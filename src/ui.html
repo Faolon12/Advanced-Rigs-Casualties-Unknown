@@ -146,6 +146,13 @@ aside.right{overflow-x:hidden}
 .gearCell span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gearCell.on,.gearPiece.on{outline:1px solid #ffcf4a}
 .gearPiece{border:1px solid var(--line);border-radius:4px;padding:6px;margin:4px 0;cursor:pointer}
+.layerBar{display:flex;gap:4px;align-items:center;margin:0 0 6px;flex-wrap:wrap}
+.layerBar button{padding:3px 7px;font-size:11px}
+.layer.inF{margin-left:14px;border-left:2px solid var(--line)}
+.folderRow{display:flex;align-items:center;gap:6px;padding:5px 6px;margin:2px 0;border:1px solid var(--line);border-radius:4px;cursor:pointer;font-size:12px;user-select:none}
+.folderRow .fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folderRow button{padding:1px 6px;font-size:11px}
+.folderRow.drop{outline:1px solid var(--acc2)}
 </style>
 </head>
 <body>
@@ -171,6 +178,7 @@ aside.right{overflow-x:hidden}
 <main>
   <aside class="left">
     <h2>Layers</h2>
+    <div class="layerBar"><button id="lyFolder" title="Put the selected layers in a new folder (Ctrl/Shift-click to select several)">📁 New folder</button><button id="lyDelSel" title="Delete the selected layers (Delete key)">🗑 Delete</button><span id="lySelN" class="muted"></span></div>
     <div id="layers"><div class="empty">Open a PSD/PSB (or PNG layers) to start.</div></div>
   </aside>
   <section id="center">

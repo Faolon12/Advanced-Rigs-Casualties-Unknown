@@ -146,6 +146,13 @@ aside.right{overflow-x:hidden}
 .gearCell span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gearCell.on,.gearPiece.on{outline:1px solid #ffcf4a}
 .gearPiece{border:1px solid var(--line);border-radius:4px;padding:6px;margin:4px 0;cursor:pointer}
+.layerBar{display:flex;gap:4px;align-items:center;margin:0 0 6px;flex-wrap:wrap}
+.layerBar button{padding:3px 7px;font-size:11px}
+.layer.inF{margin-left:14px;border-left:2px solid var(--line)}
+.folderRow{display:flex;align-items:center;gap:6px;padding:5px 6px;margin:2px 0;border:1px solid var(--line);border-radius:4px;cursor:pointer;font-size:12px;user-select:none}
+.folderRow .fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folderRow button{padding:1px 6px;font-size:11px}
+.folderRow.drop{outline:1px solid var(--acc2)}
 </style>
 </head>
 <body>
@@ -171,6 +178,7 @@ aside.right{overflow-x:hidden}
 <main>
   <aside class="left">
     <h2>Layers</h2>
+    <div class="layerBar"><button id="lyFolder" title="Put the selected layers in a new folder (Ctrl/Shift-click to select several)">📁 New folder</button><button id="lyDelSel" title="Delete the selected layers (Delete key)">🗑 Delete</button><span id="lySelN" class="muted"></span></div>
     <div id="layers"><div class="empty">Open a PSD/PSB (or PNG layers) to start.</div></div>
   </aside>
   <section id="center">
@@ -441,19 +449,26 @@ RIG.readPSD = function (buf) {
     const extra = u32(); const end = p + extra;
     { const n = u32(); p += n; } { const n = u32(); p += n; } // mask, blending ranges
     const nl = u8(); let name = str(nl); p += (4 - (nl + 1) % 4) % 4;
-    let isDivider = false;
+    let isDivider = false, divType = 0;
     while (p < end - 12) {
       const sig = str(4), key = str(4);
       if (sig !== '8BIM' && sig !== '8B64') break;
       const ln = (big && ['LMsk', 'Lr16', 'Lr32', 'Layr', 'Mt16', 'Mt32', 'Mtrn', 'Alph', 'FMsk', 'lnk2', 'FEid', 'FXid', 'PxSD'].includes(key)) ? u64() : u32();
       const start = p;
       if (key === 'luni') { const n2 = u32(); let s = ''; for (let i = 0; i < n2; i++) s += String.fromCharCode(u16()); name = s.replace(/\0+$/, ''); }
-      if (key === 'lsct' || key === 'lsdk') { const t = u32(); if (t === 1 || t === 2 || t === 3) isDivider = true; }
+      if (key === 'lsct' || key === 'lsdk') { const t = u32(); if (t === 1 || t === 2 || t === 3) { isDivider = true; divType = t; } }
       p = start + ln + (ln % 2);
     }
     p = end;
-    recs.push({ name, top, left, bottom, right, chans, hidden: !!(flags & 2), opacity, isDivider });
+    recs.push({ name, top, left, bottom, right, chans, hidden: !!(flags & 2), opacity, isDivider, divType });
   }
+  // layer groups (folders): in the file a group is [end marker (3)] [its layers] [group header (1/2) with its name], bottom to top
+  { const stack = [];
+    recs.forEach((r, i) => {
+      if (r.divType === 3) stack.push([]);
+      else if (r.divType === 1 || r.divType === 2) { const members = stack.pop() || []; for (const k of members) if (!recs[k].folder) recs[k].folder = r.name; if (stack.length) stack[stack.length - 1].push(...members); }
+      else if (stack.length) stack[stack.length - 1].push(i);
+    }); }
   const layers = [];
   recs.forEach((r, idx) => {
     const w = r.right - r.left, h = r.bottom - r.top;
@@ -485,7 +500,7 @@ RIG.readPSD = function (buf) {
     for (let i = 0; i < w * h; i++) {
       rgba[i * 4] = R ? R[i] : 0; rgba[i * 4 + 1] = G ? G[i] : 0; rgba[i * 4 + 2] = B ? B[i] : 0; rgba[i * 4 + 3] = A ? A[i] : 255;
     }
-    layers.push({ name: r.name, x: r.left, y: r.top, w, h, rgba, hidden: r.hidden, order: idx });
+    layers.push({ name: r.name, x: r.left, y: r.top, w, h, rgba, hidden: r.hidden, order: idx, folder: r.folder || undefined });
   });
   return { width: W, height: H, layers };
 };
@@ -1324,7 +1339,28 @@ RIG.writePSD = function (width, height, layers, big) {
   push(be(0, 4)); // image resources
   // ---- layer records + channel data
   const recs = [], chans = [];
-  for (const l of layers) {
+  // folders: each run of layers sharing a folder becomes a group (end marker below, header with the name above)
+  const seq = [];
+  for (let i = 0; i < layers.length; i++) {
+    const f = layers[i].folder;
+    if (f && (i === 0 || layers[i - 1].folder !== f)) seq.push({ divider: 3, name: '</Layer group>' });
+    seq.push(layers[i]);
+    if (f && (i === layers.length - 1 || layers[i + 1].folder !== f)) seq.push({ divider: 1, name: f });
+  }
+  for (const l of seq) {
+    if (l.divider) {
+      const name = String(l.name).replace(/[^\x20-\x7e]/g, '_').slice(0, 250); const pad = (4 - (name.length + 1) % 4) % 4;
+      const nameBytes = new Uint8Array(1 + name.length + pad); nameBytes[0] = name.length; nameBytes.set(str(name), 1);
+      const uni = String(l.name); const luniData = new Uint8Array(4 + uni.length * 2 + (uni.length % 2 ? 2 : 0));
+      new DataView(luniData.buffer).setUint32(0, uni.length); for (let i = 0; i < uni.length; i++) new DataView(luniData.buffer).setUint16(4 + i * 2, uni.charCodeAt(i));
+      const extra = [be(0, 4), be(0, 4), nameBytes, str('8BIM'), str('lsct'), be(4, 4), be(l.divider, 4), str('8BIM'), str('luni'), be(luniData.length, 4), luniData];
+      const extraLen = extra.reduce((a, b) => a + b.length, 0);
+      const rec = [i32(0), i32(0), i32(0), i32(0), be(4, 2)];
+      for (const id of [-1, 0, 1, 2]) { rec.push(i16(id)); rec.push(be(2, lenW)); }
+      rec.push(str('8BIM'), str('norm'), new Uint8Array([255, 0, l.divider === 3 ? 2 : 0, 0]), be(extraLen, 4), ...extra);
+      recs.push(...rec); for (let k = 0; k < 4; k++) chans.push(be(0, 2));
+      continue;
+    }
     const w = Math.max(1, l.w), h = Math.max(1, l.h), n = w * h;
     const planes = [3, 0, 1, 2].map(c => { const p = new Uint8Array(n); for (let i = 0; i < n; i++) p[i] = l.rgba[i * 4 + c] || 0; return p; }); // alpha, r, g, b
     const ids = [-1, 0, 1, 2];
@@ -1346,7 +1382,7 @@ RIG.writePSD = function (width, height, layers, big) {
   const recBytes = recs.reduce((a, b) => a + b.length, 0), chanBytes = chans.reduce((a, b) => a + b.length, 0);
   let layerInfoLen = 2 + recBytes + chanBytes; const layerPad = layerInfoLen % 2; layerInfoLen += layerPad;
   push(be(layerInfoLen + lenW + 4, lenW)); // layer and mask info section
-  push(be(layerInfoLen, lenW)); push(i16(-layers.length)); // negative: first alpha channel is the merged result's transparency
+  push(be(layerInfoLen, lenW)); push(i16(-seq.length)); // negative: first alpha channel is the merged result's transparency
   for (const r of recs) push(r); for (const c of chans) push(c); if (layerPad) push(new Uint8Array(1));
   push(be(0, 4)); // global layer mask info
   // ---- merged image (visible layers flattened), raw RGBA planes
@@ -1947,6 +1983,7 @@ async function openFiles(list) {
       }
       doc = RIG.newDoc(psd.name.replace(/\.ps[db]$/i, ''), parsed.width, parsed.height, parsed.layers);
       RIG.autoAssign(doc);
+      applyPsdFolders(parsed);
       toast('Opened ' + psd.name + ' — ' + doc.layers.length + ' layers, parts matched automatically');
     } else if (json) {
       const rig = JSON.parse(await json.text());
@@ -2273,38 +2310,96 @@ function roleValue(l) {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let dragRow = null;
+// ---- layer list: folders (only for keeping things tidy; nothing changes in game), several layers selected at once
+let selSet = new Set();
+const folderOf = (l) => l.folder && doc.folders ? doc.folders.find(f => f.id === l.folder) : null;
+function shownRows() { // the layer rows in list order (top of the stack first), folders' layers right under their folder
+  const rows = [...doc.layers].filter(l => !l.cutSource).reverse(); const out = [], done = new Set();
+  for (const l of rows) {
+    const f = folderOf(l);
+    if (!f) { out.push({ l }); continue; }
+    if (done.has(f.id)) continue; done.add(f.id);
+    const members = rows.filter(o => o.folder === f.id);
+    out.push({ f, members });
+    if (f.open) for (const m of members) out.push({ l: m, inF: true });
+  }
+  return out;
+}
+function selectedLayers() { return doc ? doc.layers.filter(l => selSet.has(l.id)) : []; }
+function moveLayersTo(list, target, above) { // keep their order, put them next to target in the stack
+  const set = new Set(list.map(l => l.id)); if (set.has(target.id)) return;
+  const keep = doc.layers.filter(l => !set.has(l.id)); const at = keep.indexOf(target) + (above ? 1 : 0);
+  keep.splice(at, 0, ...doc.layers.filter(l => set.has(l.id))); doc.layers = keep; doc.layers.forEach((o, k) => o.order = k);
+}
 function renderLayers() {
   const box = $('#layers');
+  const n = $('#lySelN'); if (n) n.textContent = selSet.size > 1 ? selSet.size + ' selected' : '';
   if (!doc || !doc.layers.length) { box.innerHTML = doc && Object.keys(doc.spriteSwaps).length ? '<div class="empty">Skin-only rig (sprite swaps). Open a PSD too if you want moving parts.</div>' : '<div class="empty">Open a PSD/PSB (or PNG layers) to start.</div>'; return; }
+  if (selLayer && !selSet.has(selLayer)) selSet = new Set([selLayer]);
+  if (!selLayer && selSet.size === 1) selSet.clear();
+  for (const id of [...selSet]) if (!RIG.layer(doc, id)) selSet.delete(id);
   box.innerHTML = '';
-  [...doc.layers].filter(l => !l.cutSource).reverse().forEach((l) => { // top of the stack first, like Photoshop
-    const row = document.createElement('div'); row.className = 'layer' + (l.id === selLayer ? ' sel' : '') + (l.role.type === 'ignore' ? ' hiddenL' : '');
-    const th = document.createElement('canvas'); th.width = 34; th.height = 34;
-    const g = th.getContext('2d'); g.imageSmoothingEnabled = false; const s = Math.min(34 / l.w, 34 / l.h);
-    g.drawImage(layerCanvas(l), (34 - l.w * s) / 2, (34 - l.h * s) / 2, l.w * s, l.h * s);
-    const right = document.createElement('div');
-    right.innerHTML = `<div class="nm">${l._new ? '<span class="pill" style="background:var(--acc);color:#fff;border-color:var(--acc)">NEW</span> ' : ''}${esc(l.name)} ${l.hidden ? '<small>(hidden)</small>' : ''}</div><select>${roleOptions(l)}</select>`;
-    const sel = right.querySelector('select'); sel.value = roleValue(l);
-    sel.onclick = (e) => e.stopPropagation();
-    sel.onchange = () => setRole(l, sel.value);
-    row.append(th, right);
-    row.onclick = () => selectLayer(l.id);
-    // drag rows to change what's drawn in front (top of the list = in front)
-    row.draggable = true;
-    row.ondragstart = (e) => { dragRow = l.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', l.id); } catch (er) { } };
-    row.ondragover = (e) => { if (!dragRow) return; e.preventDefault(); const r = row.getBoundingClientRect(); row.style.boxShadow = (e.clientY < r.top + r.height / 2) ? 'inset 0 2px 0 var(--acc2)' : 'inset 0 -2px 0 var(--acc2)'; };
-    row.ondragleave = () => { row.style.boxShadow = ''; };
-    row.ondrop = (e) => {
-      e.preventDefault(); e.stopPropagation(); row.style.boxShadow = '';
-      const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src || src === l) return;
-      const r = row.getBoundingClientRect(); const above = e.clientY < r.top + r.height / 2; // above in the list = in front
-      const list = doc.layers; list.splice(list.indexOf(src), 1);
-      const at = list.indexOf(l) + (above ? 1 : 0); list.splice(at, 0, src); list.forEach((o, k) => o.order = k);
-      refresh(); startTestIfOpen();
-    };
-    box.appendChild(row);
-  });
+  const rows = shownRows(); const flat = rows.filter(r => r.l).map(r => r.l);
+  for (const r of rows) box.appendChild(r.f ? folderRow(r.f, r.members) : layerRow(r.l, r.inF, flat));
 }
+function folderRow(f, members) {
+  const row = document.createElement('div'); row.className = 'folderRow';
+  row.innerHTML = `<span>${f.open ? '▾' : '▸'}</span><span>📁</span><span class="fn" title="Double-click to rename">${esc(f.name)} <span class="muted">(${members.length})</span></span><button data-k="ung" title="Remove the folder, keep its layers">Ungroup</button><button data-k="del" title="Delete the folder and every layer in it">🗑</button>`;
+  row.onclick = (e) => { if (e.target.closest('button')) return; f.open = !f.open; renderLayers(); };
+  row.ondblclick = (e) => { e.stopPropagation(); const nm = prompt('Folder name', f.name); if (nm && nm.trim()) { f.name = nm.trim(); renderLayers(); } };
+  row.querySelector('[data-k=ung]').onclick = () => { pushUndo(); for (const l of members) delete l.folder; doc.folders = doc.folders.filter(x => x !== f); renderLayers(); toast('Ungrouped ' + f.name + '. Ctrl+Z to undo.'); };
+  row.querySelector('[data-k=del]').onclick = () => { if (!confirm('Delete the folder "' + f.name + '" and its ' + members.length + ' layer(s)?')) return; deleteLayers(members); doc.folders = doc.folders.filter(x => x !== f); renderLayers(); };
+  // drop layers on a folder to put them in it (their drawing order doesn't change)
+  row.ondragover = (e) => { if (!dragRow) return; e.preventDefault(); row.classList.add('drop'); };
+  row.ondragleave = () => row.classList.remove('drop');
+  row.ondrop = (e) => { e.preventDefault(); row.classList.remove('drop'); const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src) return;
+    pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src]; for (const l of list) l.folder = f.id; f.open = true; renderLayers(); };
+  return row;
+}
+function layerRow(l, inF, flat) {
+  const row = document.createElement('div'); row.className = 'layer' + (selSet.has(l.id) || l.id === selLayer ? ' sel' : '') + (l.role.type === 'ignore' ? ' hiddenL' : '') + (inF ? ' inF' : '');
+  const th = document.createElement('canvas'); th.width = 34; th.height = 34;
+  const g = th.getContext('2d'); g.imageSmoothingEnabled = false; const s = Math.min(34 / l.w, 34 / l.h);
+  g.drawImage(layerCanvas(l), (34 - l.w * s) / 2, (34 - l.h * s) / 2, l.w * s, l.h * s);
+  const right = document.createElement('div');
+  right.innerHTML = `<div class="nm">${l._new ? '<span class="pill" style="background:var(--acc);color:#fff;border-color:var(--acc)">NEW</span> ' : ''}${esc(l.name)} ${l.hidden ? '<small>(hidden)</small>' : ''}</div><select>${roleOptions(l)}</select>`;
+  const sel = right.querySelector('select'); sel.value = roleValue(l);
+  sel.onclick = (e) => e.stopPropagation();
+  sel.onchange = () => setRole(l, sel.value);
+  row.append(th, right);
+  row.onclick = (e) => {
+    if (e.ctrlKey || e.metaKey) { if (selSet.has(l.id)) { selSet.delete(l.id); if (selLayer === l.id) selLayer = [...selSet][0] || null; } else { selSet.add(l.id); selLayer = l.id; } renderLayers(); renderInspector(); draw(); return; }
+    if (e.shiftKey && selLayer && flat) { const a = flat.findIndex(o => o.id === selLayer), b = flat.findIndex(o => o.id === l.id); if (a >= 0 && b >= 0) { const [lo, hi] = a < b ? [a, b] : [b, a]; for (let k = lo; k <= hi; k++) selSet.add(flat[k].id); } renderLayers(); return; }
+    selSet = new Set([l.id]); selectLayer(l.id);
+  };
+  // drag rows to change what's drawn in front (top of the list = in front); several selected rows move together
+  row.draggable = true;
+  row.ondragstart = (e) => { dragRow = l.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', l.id); } catch (er) { } };
+  row.ondragover = (e) => { if (!dragRow) return; e.preventDefault(); const r = row.getBoundingClientRect(); row.style.boxShadow = (e.clientY < r.top + r.height / 2) ? 'inset 0 2px 0 var(--acc2)' : 'inset 0 -2px 0 var(--acc2)'; };
+  row.ondragleave = () => { row.style.boxShadow = ''; };
+  row.ondrop = (e) => {
+    e.preventDefault(); e.stopPropagation(); row.style.boxShadow = '';
+    const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src || src === l) return;
+    const r = row.getBoundingClientRect(); const above = e.clientY < r.top + r.height / 2; // above in the list = in front
+    pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src];
+    moveLayersTo(list, l, above);
+    // dropped among a folder's layers = into that folder; dropped outside = out of it
+    for (const m of list) { if (l.folder) m.folder = l.folder; else delete m.folder; }
+    refresh(); startTestIfOpen();
+  };
+  return row;
+}
+function newFolderFrom(list, name) {
+  doc.folders = doc.folders || [];
+  const f = { id: RIG.newId(), name: name || 'Folder ' + (doc.folders.length + 1), open: true };
+  doc.folders.push(f); for (const l of list) l.folder = f.id; return f;
+}
+$('#lyFolder').onclick = () => {
+  if (!doc) return; const list = selectedLayers(); if (!list.length) { toast('Select layers first (Ctrl/Shift-click to pick several).'); return; }
+  const nm = prompt('Folder name', 'Folder ' + ((doc.folders || []).length + 1)); if (nm === null) return;
+  pushUndo(); newFolderFrom(list, nm.trim() || undefined); renderLayers();
+};
+$('#lyDelSel').onclick = () => { if (!doc) return; const list = selectedLayers(); if (!list.length) { toast('Select layers first.'); return; } if (list.length > 1 && !confirm('Delete ' + list.length + ' layers?')) return; deleteLayers(list); };
 
 function removeFrame(l) {
   for (const id in doc.anims) for (const k in doc.anims[id]) {
@@ -2352,6 +2447,7 @@ function removeFromChain(l) {
   if (selChain && !RIG.chain(doc, selChain)) selChain = null;
 }
 function selectLayer(id) {
+  if (animPrev && animPrev.id !== id) stopAnimPrev();
   selLayer = id; animFocus = false; const l = RIG.layer(doc, id);
   selChain = l && l.role.type === 'chain' ? l.role.chain : null;
   refresh();
@@ -2537,7 +2633,7 @@ function exportLayersFor() {
     let name = l.name, i = 2; while (used.has(name)) name = l.name + ' #' + (i++); used.add(name);
     if (name !== l.name) l.name = name; // keep names unique so they match when the file comes back
     const art = l.role.type === 'state' || l.role.type === 'injury' || l.role.type === 'frame' || l.role.type === 'gear' || (l.role.type === 'eye' && l.role.state !== 'experimentEyeOpen') || l.role.type === 'ignore' && !l.cutSource;
-    out.push({ name, x: l.x, y: l.y, w: l.w, h: l.h, rgba: l.rgba, hidden: art });
+    const f = folderOf(l); out.push({ name, x: l.x, y: l.y, w: l.w, h: l.h, rgba: l.rgba, hidden: art, folder: f ? f.name : undefined });
   }
   return out;
 }
@@ -2547,6 +2643,18 @@ async function exportPsd(big) {
   const name = (doc.name || 'MyCharacter').replace(/[^A-Za-z0-9_\- ]+/g, '_') + (big ? '.psb' : '.psd');
   await downloadBlob(new Blob([u], { type: 'image/vnd.adobe.photoshop' }), name);
   toast('Saved ' + name + ': every layer, with the extra art (mouths, injuries, frames, eyes, gear) hidden. Paint, add or rename layers, then "Update from PSD…" (or open it again).', 8000);
+}
+// folders in a PSD (layer groups) become folders here, matched by layer name
+function applyPsdFolders(parsed) {
+  doc.folders = doc.folders || [];
+  const byName = new Map(); for (const l of doc.layers) if (!byName.has(l.name)) byName.set(l.name, l);
+  for (const pl of parsed.layers) {
+    const l = byName.get(pl.name); if (!l) continue;
+    if (!pl.folder) { if (l.folder && parsed.layers.some(x => x.folder)) delete l.folder; continue; }
+    let f = doc.folders.find(x => x.name === pl.folder); if (!f) { f = { id: RIG.newId(), name: pl.folder, open: false }; doc.folders.push(f); }
+    l.folder = f.id;
+  }
+  doc.folders = doc.folders.filter(f => doc.layers.some(o => o.folder === f.id));
 }
 // bring an edited PSD back: same names update in place (bones, roles, animations kept), anything new is added
 function updateFromPsd(parsed) {
@@ -2573,6 +2681,7 @@ function updateFromPsd(parsed) {
     added.push(l);
   }
   doc.layers.forEach((l, i) => l.order = i);
+  applyPsdFolders(parsed);
   for (const ch of touched) RIG.autoBones(doc, ch);
   RIG.fitCanvas(doc);
   const unknown = added.filter(l => l.role.type === 'ignore');
@@ -2654,13 +2763,16 @@ function fillWearList() {
 }
 
 // ---- delete a layer (anything: a part, a piece of a moving part, art, gear, an image added by mistake)
-function deleteLayer(l) {
+function deleteLayer(l) { deleteLayers([l]); }
+function deleteLayers(list) {
+  if (!list.length) return; const l = list[0];
   pushUndo();
-  const ids = [l.id];
+  const ids = list.map(x => x.id);
   // a cut image goes with its pieces; a piece of a cut image takes the whole cut part with it
+  const first = new Set(ids);
   for (const ch of doc.chains) {
-    if (ch.source === l.id) ids.push(...ch.segs.map(s => s.layer));
-    if (ch.source && ch.segs.some(s => s.layer === l.id)) { ids.push(ch.source, ...ch.segs.map(s => s.layer)); }
+    if (first.has(ch.source)) ids.push(...ch.segs.map(s => s.layer));
+    if (ch.source && ch.segs.some(s => first.has(s.layer))) { ids.push(ch.source, ...ch.segs.map(s => s.layer)); }
   }
   // its frames, injury art, mouth states go too
   for (const o of doc.layers) if (o.role.of && ids.includes(o.role.of) && o.role.type !== 'part') ids.push(o.id);
@@ -2672,22 +2784,33 @@ function deleteLayer(l) {
   const hadTail = doc.hideVanillaTail;
   if (doc.chains.some(c => c.attachTo === 'tail')) doc.hideVanillaTail = true;
   const tailNote = hadTail && !doc.chains.some(c => c.attachTo === 'tail') ? ' The game\u2019s own tail stays hidden (untick Hide game tail on the Rig tab to bring it back).' : '';
-  selLayer = null; if (selChain && !RIG.chain(doc, selChain)) selChain = null;
+  selLayer = null; if (selChain && !RIG.chain(doc, selChain)) selChain = null; selSet.clear();
+  if (doc.folders) doc.folders = doc.folders.filter(f => doc.layers.some(o => o.folder === f.id));
   imgCache.clear(); refresh(); startTestIfOpen();
-  toast('Deleted ' + l.name + (set.size > 1 ? ' (+' + (set.size - 1) + ' that belonged to it)' : '') + '. Ctrl+Z to undo.' + tailNote, tailNote ? 7000 : 4000);
+  toast('Deleted ' + (list.length > 1 ? list.length + ' layers' : l.name) + (set.size > list.length ? ' (+' + (set.size - list.length) + ' that belonged to them)' : '') + '. Ctrl+Z to undo.' + tailNote, tailNote ? 7000 : 4000);
 }
 // undo: snapshots of the whole character before anything that changes it a lot
 const undoStack = [];
-function pushUndo() { if (!doc) return; try { undoStack.push(RIG.serialize(doc)); if (undoStack.length > 30) undoStack.shift(); } catch (e) { } }
+function pushUndo() { if (!doc) return; try { undoStack.push(RIG.serialize(doc)); if (undoStack.length > 30) undoStack.shift(); redoStack.length = 0; } catch (e) { } }
+const redoStack = [];
 function undo() {
   const snap = undoStack.pop(); if (!snap) { toast('Nothing to undo'); return; }
-  const keepTab = tab; const d = RIG.deserialize(snap);
-  doc = d; imgCache.clear(); selLayer = null; selChain = null; refresh(); if (keepTab === 'test') startTest(); toast('Undone');
+  try { redoStack.push(RIG.serialize(doc)); if (redoStack.length > 30) redoStack.shift(); } catch (e) { }
+  restoreSnap(snap); toast('Undone (Ctrl+Y to redo)');
+}
+function redo() {
+  const snap = redoStack.pop(); if (!snap) { toast('Nothing to redo'); return; }
+  try { undoStack.push(RIG.serialize(doc)); } catch (e) { }
+  restoreSnap(snap); toast('Redone');
+}
+function restoreSnap(snap) {
+  const keepTab = tab; doc = RIG.deserialize(snap); imgCache.clear(); selLayer = null; selChain = null; selSet.clear(); refresh(); if (keepTab === 'test' || keepTab === 'gear') startTest();
 }
 document.addEventListener('keydown', (e) => {
   const typing = /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '');
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); undo(); return; }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && tab === 'rig' && doc && selLayer) { const l = RIG.layer(doc, selLayer); if (l) { e.preventDefault(); deleteLayer(l); } }
+  if ((e.ctrlKey || e.metaKey) && !typing && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && tab === 'rig' && doc && selLayer) { const list = selSet.size > 1 ? selectedLayers() : [RIG.layer(doc, selLayer)].filter(Boolean); if (list.length) { e.preventDefault(); deleteLayers(list); } }
 });
 
 // ---- eyes
@@ -2836,8 +2959,15 @@ function draw() {
   }
   ctx.globalAlpha = 1;
   // layers
+  const prevFr = animPrevFrames();
   for (const l of doc.layers) {
     if (l.cutSource) continue;
+    if (prevFr && l.id === animPrev.id) { // the part plays its frames instead of its own art
+      const [cur, before] = prevFr;
+      if (before && before !== cur) { const q = toScreen(before); ctx.globalAlpha = 0.3; ctx.drawImage(layerCanvas(before), q.x, q.y, before.w * view.zoom, before.h * view.zoom); }
+      if (cur) { const q = toScreen(cur); ctx.globalAlpha = 1; ctx.drawImage(layerCanvas(cur), q.x, q.y, cur.w * view.zoom, cur.h * view.zoom); }
+      continue;
+    }
     const p = toScreen(l);
     const isArt = l.role.type === 'state' || l.role.type === 'injury' || l.role.type === 'frame' || (l.role.type === 'eye' && l.role.state !== shownEye()) || (l.role.type === 'gear' && !gearShown(l));
     ctx.globalAlpha = l.role.type === 'ignore' ? 0.25 : (isArt ? 0.0 : 1);
@@ -3887,6 +4017,7 @@ function animInspector(l) {
       const st = sets[k];
       h += `<div style="border:1px solid var(--line);border-radius:6px;padding:6px;margin:6px 0">
         <div class="row"><select data-akey="${k}" style="flex:1">${RIG.ANIM_KEYS.map(([kk, lab]) => `<option value="${kk}" ${kk === k ? 'selected' : ''} ${kk !== k && used.has(kk) ? 'disabled' : ''}>${lab}</option>`).join('')}</select><button data-adel="${k}" title="Remove this set">✕</button></div>
+        <div class="row"><button data-aprev="${k}" title="Play these frames here on the canvas (the frame before shows faintly)">${animPrev && animPrev.id === l.id && animPrev.key === k ? '■ Stop' : '▶ Preview'}</button></div>
         <div class="row"><label>Frames / sec</label><input data-afps="${k}" type="number" min="0.5" max="60" step="0.5" value="${st.fps}" style="width:64px"><label style="flex:0 0 auto;margin-left:8px">Loop</label><input data-aloop="${k}" type="checkbox" ${st.loop !== false ? 'checked' : ''}></div>
         ${st.frames.map((id, i) => { const fl = RIG.layer(doc, id); return `<div class="seg"><span>${i + 1}. ${esc(fl ? fl.name : '?')}${id === l.id ? ' <span class="muted">(the part itself)</span>' : ''}</span><button data-afu="${k}:${i}">↑</button><button data-afd="${k}:${i}">↓</button><button data-afx="${k}:${i}">✕</button></div>`; }).join('')}
         <div class="row"><select data-aadd="${k}" style="flex:1"><option value="">+ add a frame…</option><option value="${l.id}">${esc(l.name)} (the part itself)</option>${frameCandidates(l).filter(o => !st.frames.includes(o.id)).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></div>
@@ -3911,9 +4042,22 @@ function addLoopFrames(l, frames, fps, tag) { // frames: [{w,h,rgba}] the size o
     doc.layers.splice(at + 1 + i, 0, fl); ids.push(fl.id);
   });
   doc.layers.forEach((o, i) => o.order = i);
+  // the frames go in their own folder (closed), so the layer list stays short
+  doc.folders = (doc.folders || []).filter(f => doc.layers.some(o => o.folder === f.id));
+  if (ids.length) { const f = newFolderFrom(ids.map(id => RIG.layer(doc, id)), l.name + ' animation'); f.open = false; }
   doc.anims[l.id] = doc.anims[l.id] || {}; doc.anims[l.id].always = { fps, loop: true, frames: ids };
   imgCache.clear(); refresh(); startTestIfOpen();
-  toast(ids.length + ' frames made, looping at ' + fps + ' fps all the time. See it in the Test tab. (Ctrl+Z to undo)', 6000);
+  toast(ids.length + ' frames added in the folder "' + l.name + ' animation", looping at ' + fps + ' fps all the time. ▶ Preview it here or in the Test tab. (Ctrl+Z to undo)', 7000);
+}
+// ▶ Preview: a part's frames play on the Rig canvas, with the frame before drawn faintly (onion skin)
+let animPrev = null, animPrevTimer = 0;
+function startAnimPrev(id, key) { stopAnimPrev(); animPrev = { id, key, t0: performance.now() }; animPrevTimer = setInterval(() => { if (tab !== 'rig' || !doc || !doc.anims[animPrev.id] || !doc.anims[animPrev.id][animPrev.key]) { stopAnimPrev(); return; } draw(); }, 40); draw(); }
+function stopAnimPrev() { if (animPrevTimer) clearInterval(animPrevTimer); animPrevTimer = 0; animPrev = null; if (doc) draw(); }
+function animPrevFrames() { // [current frame layer, previous frame layer] or null
+  if (!animPrev || !doc) return null; const set = doc.anims[animPrev.id] && doc.anims[animPrev.id][animPrev.key]; if (!set || !set.frames.length) return null;
+  const n = set.frames.length, i = Math.floor((performance.now() - animPrev.t0) / 1000 * Math.max(0.5, set.fps || 8));
+  const k = set.loop === false ? Math.min(i, n - 1) : i % n;
+  return [RIG.layer(doc, set.frames[k]), n > 1 ? RIG.layer(doc, set.frames[(k - 1 + n) % n]) : null];
 }
 async function gifLoop(l) {
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.gif,.png,.webp,image/gif,image/png'; inp.multiple = true;
@@ -3945,6 +4089,7 @@ async function gifLoop(l) {
 function bindAnimInspector(l) {
   const sets = () => (doc.anims[l.id] = doc.anims[l.id] || {});
   const lg = $('#loopGif'); if (lg) lg.onclick = () => gifLoop(l);
+  document.querySelectorAll('[data-aprev]').forEach(b => b.onclick = () => { const k = b.dataset.aprev; if (animPrev && animPrev.id === l.id && animPrev.key === k) stopAnimPrev(); else startAnimPrev(l.id, k); renderInspector(); });
   const on = $('#animOn'); if (!on) return;
   const markFrame = (id) => { const fl = RIG.layer(doc, id); if (fl && fl.id !== l.id && fl.role.type === 'ignore') fl.role = { type: 'frame', of: l.id }; };
   const unmark = (id) => { const still = Object.values(sets()).some(st => st.frames.includes(id)); const fl = RIG.layer(doc, id); if (!still && fl && fl.id !== l.id && fl.role.type === 'frame') fl.role = { type: 'ignore' }; };
@@ -4152,7 +4297,7 @@ $('#eyePrev').innerHTML = '<option value="">Eyes: automatic</option>' + RIG.EYE_
 
 // ---------------------------------------------------------------- start
 resize(); renderInspector(); hint('Open your character to begin. New here? Click <b>How to</b>. <span style="opacity:.7">Fan-made, not affiliated with Casualties: Unknown. The Test tab is a simulation based on Orson\'s game code.</span>');
-window.__rigEditor = { updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); } };
+window.__rigEditor = { addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); } };
 })();
 
 </script>

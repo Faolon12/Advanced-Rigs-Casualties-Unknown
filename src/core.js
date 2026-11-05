@@ -173,19 +173,26 @@ RIG.readPSD = function (buf) {
     const extra = u32(); const end = p + extra;
     { const n = u32(); p += n; } { const n = u32(); p += n; } // mask, blending ranges
     const nl = u8(); let name = str(nl); p += (4 - (nl + 1) % 4) % 4;
-    let isDivider = false;
+    let isDivider = false, divType = 0;
     while (p < end - 12) {
       const sig = str(4), key = str(4);
       if (sig !== '8BIM' && sig !== '8B64') break;
       const ln = (big && ['LMsk', 'Lr16', 'Lr32', 'Layr', 'Mt16', 'Mt32', 'Mtrn', 'Alph', 'FMsk', 'lnk2', 'FEid', 'FXid', 'PxSD'].includes(key)) ? u64() : u32();
       const start = p;
       if (key === 'luni') { const n2 = u32(); let s = ''; for (let i = 0; i < n2; i++) s += String.fromCharCode(u16()); name = s.replace(/\0+$/, ''); }
-      if (key === 'lsct' || key === 'lsdk') { const t = u32(); if (t === 1 || t === 2 || t === 3) isDivider = true; }
+      if (key === 'lsct' || key === 'lsdk') { const t = u32(); if (t === 1 || t === 2 || t === 3) { isDivider = true; divType = t; } }
       p = start + ln + (ln % 2);
     }
     p = end;
-    recs.push({ name, top, left, bottom, right, chans, hidden: !!(flags & 2), opacity, isDivider });
+    recs.push({ name, top, left, bottom, right, chans, hidden: !!(flags & 2), opacity, isDivider, divType });
   }
+  // layer groups (folders): in the file a group is [end marker (3)] [its layers] [group header (1/2) with its name], bottom to top
+  { const stack = [];
+    recs.forEach((r, i) => {
+      if (r.divType === 3) stack.push([]);
+      else if (r.divType === 1 || r.divType === 2) { const members = stack.pop() || []; for (const k of members) if (!recs[k].folder) recs[k].folder = r.name; if (stack.length) stack[stack.length - 1].push(...members); }
+      else if (stack.length) stack[stack.length - 1].push(i);
+    }); }
   const layers = [];
   recs.forEach((r, idx) => {
     const w = r.right - r.left, h = r.bottom - r.top;
@@ -217,7 +224,7 @@ RIG.readPSD = function (buf) {
     for (let i = 0; i < w * h; i++) {
       rgba[i * 4] = R ? R[i] : 0; rgba[i * 4 + 1] = G ? G[i] : 0; rgba[i * 4 + 2] = B ? B[i] : 0; rgba[i * 4 + 3] = A ? A[i] : 255;
     }
-    layers.push({ name: r.name, x: r.left, y: r.top, w, h, rgba, hidden: r.hidden, order: idx });
+    layers.push({ name: r.name, x: r.left, y: r.top, w, h, rgba, hidden: r.hidden, order: idx, folder: r.folder || undefined });
   });
   return { width: W, height: H, layers };
 };
@@ -1056,7 +1063,28 @@ RIG.writePSD = function (width, height, layers, big) {
   push(be(0, 4)); // image resources
   // ---- layer records + channel data
   const recs = [], chans = [];
-  for (const l of layers) {
+  // folders: each run of layers sharing a folder becomes a group (end marker below, header with the name above)
+  const seq = [];
+  for (let i = 0; i < layers.length; i++) {
+    const f = layers[i].folder;
+    if (f && (i === 0 || layers[i - 1].folder !== f)) seq.push({ divider: 3, name: '</Layer group>' });
+    seq.push(layers[i]);
+    if (f && (i === layers.length - 1 || layers[i + 1].folder !== f)) seq.push({ divider: 1, name: f });
+  }
+  for (const l of seq) {
+    if (l.divider) {
+      const name = String(l.name).replace(/[^\x20-\x7e]/g, '_').slice(0, 250); const pad = (4 - (name.length + 1) % 4) % 4;
+      const nameBytes = new Uint8Array(1 + name.length + pad); nameBytes[0] = name.length; nameBytes.set(str(name), 1);
+      const uni = String(l.name); const luniData = new Uint8Array(4 + uni.length * 2 + (uni.length % 2 ? 2 : 0));
+      new DataView(luniData.buffer).setUint32(0, uni.length); for (let i = 0; i < uni.length; i++) new DataView(luniData.buffer).setUint16(4 + i * 2, uni.charCodeAt(i));
+      const extra = [be(0, 4), be(0, 4), nameBytes, str('8BIM'), str('lsct'), be(4, 4), be(l.divider, 4), str('8BIM'), str('luni'), be(luniData.length, 4), luniData];
+      const extraLen = extra.reduce((a, b) => a + b.length, 0);
+      const rec = [i32(0), i32(0), i32(0), i32(0), be(4, 2)];
+      for (const id of [-1, 0, 1, 2]) { rec.push(i16(id)); rec.push(be(2, lenW)); }
+      rec.push(str('8BIM'), str('norm'), new Uint8Array([255, 0, l.divider === 3 ? 2 : 0, 0]), be(extraLen, 4), ...extra);
+      recs.push(...rec); for (let k = 0; k < 4; k++) chans.push(be(0, 2));
+      continue;
+    }
     const w = Math.max(1, l.w), h = Math.max(1, l.h), n = w * h;
     const planes = [3, 0, 1, 2].map(c => { const p = new Uint8Array(n); for (let i = 0; i < n; i++) p[i] = l.rgba[i * 4 + c] || 0; return p; }); // alpha, r, g, b
     const ids = [-1, 0, 1, 2];
@@ -1078,7 +1106,7 @@ RIG.writePSD = function (width, height, layers, big) {
   const recBytes = recs.reduce((a, b) => a + b.length, 0), chanBytes = chans.reduce((a, b) => a + b.length, 0);
   let layerInfoLen = 2 + recBytes + chanBytes; const layerPad = layerInfoLen % 2; layerInfoLen += layerPad;
   push(be(layerInfoLen + lenW + 4, lenW)); // layer and mask info section
-  push(be(layerInfoLen, lenW)); push(i16(-layers.length)); // negative: first alpha channel is the merged result's transparency
+  push(be(layerInfoLen, lenW)); push(i16(-seq.length)); // negative: first alpha channel is the merged result's transparency
   for (const r of recs) push(r); for (const c of chans) push(c); if (layerPad) push(new Uint8Array(1));
   push(be(0, 4)); // global layer mask info
   // ---- merged image (visible layers flattened), raw RGBA planes
