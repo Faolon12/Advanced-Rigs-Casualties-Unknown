@@ -90,6 +90,20 @@ RIG.INJURY_STATES = [
 // actions a part can have animation frames for (same as the mod), and what each falls back to
 // the states the game itself has (the mod picks one every frame, in this priority: dead, sleep, down, swim, climb,
 // attack, exercise, wall slide / jump / fall, crouch, sit, run, walk, idle)
+// the game's limb tree for tearing off (TourniquetScript.GetLowerLimbs): a torn limb takes everything below it
+RIG.LOWER = { UpArmF: ['DownArmF', 'HandF'], DownArmF: ['HandF'], UpArmB: ['DownArmB', 'HandB'], DownArmB: ['HandB'],
+  ThighF: ['CrusF', 'FootF'], CrusF: ['FootF'], ThighB: ['CrusB', 'FootB'], CrusB: ['FootB'] };
+RIG.UPPER = {}; for (const u in RIG.LOWER) { const d = RIG.LOWER[u][0]; RIG.UPPER[d] = u; }
+RIG.TEARABLE = ['Head', 'UpArmF', 'DownArmF', 'HandF', 'UpArmB', 'DownArmB', 'HandB', 'ThighF', 'CrusF', 'FootF', 'ThighB', 'CrusB', 'FootB'];
+const INJ_ORDER = (k) => { const i = RIG.INJURY_STATES.findIndex(([s]) => s === k); return i < 0 ? 99 : i; };
+RIG.statesOf = (I, key) => { const e = I && I[key]; return e && e.states ? [...e.states].sort((a, b) => INJ_ORDER(a) - INJ_ORDER(b)) : []; };
+// injuries = { <Part> | 'c:<piece name>:<group>': { states: [...], torn: bool } } -> what is hidden, what shows a stump, states per part
+RIG.hurtView = function (I) {
+  const hidden = new Set(), stump = new Set();
+  for (const k in I) if (I[k] && I[k].torn && RIG.TEARABLE.includes(k)) { hidden.add(k); for (const l of (RIG.LOWER[k] || [])) hidden.add(l); }
+  for (const k of hidden) { const u = RIG.UPPER[k]; if (u && !hidden.has(u)) stump.add(u); }
+  return { hidden, stump, statesOf: (part) => (stump.has(part) ? ['stump'] : []).concat(RIG.statesOf(I, part)) };
+};
 RIG.ACTIONS = [['always', 'Always (loops all the time)'], ['idle', 'Standing still'], ['walk', 'Walking'], ['run', 'Running'], ['crouch', 'Crouching'],
   ['jump', 'Jumping (going up)'], ['fall', 'Falling'], ['wallslide', 'Sliding down a wall'], ['climb', 'Climbing (ladder / rope)'], ['swim', 'In water'],
   ['attack', 'Attacking (swing)'], ['sit', 'Sitting (idle 12 s)'], ['exercise', 'Exercising'], ['sleep', 'Sleeping'],
@@ -1270,7 +1284,11 @@ RIG.Runtime = class {
       const base = (RIG.ORDER[c.def.attachTo] || 0) + (c.def.sortingOrderOffset || 0);
       const ms = this.segMatrices(c, attachM);
       const inj = c.def.injury && c.def.injury.enabled;
-      const cut = inj && state.tornAt !== undefined && state.tornAt !== null ? Math.max(1, Math.min(c.segs.length, state.tornAt)) : c.segs.length + 1;
+      const I = state.injuries || null, hv = I ? RIG.hurtView(I) : null;
+      if (hv && c.def.attachTo !== 'tail' && hv.hidden.has(c.def.attachTo)) continue; // gone with the limb it hangs on
+      let cut = inj && state.tornAt !== undefined && state.tornAt !== null ? Math.max(1, Math.min(c.segs.length, state.tornAt)) : c.segs.length + 1;
+      const grp = inj ? ((c.def.injury.groups && c.def.injury.groups.length === c.segs.length) ? c.def.injury.groups : c.segs.map((_, k) => k)) : null;
+      if (inj && I) { const k0 = grp.findIndex(g => g >= 0 && I['c:' + c.def.name + ':' + g] && I['c:' + c.def.name + ':' + g].torn); if (k0 >= 0) cut = Math.min(cut, k0); }
       c.segs.forEach((s, k) => {
         if (k >= cut) return;
         let file = s.def.file;
@@ -1288,7 +1306,11 @@ RIG.Runtime = class {
         };
         let chosen = null;
         const stumpHere = inj && k === cut - 1 && cut <= c.segs.length;
-        const hurtKey = stumpHere ? 'stump' : (canHurt ? state.injury : null);
+        let hurtKey = stumpHere ? 'stump' : (canHurt ? state.injury : null);
+        if (I && !stumpHere) { // per-part injuries (the injury tester): the first state, in the game's priority, that has art
+          const here = inj ? RIG.statesOf(I, 'c:' + c.def.name + ':' + grp[k]) : (c.def.attachTo !== 'tail' ? hv.statesOf(c.def.attachTo) : []);
+          hurtKey = here.find(st => (anims && anims[st]) || (art && art[st])) || null;
+        }
         if (hurtKey) { const fr = play(hurtKey); if (fr) chosen = fr; else { const f = pick(hurtKey); if (f) file = f; else if (hurtKey === 'stump' && state.injury) { const fr2 = play(state.injury); if (fr2) chosen = fr2; else if (pick(state.injury)) file = pick(state.injury); } } }
         if (!chosen && file === s.def.file && !(state.headState && s.def.states && s.def.states[state.headState]) && anims) {
           const key = RIG.resolveAction(anims, state.action || 'idle'); if (key) chosen = play(key);

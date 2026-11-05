@@ -119,8 +119,10 @@ async function openFiles(list) {
 const isGameSprite = (f) => /^(health_|experiment)/i.test(f.name) || /^sprites\.json$/i.test(f.name);
 async function addImages(list) {
   const files = [...list]; if (!files.length) return;
-  const art = files.filter(f => /\.png$/i.test(f.name) && !isGameSprite(f));
-  const game = files.filter(isGameSprite);
+  // a game-named image (experimentTail.png…) whose layer is already in the character is a repaint of that layer, not a skin
+  const hasLayer = (f) => doc && /\.png$/i.test(f.name) && doc.layers.some(l => !l.cutSource && l.name === f.name.replace(/\.png$/i, ''));
+  const art = files.filter(f => /\.png$/i.test(f.name) && (!isGameSprite(f) || hasLayer(f)));
+  const game = files.filter(f => isGameSprite(f) && !hasLayer(f));
   if (!doc && art.length) { await openFiles(art); if (game.length) await addSprites(game); return; }
   if (art.length) {
     const imgs = []; let replaced = 0;
@@ -461,7 +463,8 @@ function setRole(l, v) {
     ch.segs.push({ layer: l.id, joint: RIG.center(l), tip: null, restAngle: 0, maxBend: -1 });
     RIG.autoBones(doc, ch); selChain = ch.id;
   }
-  doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail');
+  // a new tail hides the game's; taking one away never brings the game's tail back by itself (Rig tab → Hide game tail)
+  if (doc.chains.some(c => c.attachTo === 'tail')) doc.hideVanillaTail = true;
   refresh();
 }
 function guessState(name) {
@@ -513,6 +516,8 @@ function renderInspector() {
   }
   if (tab === 'health') { box.innerHTML = hsInspector(); bindHsInspector(); return; }
   if (tab === 'anim') { box.innerHTML = animInspectorHtml(); bindAnimateTab(); return; }
+  if (tab === 'test') { box.innerHTML = injTesterHtml(); bindInjTester(); return; }
+  if (tab === 'gear') { box.innerHTML = gearTabHtml(); bindGearTab(); return; }
   let h = '';
   const ch = selChain && RIG.chain(doc, selChain);
   const l = selLayer && RIG.layer(doc, selLayer);
@@ -796,10 +801,12 @@ function deleteLayer(l) {
   doc.chains = doc.chains.filter(c => c.segs.length);
   RIG.removeLayers(doc, [...set]);
   for (const ch of doc.chains) if (ch.injury && ch.injury.groups && ch.injury.groups.length !== ch.segs.length) delete ch.injury.groups;
-  doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail');
+  const hadTail = doc.hideVanillaTail;
+  if (doc.chains.some(c => c.attachTo === 'tail')) doc.hideVanillaTail = true;
+  const tailNote = hadTail && !doc.chains.some(c => c.attachTo === 'tail') ? ' The game\u2019s own tail stays hidden (untick Hide game tail on the Rig tab to bring it back).' : '';
   selLayer = null; if (selChain && !RIG.chain(doc, selChain)) selChain = null;
   imgCache.clear(); refresh(); startTestIfOpen();
-  toast('Deleted ' + l.name + (set.size > 1 ? ' (+' + (set.size - 1) + ' that belonged to it)' : '') + '. Ctrl+Z to undo.', 4000);
+  toast('Deleted ' + l.name + (set.size > 1 ? ' (+' + (set.size - 1) + ' that belonged to it)' : '') + '. Ctrl+Z to undo.' + tailNote, tailNote ? 7000 : 4000);
 }
 // undo: snapshots of the whole character before anything that changes it a lot
 const undoStack = [];
@@ -915,7 +922,7 @@ function bindMoveBox(l) {
   };
 }
 
-function refresh() { renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test') startTest(); draw(); }
+function refresh() { renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test' || tab === 'gear') startTest(); draw(); }
 
 // ---------------------------------------------------------------- canvas: rig view
 function resize() { const r = stage.getBoundingClientRect(); const d = window.devicePixelRatio || 1; cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); draw(); }
@@ -939,7 +946,7 @@ function drawChecker(W, H) {
 function draw() {
   const d = window.devicePixelRatio || 1; ctx.setTransform(d, 0, 0, d, 0, 0);
   const W = cv.width / d, H = cv.height / d;
-  if (tab === 'test' || tab === 'anim') return; // test loop draws itself
+  if (tab === 'test' || tab === 'anim' || tab === 'gear') return; // test loop draws itself
   if (tab === 'health') { drawHealth(W, H); return; }
   drawChecker(W, H);
   if (!doc) return;
@@ -1048,6 +1055,7 @@ cv.addEventListener('pointerdown', (e) => {
   if (!doc) return; const r = cv.getBoundingClientRect(); const sx = e.clientX - r.left, sy = e.clientY - r.top;
   cv.setPointerCapture(e.pointerId);
   if (tab === 'anim') { animPointerDown(sx, sy, e); return; }
+  if (tab === 'gear') { gearPointerDown(sx, sy); return; }
   if (tab === 'test') { grab = { sx, sy }; return; }
   if (tab === 'health') {
     const hit = hsAt(sx, sy);
@@ -1067,6 +1075,7 @@ cv.addEventListener('pointerdown', (e) => {
 cv.addEventListener('pointermove', (e) => {
   const r = cv.getBoundingClientRect(); const sx = e.clientX - r.left, sy = e.clientY - r.top;
   if (tab === 'anim') { animPointerMove(sx, sy); return; }
+  if (tab === 'gear') { gearPointerMove(sx, sy); return; }
   if (tab === 'test') { if (grab) { grab.sx = sx; grab.sy = sy; } return; }
   if (tab === 'health') {
     if (hsDrag) { const e2 = hsEntry(hsDrag.key); e2.x = Math.round(hsDrag.x0 + (sx - hsDrag.sx) / hsDrag.z); e2.y = Math.round(hsDrag.y0 - (sy - hsDrag.sy) / hsDrag.z); if (e2.mirror === undefined) e2.mirror = hsDrag.mirror; draw(); }
@@ -1105,15 +1114,15 @@ document.addEventListener('keydown', (e) => {
   if (!l) return;
   e.preventDefault(); const k = e.shiftKey ? 5 : 1; moveLayerBy(l, d[0] * k, d[1] * k); draw();
 });
-cv.addEventListener('pointerup', () => { if (AS.drag) { AS.drag = null; renderInspector(); } if (hsDrag) { hsDrag = null; renderInspector(); } if (drag && drag.type === 'skel') hint('Skeleton moved. Body parts follow it automatically.'); drag = null; grab = null; });
+cv.addEventListener('pointerup', () => { if (GS.drag) { GS.drag = null; renderInspector(); renderLayers(); } if (AS.drag) { AS.drag = null; renderInspector(); } if (hsDrag) { hsDrag = null; renderInspector(); } if (drag && drag.type === 'skel') hint('Skeleton moved. Body parts follow it automatically.'); drag = null; grab = null; });
 cv.addEventListener('wheel', (e) => {
   e.preventDefault(); const r = cv.getBoundingClientRect(); const sx = e.clientX - r.left, sy = e.clientY - r.top;
-  if (tab === 'test') { test.zoom = Math.max(6, Math.min(80, test.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); return; }
+  if (tab === 'test' || tab === 'gear') { test.zoom = Math.max(6, Math.min(140, test.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); return; }
   const before = toCanvas(sx, sy); view.zoom = Math.max(1, Math.min(48, view.zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2)));
   view.panX = sx - before.x * view.zoom; view.panY = sy - before.y * view.zoom; draw();
 }, { passive: false });
-$('#zoomIn').onclick = () => { if (tab === 'test') test.zoom = Math.min(80, test.zoom * 1.25); else { view.zoom = Math.min(48, view.zoom * 1.25); draw(); } };
-$('#zoomOut').onclick = () => { if (tab === 'test') test.zoom = Math.max(6, test.zoom / 1.25); else { view.zoom = Math.max(1, view.zoom / 1.25); draw(); } };
+$('#zoomIn').onclick = () => { if (tab === 'test' || tab === 'gear') test.zoom = Math.min(140, test.zoom * 1.25); else { view.zoom = Math.min(48, view.zoom * 1.25); draw(); } };
+$('#zoomOut').onclick = () => { if (tab === 'test' || tab === 'gear') test.zoom = Math.max(6, test.zoom / 1.25); else { view.zoom = Math.max(1, view.zoom / 1.25); draw(); } };
 $('#btnSkel').onclick = (e) => { showSkel = !showSkel; e.target.classList.toggle('on', showSkel); draw(); };
 $('#btnMoveSkel').onclick = (e) => { moveSkel = !moveSkel; e.target.classList.toggle('on', moveSkel); hint(moveSkel ? 'Drag anywhere to move the game skeleton under your drawing. Click the button again when done.' : rigHint()); };
 $('#btnAlign').onclick = () => { if (!doc) return; RIG.autoAlign(doc); draw(); toast('Skeleton lined up with your body parts'); };
@@ -1122,16 +1131,17 @@ const rigHint = () => 'Click a part to select it · <b>drag it</b> (or arrow key
 // ---------------------------------------------------------------- test mode
 let test = null, grab = null, raf = 0;
 function tabTo(t) {
-  tab = t; $('#tabRig').classList.toggle('on', t === 'rig'); $('#tabTest').classList.toggle('on', t === 'test'); $('#tabHealth').classList.toggle('on', t === 'health'); $('#tabAnim').classList.toggle('on', t === 'anim');
-  $('#rigTools').style.display = t === 'rig' ? '' : 'none'; $('#testTools').style.display = t === 'test' ? '' : 'none';
+  tab = t; $('#tabRig').classList.toggle('on', t === 'rig'); $('#tabTest').classList.toggle('on', t === 'test'); $('#tabHealth').classList.toggle('on', t === 'health'); $('#tabAnim').classList.toggle('on', t === 'anim'); $('#tabGear').classList.toggle('on', t === 'gear');
+  $('#rigTools').style.display = t === 'rig' ? '' : 'none'; $('#testTools').style.display = t === 'test' ? '' : 'none'; $('#gearTools').style.display = t === 'gear' ? '' : 'none';
   $('#healthTools').style.display = t === 'health' ? '' : 'none'; $('#animTools').style.display = t === 'anim' ? '' : 'none';
   $('#dope').style.display = t === 'anim' ? 'flex' : 'none';
   if (t === 'anim') { if (!gameMode()) { toast('Animate needs the game template from your game (the mod saves it; click "no game template" at the top to load it).', 7000); } startTest(); renderInspector(); hint('Pick an animation, pick a bone (click it, or in the list), then turn / move it at any moment of the animation. Your changes are added on top of the game\'s animation, in game too.'); return; }
+  if (t === 'gear') { fillGearPoses(); if (!RIG.GAME) toast('Gear needs the game template from your game (click "no game template" at the top to load it).', 7000); startTest(); renderInspector(); hint('Pick an item on the right. It is shown worn on your character: <b>drag it</b> to fit (arrow keys nudge), check it in other poses, then Download → repaint → Replace.'); return; }
   if (t === 'test') { startTest(); renderInspector(); hint('Play with the keyboard (A/D, Space, S, W, F, T…), or pick a demo. <span style="opacity:.8">This is a <b>simulation</b> based on Casualties: Unknown\'s code by Orson — not the game itself.</span>'); }
   else { cancelAnimationFrame(raf); raf = 0; hint(t === 'health' ? 'The in-game health screen. Drag any part to move it; click it to give it your own outline/middle art. Injurable pieces appear here too.' : rigHint()); renderInspector(); draw(); }
 }
-const startTestIfOpen = () => { if (tab === 'test') startTest(); };
-$('#tabRig').onclick = () => tabTo('rig'); $('#tabTest').onclick = () => tabTo('test'); $('#tabHealth').onclick = () => tabTo('health'); $('#tabAnim').onclick = () => tabTo('anim');
+const startTestIfOpen = () => { if (tab === 'test' || tab === 'gear') startTest(); };
+$('#tabGear').onclick = () => tabTo('gear'); $('#tabRig').onclick = () => tabTo('rig'); $('#tabTest').onclick = () => tabTo('test'); $('#tabHealth').onclick = () => tabTo('health'); $('#tabAnim').onclick = () => tabTo('anim');
 $('#actPrev').onchange = () => {
   if (!test) return; const A = $('#actPrev').value || 'idle';
   test.mode = A; test.timer = 0; test.dir = test.body.facing; test.vy = 0; test.vx = 0;
@@ -1141,21 +1151,62 @@ $('#actPrev').onchange = () => {
   cv.focus && cv.focus();
 };
 $('#btnTurn').onclick = () => { if (test) { test.body.facing *= -1; test.dir = test.body.facing; test.timer = 0; } };
-function updateInjuryPreview() {
-  const ip = $('#injPrev'), tp = $('#tornPrev'); const ci = ip.value, ct = tp.value;
-  const inj = doc ? doc.chains.filter(c => c.injury && c.injury.enabled) : [];
-  const states = new Set(doc ? doc.layers.filter(l => l.role.type === 'injury').map(l => l.role.state) : []);
-  if (doc) for (const id in doc.anims) for (const k in doc.anims[id]) if (RIG.isInjuryKey(k)) states.add(k);
-  ip.innerHTML = '<option value="">Healthy</option>' + RIG.INJURY_STATES.filter(([k]) => states.has(k) && k !== 'stump').map(([k, lab]) => `<option value="${k}">${lab}</option>`).join('');
-  const who = $('#injWho'), cw = who.value;
-  const hurtable = doc ? [...new Set([...doc.layers.filter(l => l.role.type === 'injury').map(l => RIG.layer(doc, l.role.of)).filter(Boolean).map(o => o.role.type === 'chain' ? (RIG.chain(doc, o.role.chain) || {}).name : o.name),
-    ...inj.map(c => c.name)])].filter(Boolean) : [];
-  who.innerHTML = '<option value="">on every part</option>' + hurtable.map(n => `<option value="${esc(n)}">on ${esc(n)}</option>`).join('');
-  who.value = hurtable.includes(cw) ? cw : ''; who.style.display = states.size ? '' : 'none';
-  const maxN = Math.max(0, ...inj.map(c => c.segs.length));
-  let o = '<option value="">Nothing torn off</option>'; for (let i = 1; i <= maxN; i++) o += `<option value="${i}">Torn off after piece ${i}</option>`;
-  tp.innerHTML = o; ip.value = [...ip.options].some(x => x.value === ci) ? ci : ''; tp.value = [...tp.options].some(x => x.value === ct) ? ct : '';
-  ip.style.display = states.size ? '' : 'none'; tp.style.display = inj.length ? '' : 'none';
+// ---- injury tester (Test tab): hurt any part, any state, tear things off. Only for looking; nothing is saved.
+let testInj = {}, itSel = 'UpArmF';
+function updateInjuryPreview() { // keeps the tester's list in step with the character (pieces renamed / removed)
+  const keys = new Set(injTargets().map(t => t.key));
+  for (const k in testInj) if (!keys.has(k)) delete testInj[k];
+  if (!keys.has(itSel)) itSel = 'UpArmF';
+}
+// every part you can hurt: the game's 15 + one per injury box of your injurable pieces
+function injTargets() {
+  const out = RIG.PARTS.map(p => ({ key: p, label: RIG.PART_LABEL[p], game: true, tear: RIG.TEARABLE.includes(p) }));
+  if (!doc) return out;
+  for (const ch of doc.chains) {
+    if (!ch.injury || !ch.injury.enabled) continue;
+    const g = RIG.groupsOf(ch), n = RIG.groupCount(ch); const seen = new Set();
+    g.forEach((gi, k) => { if (gi < 0 || seen.has(gi)) return; seen.add(gi);
+      out.push({ key: 'c:' + ch.name + ':' + gi, label: (ch.injury.name || ch.name) + (n > 1 ? ' ' + (seen.size) : ''), game: false, tear: ch.injury.tearOff !== false, chain: ch, first: k }); });
+  }
+  return out;
+}
+// the art layers that would show for a target in a state (your own injury art), so the tester can say what you'll see
+function injArtFor(t, st) {
+  if (!doc) return false;
+  const layers = t.game ? doc.layers.filter(l => l.role.type === 'part' && l.role.part === t.key).map(l => l.id).concat(doc.chains.filter(c => c.attachTo === t.key).flatMap(c => c.segs.map(s => s.layer)))
+    : t.chain.segs.filter((s, k) => RIG.groupsOf(t.chain)[k] === +t.key.split(':').pop()).map(s => s.layer);
+  return layers.some(id => doc.layers.some(a => a.role.type === 'injury' && a.role.of === id && a.role.state === st) || (doc.anims[id] && doc.anims[id][st]));
+}
+const GAME_LOOK = { broken: 'game shows a broken bone', bandaged: 'game wraps it', splinted: 'game straps a splint on' };
+function injTesterHtml() {
+  const T = injTargets(); const t = T.find(x => x.key === itSel) || T[0];
+  const e = testInj[t.key] || { states: [], torn: false };
+  const hurt = T.filter(x => testInj[x.key] && (testInj[x.key].torn || testInj[x.key].states.length));
+  const opt = (x) => `<option value="${esc(x.key)}" ${x.key === t.key ? 'selected' : ''}>${testInj[x.key] && (testInj[x.key].torn || testInj[x.key].states.length) ? '● ' : ''}${esc(x.label)}</option>`;
+  const lowers = t.game ? (RIG.LOWER[t.key] || []).map(p => RIG.PART_LABEL[p]) : [];
+  return `<h2>Injury tester</h2><div class="sec">
+    <div class="muted" style="margin-bottom:6px">Hurt any part and watch it in the test. Only for testing, nothing here is saved or exported.</div>
+    <div class="row"><label>Body part</label><select id="itPart" style="flex:1"><optgroup label="Game body parts">${T.filter(x => x.game).map(opt).join('')}</optgroup>${T.some(x => !x.game) ? `<optgroup label="Your injurable pieces">${T.filter(x => !x.game).map(opt).join('')}</optgroup>` : ''}</select></div>
+    <div class="row"><label>Torn off</label>${t.tear ? `<input type="checkbox" id="itTorn" ${e.torn ? 'checked' : ''}><span class="muted">${lowers.length ? 'takes ' + esc(lowers.join(' + ')) + ' with it' : t.game ? '' : 'and every piece after it'}</span>` : `<span class="muted">${t.game ? 'the game never tears this off' : 'tearing is off for this piece (Rig tab)'}</span>`}</div>
+    <div class="itGrid">${RIG.INJURY_STATES.filter(([k]) => k !== 'stump').map(([k, lab]) => {
+      const art = injArtFor(t, k), gl = t.game && GAME_LOOK[k] && !(k === 'splinted' && (t.key === 'Head' || t.key === 'UpTorso' || t.key === 'DownTorso'));
+      return `<label class="itRow"><input type="checkbox" data-it="${k}" ${e.states.includes(k) ? 'checked' : ''}><span>${esc(lab.replace(/ \(.*\)$/, ''))}</span>${art ? '<b class="pill ok" title="You drew art for this">your art</b>' : gl ? `<span class="pill" title="${GAME_LOOK[k]}">game look</span>` : ''}</label>`; }).join('')}</div>
+    <div class="row"><label>Stump art</label><span class="muted">${injArtFor(t, 'stump') ? 'yours shows when the part below is torn off' : 'tear off the part below to see it'}</span></div>
+    <div class="row"><button id="itHeal">Heal this part</button><button id="itHealAll" ${hurt.length ? '' : 'disabled'}>Heal everything</button></div>
+    ${hurt.length ? `<div class="muted" style="margin:6px 0 2px">Hurt right now:</div>${hurt.map(x => `<div class="seg"><span><a href="#" data-itgo="${esc(x.key)}">${esc(x.label)}</a>: ${testInj[x.key].torn ? 'torn off' + (testInj[x.key].states.length ? ', ' : '') : ''}${testInj[x.key].states.map(s => esc((RIG.INJURY_STATES.find(z => z[0] === s) || [s, s])[1].replace(/ \(.*\)$/, ''))).join(', ')}</span><button data-itx="${esc(x.key)}" title="Heal">✕</button></div>`).join('')}` : ''}
+    <div class="muted" style="margin-top:6px">With several states, the one highest in the list shows (like the mod). No <span class="pill ok">your art</span> = the game shows nothing special for that state on the body, only on the health screen.</div>
+  </div>`;
+}
+function bindInjTester() {
+  const ent = () => testInj[itSel] = testInj[itSel] || { states: [], torn: false };
+  const tidy = () => { for (const k in testInj) if (!testInj[k].torn && !testInj[k].states.length) delete testInj[k]; renderInspector(); };
+  $('#itPart').onchange = (e) => { itSel = e.target.value; renderInspector(); };
+  const tn = $('#itTorn'); if (tn) tn.onchange = () => { ent().torn = tn.checked; tidy(); };
+  document.querySelectorAll('[data-it]').forEach(c => c.onchange = () => { const e = ent(), k = c.dataset.it; e.states = e.states.filter(s => s !== k); if (c.checked) e.states.push(k); tidy(); });
+  $('#itHeal').onclick = () => { delete testInj[itSel]; renderInspector(); };
+  $('#itHealAll').onclick = () => { testInj = {}; renderInspector(); };
+  document.querySelectorAll('[data-itx]').forEach(b => b.onclick = () => { delete testInj[b.dataset.itx]; renderInspector(); });
+  document.querySelectorAll('[data-itgo]').forEach(a => a.onclick = (ev) => { ev.preventDefault(); itSel = a.dataset.itgo; renderInspector(); });
 }
 function updateHeadStates() {
   updateInjuryPreview(); fillWearList();
@@ -1189,6 +1240,115 @@ function liveMotion() {
   const built = RIG.buildRig(doc);
   test.rt.chains.forEach((c) => { const def = built.rig.chains.find(x => x.name === c.def.name && x.attachTo === c.def.attachTo); if (def) Object.assign(c.motion, def.motion); });
 }
+
+// ---- Gear tab: every wearable shown worn on your character, in any pose; drag it to fit, repaint it
+const GS = { item: '', piece: '', pose: 'stand', t: 0, playing: false, facing: 1, hits: [], drag: null };
+const GEAR_POSES = [['stand', 'ExperimentIdle', 'ArmsIdle', 'Standing'], ['run', 'ExperimentRun', 'ArmsRun', 'Running'], ['crouch', 'ExperimentIdleCrouch', 'ArmsCrouch', 'Crouching'],
+  ['jump', 'ExperimentAirUp', 'ArmsAirUp', 'Jumping'], ['fall', 'ExperimentAirDown', 'ArmsAirDown', 'Falling'], ['climb', 'ExperimentClimbUp', 'ArmsClimbUp', 'Climbing'],
+  ['sit', 'ExperimentSit', 'ArmsSit', 'Sitting'], ['swing', 'ExperimentIdle', 'ArmsSwing', 'Attacking'], ['lay', 'ExperimentLayDown', 'ArmsLayDown', 'Lying down']];
+function fillGearPoses() {
+  const sel = $('#gearPose'); sel.innerHTML = GEAR_POSES.map(p => `<option value="${p[0]}" ${p[0] === GS.pose ? 'selected' : ''}>Pose: ${p[3]}</option>`).join('');
+  sel.onchange = () => { GS.pose = sel.value; GS.t = 0; };
+  $('#gearPlay').onclick = (e) => { GS.playing = !GS.playing; e.target.textContent = GS.playing ? '❚❚ Pause' : '▶ Play'; if (!GS.playing) GS.t = 0; };
+  $('#gearTurn').onclick = () => { GS.facing *= -1; };
+}
+// the game's own spot for a worn sprite (its pivot on the limb's joint), in canvas pixels
+function gearHome(sprite, limb) {
+  const G = RIG.GAME, im = G && G.images[sprite], sp = G && G.sprites[sprite]; if (!im || !sp) return null;
+  const c = RIG.crop(im.rgba, im.w, im.h) || { x: 0, y: 0 }; const J = RIG.J(doc, limb);
+  const px = sp.pivot ? sp.pivot[0] : im.w / 2, py = sp.pivot ? sp.pivot[1] : im.h / 2;
+  return { x: Math.round(J.x - px + c.x), y: Math.round(J.y - (im.h - py) + c.y) };
+}
+const gearPieces = (g) => [{ limb: g.limb, sprite: g.sprite }, ...(g.extra || [])].filter(w => w.sprite);
+const myGear = (sprite) => doc.layers.find(o => o.role.type === 'gear' && o.role.sprite === sprite);
+function makeMyGear(g, w) { // your copy of one worn sprite (starts as the game's art, on the game's spot)
+  let l = myGear(w.sprite); if (l) return l;
+  l = gameLayer(doc, w.sprite, w.sprite, { type: 'gear', sprite: w.sprite, limb: w.limb, item: g.id }, w.limb);
+  if (l) { if (RIG.REST[w.limb] && RIG.REST[w.limb][2]) l.spriteRot = RIG.REST[w.limb][2]; doc.layers.forEach((o, i) => o.order = i); }
+  return l;
+}
+const thumbCache = new Map();
+function gearThumb(sprite) {
+  const l = doc && myGear(sprite); const im = l || (RIG.GAME && RIG.GAME.images[sprite]); if (!im) return '';
+  const key = l ? l : sprite; if (!l && thumbCache.has(key)) return thumbCache.get(key);
+  let url = ''; try { url = layerCanvas(im).toDataURL(); } catch (e) { }
+  if (!l) thumbCache.set(key, url); return url;
+}
+let gearFilter = '';
+function gearTabHtml() {
+  if (!RIG.GAME) return `<h2>Gear</h2><div class="sec muted">Load the game template first (click <b>no game template</b> at the top and pick <code>BepInEx\plugins\AdvancedRigs\GameTemplate</code>). The mod writes it the first time you play, or press <b>F10</b> in game.</div>`;
+  const list = gearList();
+  if (!list.length) return `<h2>Gear</h2><div class="sec muted">Your game template has no wearables in it. Load into a world and press <b>F10</b> in game to save it again, then reload it here.</div>`;
+  if (!GS.item || !list.some(g => g.id === GS.item)) { GS.item = list[0].id; GS.piece = list[0].sprite; }
+  const g = list.find(x => x.id === GS.item); const pcs = gearPieces(g);
+  if (!pcs.some(w => w.sprite === GS.piece)) GS.piece = pcs[0] ? pcs[0].sprite : '';
+  const f = gearFilter.toLowerCase();
+  const byLimb = {}; for (const x of list) { if (f && !x.id.toLowerCase().includes(f)) continue; (byLimb[x.limb] = byLimb[x.limb] || []).push(x); }
+  let h = `<h2>${esc(g.id)}</h2><div class="sec">
+    <div class="muted" style="margin-bottom:6px">Worn on the <b>${esc(RIG.PART_LABEL[g.limb] || g.limb)}</b>${g.slot ? ' · slot ' + esc(g.slot) : ''}${g.drawOffset ? ' · drawn ' + (g.drawOffset > 0 ? 'in front of' : 'behind') + ' it' : ''}. Your version shows only while you wear it; everyone sees it.</div>`;
+  for (const w of pcs) {
+    const l = myGear(w.sprite), home = gearHome(w.sprite, w.limb);
+    const off = l && home ? { x: l.x - home.x, y: home.y - l.y } : { x: 0, y: 0 };
+    h += `<div class="gearPiece ${w.sprite === GS.piece ? 'on' : ''}" data-gpiece="${esc(w.sprite)}">
+      <div class="row" style="margin:0"><img class="gthumb" src="${gearThumb(w.sprite)}"><div style="flex:1"><b>${esc(RIG.PART_LABEL[w.limb] || w.limb)}</b><br><span class="muted">${l ? 'your version' : "game's art"}</span></div></div>
+      <div class="row"><label>Position</label><span class="muted">x</span><input type="number" step="1" data-gx="${esc(w.sprite)}" value="${off.x}" style="width:56px"><span class="muted">y</span><input type="number" step="1" data-gy="${esc(w.sprite)}" value="${off.y}" style="width:56px"><span class="muted">px</span></div>
+      <div class="row"><button data-gdl="${esc(w.sprite)}" title="Save the sprite as a PNG to repaint">⬇ PNG</button><button data-grep="${esc(w.sprite)}" title="Load your repainted PNG">Replace…</button>${l ? `<button data-gzero="${esc(w.sprite)}" title="Back to the game's spot">Center</button><button data-gdel="${esc(w.sprite)}" title="Use the game's art again">✕ Mine</button>` : ''}</div>
+    </div>`;
+  }
+  h += `<div class="muted">Drag it on the body, or use the arrow keys (Shift = 5 px). Try other poses at the top to check it fits while moving.</div></div>`;
+  h += `<h2>All wearables</h2><div class="sec"><input id="gearFind" type="text" placeholder="Search…" value="${esc(gearFilter)}" style="width:100%;margin-bottom:6px">`;
+  for (const limb of Object.keys(byLimb).sort((a, b) => RIG.PARTS.indexOf(a) - RIG.PARTS.indexOf(b))) {
+    h += `<div class="muted" style="margin:6px 0 2px">${esc(RIG.PART_LABEL[limb] || limb)}</div><div class="gearGrid">`;
+    for (const x of byLimb[limb]) { const mine = gearPieces(x).some(w => myGear(w.sprite));
+      h += `<button class="gearCell ${x.id === GS.item ? 'on' : ''}" data-gitem="${esc(x.id)}" title="${esc(x.id)}"><img src="${gearThumb(x.sprite)}"><span>${mine ? '✎ ' : ''}${esc(x.id)}</span></button>`; }
+    h += `</div>`;
+  }
+  return h + `</div><input id="gearFile" type="file" accept=".png" hidden>`;
+}
+function bindGearTab() {
+  const box = $('#insp'); const g = gearList().find(x => x.id === GS.item); if (!g) return;
+  const pieceOf = (sp) => gearPieces(g).find(w => w.sprite === sp);
+  box.querySelectorAll('[data-gitem]').forEach(b => b.onclick = () => { GS.item = b.dataset.gitem; GS.piece = ''; renderInspector(); });
+  box.querySelectorAll('[data-gpiece]').forEach(d => d.onclick = (e) => { if (e.target.closest('button,input')) return; GS.piece = d.dataset.gpiece; renderInspector(); });
+  const fd = $('#gearFind'); if (fd) fd.oninput = () => { gearFilter = fd.value; const pos = fd.selectionStart; renderInspector(); const n = $('#gearFind'); n.focus(); n.setSelectionRange(pos, pos); };
+  const setOff = (sp, ax, v) => { const w = pieceOf(sp); pushUndo(); const l = makeMyGear(g, w); const home = gearHome(sp, w.limb); if (!l || !home) return;
+    if (ax === 'x') l.x = home.x + Math.round(v); else l.y = home.y - Math.round(v); GS.piece = sp; renderInspector(); renderLayers(); };
+  box.querySelectorAll('[data-gx]').forEach(i => i.onchange = () => setOff(i.dataset.gx, 'x', +i.value));
+  box.querySelectorAll('[data-gy]').forEach(i => i.onchange = () => setOff(i.dataset.gy, 'y', +i.value));
+  box.querySelectorAll('[data-gzero]').forEach(b => b.onclick = () => { setOff(b.dataset.gzero, 'x', 0); setOff(b.dataset.gzero, 'y', 0); });
+  box.querySelectorAll('[data-gdel]').forEach(b => b.onclick = () => { const l = myGear(b.dataset.gdel); if (!l) return; pushUndo(); RIG.removeLayers(doc, [l.id]); imgCache.clear(); renderInspector(); renderLayers(); startTest(); toast('Back to the game\'s art. Ctrl+Z to undo.'); });
+  box.querySelectorAll('[data-gdl]').forEach(b => b.onclick = () => { const sp = b.dataset.gdl, l = myGear(sp), im = l || RIG.GAME.images[sp]; if (!im) return;
+    layerCanvas(im).toBlob(bl => { const a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = sp + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }); });
+  box.querySelectorAll('[data-grep]').forEach(b => b.onclick = () => { const sp = b.dataset.grep; const inp = $('#gearFile');
+    inp.onchange = async () => { const f = inp.files[0]; inp.value = ''; if (!f) return; const d = await decodePng(f); const w = pieceOf(sp);
+      const l = makeMyGear(g, w); if (!l) return; replaceLayerImage(l, d); thumbCache.clear(); imgCache.clear(); GS.piece = sp; renderInspector(); renderLayers(); startTest(); toast('Replaced. Drag it to fit if it moved.'); };
+    inp.click(); });
+}
+// drag on the canvas: moves your copy of the picked (or clicked) sprite, in the body part's own pixels
+function gearHit(sx, sy) {
+  for (let i = GS.hits.length - 1; i >= 0; i--) { const h = GS.hits[i], m = h.m; const det = m[0] * m[3] - m[1] * m[2]; if (!det) continue;
+    const x = sx - m[4], y = sy - m[5]; const lx = (m[3] * x - m[2] * y) / det, ly = (-m[1] * x + m[0] * y) / det;
+    if (lx >= h.box[0] - 1 && lx <= h.box[0] + h.box[2] + 1 && ly >= h.box[1] - 1 && ly <= h.box[1] + h.box[3] + 1) return h; }
+  return null;
+}
+function gearPointerDown(sx, sy) {
+  const h = gearHit(sx, sy); if (!h) return;
+  const g = gearList().find(x => x.id === GS.item); const w = g && gearPieces(g).find(p => p.sprite === h.sprite); if (!w) return;
+  pushUndo(); const l = makeMyGear(g, w); if (!l) return;
+  GS.piece = h.sprite; GS.drag = { sx, sy, m: h.m, x0: l.x, y0: l.y, l }; renderInspector();
+}
+function gearPointerMove(sx, sy) {
+  const D = GS.drag; if (!D) { cv.style.cursor = gearHit(sx, sy) ? 'move' : ''; return; }
+  const m = D.m, det = m[0] * m[3] - m[1] * m[2]; const dx = sx - D.sx, dy = sy - D.sy;
+  D.l.x = D.x0 + Math.round((m[3] * dx - m[2] * dy) / det); D.l.y = D.y0 + Math.round((-m[1] * dx + m[0] * dy) / det);
+}
+document.addEventListener('keydown', (e) => {
+  if (!doc || tab !== 'gear' || /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key]; if (!d) return;
+  const g = gearList().find(x => x.id === GS.item); const w = g && gearPieces(g).find(p => p.sprite === GS.piece); if (!w) return;
+  e.preventDefault(); const l = myGear(w.sprite) || (pushUndo(), makeMyGear(g, w)); if (!l) return;
+  const k = e.shiftKey ? 5 : 1; l.x += d[0] * k * (GS.facing < 0 ? -1 : 1); l.y += d[1] * k; clearTimeout(GS.rt); GS.rt = setTimeout(renderInspector, 150);
+});
 
 // ---- Animate tab: your own touch on top of the game's animations (saved in the rig, played by the mod in game)
 const CLIP_LABEL = {
@@ -1575,8 +1735,10 @@ function loop(now) {
   const ease = (cur, to, k) => cur + (to - cur) * Math.min(1, dt * k);
   b.t += dt;
   let act = A;
+  const gearMode = tab === 'gear';
   const animMode = tab === 'anim';
-  if (animMode) { T.vx = 0; T.vy = 0; b.x = 0; b.y = 0; b.facing = 1; b.accelRot = 0; T.grounded = true; act = 'idle';
+  if (gearMode) { T.vx = 0; T.vy = 0; b.x = 0; b.y = 0; b.facing = GS.facing; b.accelRot = 0; T.grounded = true; act = 'idle'; if (GS.playing) GS.t += dt; }
+  else if (animMode) { T.vx = 0; T.vy = 0; b.x = 0; b.y = 0; b.facing = 1; b.accelRot = 0; T.grounded = true; act = 'idle';
     const c = clipOf(); if (c && AS.playing && c.length > 0) { AS.t += dt * AS.speed; if (AS.t > c.length) AS.t = c.loop ? AS.t % c.length : 0; }
     drawDope();
   } else if (A === 'play') {
@@ -1623,7 +1785,12 @@ function loop(now) {
   b.tailAngle = ease(b.tailAngle, Math.abs(T.vx) > 1.4 ? -6 : 23.6, 3);
   let frames;
   const useGame = gameMode() && T.ga && !lying;
-  if (animMode && gameMode() && T.ga) {
+  if (gearMode && gameMode() && T.ga) {
+    T.ga.overrides = doc.animations || {};
+    const P = GEAR_POSES.find(x => x[0] === GS.pose) || GEAR_POSES[0], ga = T.ga;
+    const tb = ga.clips[P[1]] ? GS.t % Math.max(0.001, ga.clips[P[1]].length || 0.001) : 0, ta = ga.clips[P[2]] ? GS.t % Math.max(0.001, ga.clips[P[2]].length || 0.001) : 0;
+    frames = RIG.gameFrames(ga, ga.combine(ga.clipPose(P[1], tb), ga.clipPose(P[2], ta)), { x: 0, y: 0, facing: GS.facing, accelRot: 0, crouchAmount: 0, grounded: true, tailAngle: b.tailAngle });
+  } else if (animMode && gameMode() && T.ga) {
     T.ga.overrides = doc.animations || {};
     frames = RIG.gameFrames(T.ga, T.ga.single(AS.clip, AS.t), { x: 0, y: 0, facing: 1, accelRot: 0, crouchAmount: 0, grounded: true, tailAngle: b.tailAngle });
   } else if (useGame) {
@@ -1659,13 +1826,14 @@ function loop(now) {
   const z = T.zoom;
   ctx.setTransform(d, 0, 0, d, 0, 0);
   const PAL = CV(); ctx.fillStyle = PAL.bg; ctx.fillRect(0, 0, W, H);
-  const groundY = (animMode ? Math.max(120, (H - 206) * 0.86) : H * 0.72) + T.camY * z; // screen y of world y = 0 (above the timeline in Animate)
+  if (gearMode) { T.camX = 0; T.camY = 0; }
+  const groundY = (animMode ? Math.max(120, (H - 206) * 0.86) : gearMode ? H * 0.8 : H * 0.72) + T.camY * z; // screen y of world y = 0 (above the timeline in Animate)
   const x0 = W / 2 - T.camX * z;
   const sx = (x) => x0 + x * z, sy = (y) => groundY - y * z;
   ctx.strokeStyle = PAL.grid; ctx.lineWidth = 1;
   for (let gx = Math.floor((T.camX - W / 2 / z) / 2) * 2; gx < T.camX + W / 2 / z; gx += 2) { ctx.beginPath(); ctx.moveTo(sx(gx), 0); ctx.lineTo(sx(gx), H); ctx.stroke(); }
   for (let gy = Math.floor(T.camY / 2) * 2 - 14; gy < T.camY + 16; gy += 2) { const y = sy(gy); if (y < 0 || y > H) continue; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-  if (A === 'play') { // the level
+  if (A === 'play' && !gearMode && !animMode) { // the level
     ctx.fillStyle = 'rgba(70,130,220,.22)'; const Wt = LEVEL.water; ctx.fillRect(sx(Wt.x0), sy(Wt.y1), (Wt.x1 - Wt.x0) * z, (Wt.y1 - Wt.y0) * z);
     const L = LEVEL.ladder; ctx.strokeStyle = '#6b5a3a'; ctx.lineWidth = Math.max(1, z * 0.08);
     ctx.beginPath(); ctx.moveTo(sx(L.x0), sy(L.y0)); ctx.lineTo(sx(L.x0), sy(L.y1)); ctx.moveTo(sx(L.x1), sy(L.y0)); ctx.lineTo(sx(L.x1), sy(L.y1));
@@ -1676,27 +1844,32 @@ function loop(now) {
     if (act === 'climb') { ctx.fillStyle = '#1a1c22'; ctx.fillRect(sx(b.x + 0.9 * b.facing) - (b.facing > 0 ? 0 : 0.6 * z), 0, 0.6 * z, Math.min(H, groundY)); }
     if (groundY < H + 2) { ctx.fillStyle = PAL.ground; ctx.fillRect(0, groundY, W, H - groundY); ctx.strokeStyle = PAL.groundLine; ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke(); }
   }
-  const footBottom = (useGame || animMode) && gameMode() ? moveConsts(T).footBottom : 2.415 + 0.7;
+  const footBottom = (useGame || animMode || gearMode) && gameMode() ? moveConsts(T).footBottom : 2.415 + 0.7;
   const S = [z, 0, 0, -z, x0, groundY - footBottom * z];
   T.lastS = S; T.lastFrames = frames;
   ctx.imageSmoothingEnabled = false;
   const ppu = RIG.PPU, pix = [1 / ppu, 0, 0, -1 / ppu, 0, 0];
   const replaced = new Set(T.rig.chains.filter(c => c.hideTarget).map(c => c.attachTo));
-  const injTarget = $('#injWho') ? $('#injWho').value : '';
-  const items = T.rt.drawList({ frames, action: act, headState, injury: $('#injPrev').value || null, injuryOnly: injTarget || null, tornAt: $('#tornPrev').value ? +$('#tornPrev').value : null });
+  const inj = tab === 'test' ? testInj : {}; const hv = RIG.hurtView(inj);
+  const items = T.rt.drawList({ frames, action: act, headState, injuries: inj });
   // the game's own parts this rig doesn't replace (drawn with the game's sprites, or your skin swaps)
-  for (const part of RIG.PARTS) if (!replaced.has(part)) items.push({ ghost: part, order: RIG.ORDER[part], m: frames[part] });
+  for (const part of RIG.PARTS) if (!replaced.has(part) && !hv.hidden.has(part)) items.push({ ghost: part, order: RIG.ORDER[part], m: frames[part] });
+  // what the game itself puts on a hurt limb (Limb.MakeBoneSprite, CreateTemporarySprite): broken bone, bandage wrap, splint
+  for (const part of RIG.PARTS) { if (hv.hidden.has(part) || !frames[part]) continue; const sts = RIG.statesOf(inj, part);
+    if (sts.includes('broken')) items.push({ fx: 'brokenBone', part, order: RIG.ORDER[part] + 1, m: frames[part], angle: (part.length * 47 + part.charCodeAt(0) * 13) % 360 });
+    if (sts.includes('bandaged')) items.push({ fx: 'bandageWrap', part, order: RIG.ORDER[part] + 2, m: frames[part], angle: 0, wrap: true });
+    if (sts.includes('splinted') && !/Head|Torso/.test(part)) items.push({ fx: 'splint', part, order: RIG.ORDER[part] + 2.1, m: frames[part], angle: -90 }); }
   if (!T.rig.hideVanillaTail) items.push({ ghost: 'tail', order: RIG.ORDER.tail, m: frames.tail });
   // eyes: drawn on the head, above it
   const headItem = items.find(it => !it.ghost && it.chainAttach === 'Head' && it.isPart);
   const eyesHidden = T.rig.hideObjects.includes('Eyes');
-  if (!eyesHidden) items.push({ eyes: true, order: (headItem ? headItem.order : RIG.ORDER.Head) + 0.5, m: frames.Head });
+  if (!eyesHidden && !hv.hidden.has('Head')) items.push({ eyes: true, order: (headItem ? headItem.order : RIG.ORDER.Head) + 0.5, m: frames.Head });
   // an item worn in the test: your version if you drew one, the game's otherwise, on its body part (like Body.WearItem)
-  const wearId = $('#wearPrev') ? $('#wearPrev').value : '';
+  const wearId = gearMode ? GS.item : ($('#wearPrev') ? $('#wearPrev').value : '');
   const wearG = wearId && RIG.GAME ? (RIG.GAME.tpl.gear || []).find(g => g.id === wearId) : null;
   if (wearG) {
     const partOrder = (part) => { const pc = T.rig.chains.find(c => c.hideTarget && c.attachTo === part); return (RIG.ORDER[part] || 0) + (pc ? pc.sortingOrderOffset || 0 : 0); };
-    for (const w of [{ limb: wearG.limb, sprite: wearG.sprite }, ...(wearG.extra || [])]) if (w.sprite && frames[w.limb]) items.push({ wear: w.sprite, order: partOrder(w.limb) + (wearG.drawOffset || 0) * 0.1 + 0.05, m: frames[w.limb], limb: w.limb });
+    for (const w of [{ limb: wearG.limb, sprite: wearG.sprite }, ...(wearG.extra || [])]) if (w.sprite && frames[w.limb] && !hv.hidden.has(w.limb)) items.push({ wear: w.sprite, order: partOrder(w.limb) + (wearG.drawOffset || 0) * 0.1 + 0.05, m: frames[w.limb], limb: w.limb });
   }
   items.sort((a, b2) => a.order - b2.order);
   // the game's own sprites (from the game template) for anything the rig doesn't replace, drawn on their real pivots
@@ -1719,11 +1892,25 @@ function loop(now) {
       void tint;
     }
   }
+  if (gearMode) GS.hits = [];
   for (const it of items) {
+    if (it.fx) { // the game's effect sprite, or a plain stand-in when the template is older than the mod's v0.1 template 2
+      const G = RIG.GAME, fxName = G && G.tpl.effects && G.tpl.effects[it.fx];
+      const L = G && (G.tpl.limbs || []).find(x => x.name === it.part); const sx = it.wrap && L && L.tempScale ? L.tempScale : 1;
+      const m = RIG.M.mul(RIG.M.mul(RIG.M.mul(S, it.m), RIG.M.mul(RIG.M.R(it.angle || 0), [sx, 0, 0, 1, 0, 0])), pix); setM(m);
+      if (fxName && tplDraw(fxName)) continue;
+      ctx.fillStyle = it.fx === 'brokenBone' ? 'rgba(240,235,220,.95)' : it.fx === 'splint' ? '#8a6a3c' : 'rgba(245,245,245,.92)';
+      if (it.fx === 'brokenBone') { ctx.fillRect(-3, -0.5, 6, 1); ctx.fillRect(-0.5, -3, 1, 6); } else if (it.fx === 'splint') ctx.fillRect(-1, -6, 2, 12); else ctx.fillRect(-3.5, -2, 7, 4);
+      continue;
+    }
     if (it.wear) {
       const m = RIG.M.mul(RIG.M.mul(S, it.m), pix); setM(m);
       const gl = doc.layers.find(o => o.role.type === 'gear' && o.role.sprite === it.wear);
-      if (gl) { const J = RIG.J(doc, it.limb); ctx.drawImage(layerCanvas(gl), gl.x - J.x, gl.y - J.y); } else tplDraw(it.wear);
+      let box;
+      if (gl) { const J = RIG.J(doc, it.limb); ctx.drawImage(layerCanvas(gl), gl.x - J.x, gl.y - J.y); box = [gl.x - J.x, gl.y - J.y, gl.w, gl.h]; }
+      else { tplDraw(it.wear); const im = RIG.GAME.images[it.wear], sp = RIG.GAME.sprites[it.wear] || {}; if (im) { const pv = sp.pivot || [im.w / 2, im.h / 2]; box = [-pv[0], -(im.h - pv[1]), im.w, im.h]; } }
+      if (gearMode && box) { GS.hits.push({ sprite: it.wear, limb: it.limb, m: m.slice(), box });
+        if (it.wear === GS.piece) { ctx.save(); ctx.setLineDash([3 * RIG.PPU / z, 3 * RIG.PPU / z]); ctx.lineWidth = 1.5 * RIG.PPU / z; ctx.strokeStyle = '#ffcf4a'; ctx.strokeRect(box[0] - 0.5, box[1] - 0.5, box[2] + 1, box[3] + 1); ctx.restore(); } }
       continue;
     }
     if (it.eyes) {
@@ -1759,8 +1946,8 @@ function loop(now) {
   }
   ctx.fillStyle = alive ? PAL.text : '#e0475b'; ctx.font = '12px ui-monospace, Consolas, monospace';
   const lab = (RIG.ACTIONS.find(x => x[0] === act) || [act, act])[1];
-  ctx.fillText('State: ' + lab + (A === 'play' ? '' : '  (demo)') + '   ·   eyes: ' + (RIG.EYE_LABEL[eyeState] || eyeState) + (headState ? '   ·   head: ' + (RIG.HEAD_STATE_LABEL[headState] || headState) : ''), 12, 20);
-  if (A === 'play') {
+  if (!gearMode) ctx.fillText('State: ' + lab + (A === 'play' ? '' : '  (demo)') + '   ·   eyes: ' + (RIG.EYE_LABEL[eyeState] || eyeState) + (headState ? '   ·   head: ' + (RIG.HEAD_STATE_LABEL[headState] || headState) : ''), 12, 20);
+  if (A === 'play' && !gearMode) {
     ctx.fillStyle = '#6f7280';
     ctx.fillText('A/D move · Shift walk · Space jump (hold = higher; jump off walls) · S crouch · W/S ladder · F attack · T talk · R ragdoll · Z sleep · X dead', 12, H - 12);
   }
@@ -1876,7 +2063,10 @@ const hsArt = (name) => (RIG.GAME && RIG.GAME.images[name]) ? layerCanvas(RIG.GA
 // every item on the health screen: the game's 15 parts + one per injurable piece (same default spots as the mod)
 function hsItems() {
   if (!doc) return [];
-  const items = RIG.HS_LAYOUT.map(L => {
+  const ths = RIG.GAME && RIG.GAME.tpl.healthScreen || {};
+  const items = RIG.HS_LAYOUT.map(L0 => {
+    const t = ths[L0.part]; // the player's own game wins over the built-in numbers
+    const L = t && t.outline ? Object.assign({}, L0, { outline: t.outline, middle: t.middle || L0.middle, x: t.x, y: t.y, w: t.w || L0.w, h: t.h || L0.h, mirror: !!t.mirror }) : L0;
     const c = doc.healthScreen[L.part];
     const hasArt = c && c.outline;
     return { key: L.part, label: RIG.PART_LABEL[L.part], x: c && c.x !== undefined ? c.x : L.x, y: c && c.y !== undefined ? c.y : L.y,
@@ -1892,7 +2082,7 @@ function hsItems() {
       if (!RIG.isGroupLeader(ch, k)) return;
       const key = 'seg:' + sg.layer, c = doc.healthScreen[key], hasArt = c && c.outline; const n = gi++;
       items.push({ key, label: (ch.injury.name || ch.name) + (nG > 1 ? ' ' + (n + 1) : ''), extra: true,
-        x: c && c.x !== undefined ? c.x : -150 - n * 58, y: c && c.y !== undefined ? c.y : 20 - ci * 70,
+        x: c && c.x !== undefined ? c.x : -150 - ci * 58, y: c && c.y !== undefined ? c.y : 20 - n * 62, injKey: 'c:' + ch.name + ':' + RIG.groupsOf(ch)[k], chainName: ch.name, firstK: k,
         w: hasArt ? c.outline.w * (c.scale || 3) : (c ? 72 : 54), h: hasArt ? c.outline.h * (c.scale || 3) : (c ? 75 : 56),
         mirror: c ? !!c.mirror : false, rot: c ? (c.rotation || 0) : 0, outline: hasArt ? c.outline : null, middle: c && c.middle ? c.middle : null,
         vOutline: 'crusOutline', vMiddle: 'crusMiddle', custom: !!c });
@@ -1902,30 +2092,74 @@ function hsItems() {
   return items;
 }
 function hsView(W, H) { const z = Math.min(W, H) / 780; return { z, cx: W / 2, cy: H / 2 }; }
+// tinting like Unity UI (sprite colour x image colour)
+const tintCache = new Map();
+function tinted(src, r, g, b) {
+  if (!src) return null; const key = src; let per = tintCache.get(key); if (!per) { per = new Map(); tintCache.set(key, per); }
+  const k = (r * 255 | 0) + ',' + (g * 255 | 0) + ',' + (b * 255 | 0); if (per.has(k)) return per.get(k);
+  const w = src.width || src.naturalWidth, h = src.height || src.naturalHeight; const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+  x.drawImage(src, 0, 0); x.globalCompositeOperation = 'multiply'; x.fillStyle = `rgb(${Math.max(0, r) * 255 | 0},${Math.max(0, g) * 255 | 0},${Math.max(0, b) * 255 | 0})`; x.fillRect(0, 0, w, h);
+  x.globalCompositeOperation = 'destination-in'; x.drawImage(src, 0, 0); per.set(k, c); if (per.size > 40) per.delete(per.keys().next().value); return c;
+}
+// what a limb would look like on the health screen with the injury tester's injuries (WoundView.UpdateView)
+function hsLook(states) {
+  let skin = 100, muscle = 100; const icons = [];
+  if (states.includes('scratched')) skin = 60; if (states.includes('wounded')) skin = 30; if (states.includes('broken')) skin = Math.min(skin, 67);
+  if (states.includes('mangled')) muscle = 25;
+  if (states.includes('bleeding')) icons.push([states.includes('bandaged') ? 12 : 7, [0.85, 0.1, 0.1]]);
+  if (states.includes('infected')) icons.push([10, [0.85, 0.5, 0.9]]);
+  if (states.includes('broken')) icons.push([2, [1, 0, 0]]);
+  if (states.includes('dislocated')) icons.push([1, [1, 0, 0]]);
+  if (states.includes('disinfected')) icons.push([4, [0.65, 0.65, 0.65]]);
+  if (states.includes('shrapnel')) icons.push([5, [0.68, 0.42, 0.21]]);
+  if (states.includes('frostbite')) icons.push([6, [0.21, 0.54, 1]]);
+  return { skin, muscle, icons, tourniquet: states.includes('tourniquet') };
+}
 function drawHealth(W, H) {
   ctx.fillStyle = CV().bg; ctx.fillRect(0, 0, W, H);
   if (!doc) return;
   const v = hsView(W, H);
   ctx.strokeStyle = '#2a2c34'; ctx.strokeRect(v.cx - 342 * v.z, v.cy - 342 * v.z, 684 * v.z, 684 * v.z);
   ctx.imageSmoothingEnabled = false;
+  const hv = RIG.hurtView(testInj); const G = RIG.GAME;
+  const tornChain = {}; // pieces at / after a torn one are gone
+  for (const k in testInj) if (testInj[k].torn && k.startsWith('c:')) { const [, nm, g] = k.split(':'); const ch = doc.chains.find(c => c.name === nm); if (ch) { const k0 = RIG.groupsOf(ch).indexOf(+g); if (k0 >= 0) tornChain[nm] = Math.min(tornChain[nm] === undefined ? 1e9 : tornChain[nm], k0); } }
+  const noArt = !hsItems().some(it => it.outline || hsArt(it.vOutline));
   for (const it of hsItems()) {
+    if (!it.extra && hv.hidden.has(it.key)) continue;
+    if (it.extra && tornChain[it.chainName] !== undefined && it.firstK >= tornChain[it.chainName]) continue;
+    const look = hsLook(it.extra ? RIG.statesOf(testInj, it.injKey) : RIG.statesOf(testInj, it.key));
     ctx.save(); ctx.translate(v.cx + it.x * v.z, v.cy - it.y * v.z); ctx.rotate(-it.rot * Math.PI / 180); ctx.scale(it.mirror ? -1 : 1, 1);
     const w = it.w * v.z, h = it.h * v.z;
-    const mid = it.middle ? layerCanvas(it.middle) : (it.outline ? layerCanvas(it.outline) : hsArt(it.vMiddle));
+    const mid = it.middle ? layerCanvas(it.middle) : (it.outline ? null : hsArt(it.vMiddle));
     const out = it.outline ? layerCanvas(it.outline) : hsArt(it.vOutline);
-    if (!mid && !out) { // no game template loaded: a plain shape where the part goes
-      ctx.fillStyle = 'rgba(200,200,210,.25)'; ctx.strokeStyle = 'rgba(220,220,230,.6)'; ctx.lineWidth = 1;
+    if (!mid && !out) { // no game template art: a plain shape where the part goes
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.strokeStyle = `rgb(255,${look.skin * 2.55 | 0},${look.skin * 2.55 | 0})`; ctx.lineWidth = 2;
       ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-w / 2, -h / 2, w, h, Math.min(w, h) * 0.3); else ctx.rect(-w / 2, -h / 2, w, h); ctx.fill(); ctx.stroke();
     }
-    ctx.globalAlpha = 0.55; if (mid && (mid.width || mid.naturalWidth)) ctx.drawImage(mid, -w / 2, -h / 2, w, h);
-    ctx.globalAlpha = 1; if (out && (out.width || out.naturalWidth)) ctx.drawImage(out, -w / 2, -h / 2, w, h);
+    // the game: the outline image tinted (1, skin, skin), its child "middle" image on top tinted (1 - muscle, 0, 0)
+    if (out) ctx.drawImage(tinted(out, 1, look.skin / 100, look.skin / 100), -w / 2, -h / 2, w, h);
+    if (mid) ctx.drawImage(tinted(mid, 1 - look.muscle / 100, 0, 0), -w / 2, -h / 2, w, h);
+    if (look.tourniquet && G && G.tpl.effects && G.tpl.effects.tourniquetIcon && G.images[G.tpl.effects.tourniquetIcon]) { const im = G.images[G.tpl.effects.tourniquetIcon], sp = G.sprites[G.tpl.effects.tourniquetIcon] || {}; const s = 100 / (sp.ppu || 100) * v.z; ctx.drawImage(layerCanvas(im), -im.w * s / 2, -im.h * s / 2, im.w * s, im.h * s); }
     ctx.restore();
+    // status icons over the part, like WoundView (bleeding, infection, broken bone…)
+    const ic = G && G.tpl.hsIcons;
+    look.icons.forEach(([idx, col], m) => {
+      const off = (m * 50 - (look.icons.length - 1) * 25) * 0.6 * v.z; const px = v.cx + it.x * v.z + off, py = v.cy - it.y * v.z - off * 0.2;
+      const nm = ic && ic[idx], im = nm && G.images[nm];
+      if (im) { const sp = G.sprites[nm] || {}; const s = 100 / (sp.ppu || 100) * v.z; ctx.drawImage(tinted(layerCanvas(im), col[0], col[1], col[2]), px - im.w * s / 2, py - im.h * s / 2, im.w * s, im.h * s); }
+      else { ctx.fillStyle = `rgb(${col[0] * 255 | 0},${col[1] * 255 | 0},${col[2] * 255 | 0})`; ctx.beginPath(); ctx.arc(px, py, 7, 0, 7); ctx.fill(); }
+    });
     if (it.extra || it.key === selHs) {
       ctx.strokeStyle = it.key === selHs ? '#8f5bff' : 'rgba(255,207,74,.6)'; ctx.lineWidth = it.key === selHs ? 2 : 1;
       ctx.strokeRect(v.cx + it.x * v.z - w / 2 - 2, v.cy - it.y * v.z - h / 2 - 2, w + 4, h + 4);
       ctx.fillStyle = '#ffcf4a'; ctx.font = '11px system-ui'; if (it.extra) ctx.fillText(it.label, v.cx + it.x * v.z - w / 2, v.cy - it.y * v.z - h / 2 - 5);
     }
   }
+  ctx.font = '12px ui-monospace, Consolas, monospace'; ctx.fillStyle = '#8a8f98';
+  const nHurt = Object.keys(testInj).length;
+  if (noArt) ctx.fillText('No health screen art in your game template: press F10 in game (with the mod updated) and load the template again.', 12, H - 14);
+  else ctx.fillText(nHurt ? 'Showing the injuries from the Test tab’s injury tester.' : 'Healthy. Hurt parts in Test → Injury tester to see them here.', 12, H - 14);
 }
 function hsAt(sx, sy) {
   const d = window.devicePixelRatio || 1, v = hsView(cv.width / d, cv.height / d);
@@ -1939,7 +2173,7 @@ function hsAt(sx, sy) {
 function hsEntry(key) { return doc.healthScreen[key] = doc.healthScreen[key] || { scale: 3 }; }
 function hsInspector() {
   const it = hsItems().find(i => i.key === selHs);
-  if (!it) return `<h2>Health screen</h2><div class="sec muted">Click a part to give it your own art or move it. Injurable pieces (tail, wings…) show up here once you tick <i>Can be injured</i> on them.<br><br>Tip: press <b>F9</b> in game to save the game's own health screen art, repaint it, and load it with <b>Add sprites…</b> (files named <code>health_Head_outline.png</code> etc. are placed automatically).</div>`;
+  if (!it) return `<h2>Health screen</h2><div class="sec muted">Click a part to give it your own art or move it. Injurable pieces (tail, wings…) show up here once you tick <i>Can be injured</i> on them.<br><br>To see how hurt parts look here, injure them in <b>Test → Injury tester</b>.<br><br>Tip: press <b>F9</b> in game to save the game's own health screen art, repaint it, and load it with <b>Add sprites…</b> (files named <code>health_Head_outline.png</code> etc. are placed automatically).</div>`;
   const c = doc.healthScreen[it.key] || {};
   return `<h2>Health screen: ${esc(it.label)}</h2><div class="sec">
     <div class="row"><label>Outline image</label><button id="hsOut">${c.outline ? 'Replace…' : 'Load…'}</button>${c.outline ? `<span class="pill">${c.outline.w}×${c.outline.h}</span>` : '<span class="muted">game art</span>'}</div>
