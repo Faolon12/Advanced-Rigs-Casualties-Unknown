@@ -1,4 +1,4 @@
-# Luna Advanced Rig Systems Editor - Casualties Release V0.1 Alpha
+# Luna Advanced Rig Systems Editor - Casualties Release V0.2 Alpha
 
 A browser-based character rig editor for **Luna Advanced Rig Systems**, the BepInEx mod for *Casualties: Unknown* (get the mod on Nexus).
 Turn a layered drawing into a fully custom character, with moving tails, ears, hair floof and wings, and test it with the same physics as the mod.

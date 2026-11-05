@@ -1091,6 +1091,7 @@ function draw() {
   }
   // selected layer outline
   const sl = selLayer && RIG.layer(doc, selLayer);
+  if (selSet.size > 1) for (const id of selSet) { const o = RIG.layer(doc, id); if (!o || o === sl) continue; const p = toScreen(o); ctx.strokeStyle = 'rgba(143,91,255,.8)'; ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.strokeRect(p.x - .5, p.y - .5, o.w * view.zoom + 1, o.h * view.zoom + 1); ctx.setLineDash([]); }
   if (sl) { const p = toScreen(sl); ctx.strokeStyle = '#8f5bff'; ctx.lineWidth = 1.5; ctx.strokeRect(p.x - .5, p.y - .5, sl.w * view.zoom + 1, sl.h * view.zoom + 1); }
   const sc = selChain && RIG.chain(doc, selChain);
   if (sc && !sl) { ctx.strokeStyle = 'rgba(143,91,255,.55)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); for (const s of sc.segs) { const l = RIG.layer(doc, s.layer); if (!l) continue; const p = toScreen(l); ctx.strokeRect(p.x - .5, p.y - .5, l.w * view.zoom + 1, l.h * view.zoom + 1); } ctx.setLineDash([]); }
@@ -1162,7 +1163,12 @@ cv.addEventListener('pointerdown', (e) => {
   const hnd = handleAt(sx, sy);
   if (hnd) { selChain = hnd.ch.id; drag = { type: 'handle', ...hnd }; renderInspector(); draw(); return; }
   const l = layerAt(sx, sy);
-  if (l) { if (selLayer !== l.id) selectLayer(l.id); pushUndo(); drag = { type: 'layer', l, sx, sy, start: toCanvas(sx, sy), done: { x: 0, y: 0 }, moved: false }; return; }
+  if (l && (e.ctrlKey || e.metaKey)) { if (selSet.has(l.id)) { selSet.delete(l.id); if (selLayer === l.id) selLayer = [...selSet][0] || null; } else { selSet.add(l.id); selLayer = l.id; } renderLayers(); renderInspector(); draw(); return; }
+  if (l) {
+    const many = selSet.size > 1 && selSet.has(l.id);
+    if (many) { selLayer = l.id; } else if (selLayer !== l.id) { selSet = new Set([l.id]); selectLayer(l.id); }
+    pushUndo(); drag = { type: 'layer', l, list: many ? selectedLayers() : [l], sx, sy, start: toCanvas(sx, sy), done: { x: 0, y: 0 }, moved: false }; return;
+  }
   selLayer = null; refresh();
   drag = { type: 'pan', sx, sy, px: view.panX, py: view.panY, soft: true };
 });
@@ -1183,12 +1189,20 @@ cv.addEventListener('pointermove', (e) => {
     if (!drag.moved && Math.hypot(sx - drag.sx, sy - drag.sy) < 4) return;
     drag.moved = true; const p = toCanvas(sx, sy);
     const tx = Math.round(p.x - drag.start.x), ty = Math.round(p.y - drag.start.y);
-    if (tx !== drag.done.x || ty !== drag.done.y) { moveLayerBy(drag.l, tx - drag.done.x, ty - drag.done.y); drag.done = { x: tx, y: ty }; draw(); }
+    if (tx !== drag.done.x || ty !== drag.done.y) { moveLayersBy(drag.list || [drag.l], tx - drag.done.x, ty - drag.done.y); drag.done = { x: tx, y: ty }; draw(); }
   }
   else if (drag.type === 'handle') { const p = toCanvas(sx, sy); drag.s[drag.key] = { x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2 }; draw(); }
 });
 // move a layer (and whatever belongs to it: frames, injury art, its bones; a cut image moves as a whole)
-function moveLayerBy(l, dx, dy) {
+function moveLayerBy(l, dx, dy) { moveLayersBy([l], dx, dy); }
+// several at once: everything that belongs to any of them moves once (no double moves for shared frames / bones)
+function moveLayersBy(list, dx, dy) {
+  const G = new Set(), B = new Set();
+  for (const l of list) { const r = moveGroupOf(l); r.group.forEach(g => G.add(g)); r.bones.forEach(b => B.add(b)); }
+  for (const g of G) { g.x += dx; g.y += dy; }
+  for (const s of B) { s.joint = { x: s.joint.x + dx, y: s.joint.y + dy }; if (s.tip) s.tip = { x: s.tip.x + dx, y: s.tip.y + dy }; }
+}
+function moveGroupOf(l) {
   let group = [l]; const bones = [];
   if (l.role.type === 'chain') {
     const ch = RIG.chain(doc, l.role.chain);
@@ -1197,8 +1211,7 @@ function moveLayerBy(l, dx, dy) {
   }
   const ids = new Set(group.map(g => g.id));
   for (const o of doc.layers) if (o.role.of && ids.has(o.role.of) && !group.includes(o)) group.push(o);
-  for (const g of group) { g.x += dx; g.y += dy; }
-  for (const s of bones) { s.joint = { x: s.joint.x + dx, y: s.joint.y + dy }; if (s.tip) s.tip = { x: s.tip.x + dx, y: s.tip.y + dy }; }
+  return { group, bones };
 }
 document.addEventListener('keydown', (e) => {
   if (!doc || tab !== 'rig' || /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
@@ -1206,7 +1219,7 @@ document.addEventListener('keydown', (e) => {
   let l = selLayer && RIG.layer(doc, selLayer);
   if (!l && selChain) { const ch = RIG.chain(doc, selChain); l = ch && RIG.layer(doc, ch.segs[0].layer); }
   if (!l) return;
-  e.preventDefault(); const k = e.shiftKey ? 5 : 1; moveLayerBy(l, d[0] * k, d[1] * k); draw();
+  e.preventDefault(); const k = e.shiftKey ? 5 : 1; moveLayersBy(selSet.size > 1 ? selectedLayers() : [l], d[0] * k, d[1] * k); draw();
 });
 cv.addEventListener('pointerup', () => { if (GS.drag) { GS.drag = null; renderInspector(); renderLayers(); } if (AS.drag) { AS.drag = null; renderInspector(); } if (hsDrag) { hsDrag = null; renderInspector(); } if (drag && drag.type === 'skel') hint('Skeleton moved. Body parts follow it automatically.'); drag = null; grab = null; });
 cv.addEventListener('wheel', (e) => {
