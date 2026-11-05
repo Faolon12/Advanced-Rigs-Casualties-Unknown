@@ -3113,7 +3113,8 @@ function liveMotion() {
 const GS = { item: '', piece: '', pose: 'stand', t: 0, playing: false, facing: 1, hits: [], drag: null };
 const GEAR_POSES = [['stand', 'ExperimentIdle', 'ArmsIdle', 'Standing'], ['run', 'ExperimentRun', 'ArmsRun', 'Running'], ['crouch', 'ExperimentIdleCrouch', 'ArmsCrouch', 'Crouching'],
   ['jump', 'ExperimentAirUp', 'ArmsAirUp', 'Jumping'], ['fall', 'ExperimentAirDown', 'ArmsAirDown', 'Falling'], ['climb', 'ExperimentClimbUp', 'ArmsClimbUp', 'Climbing'],
-  ['sit', 'ExperimentSit', 'ArmsSit', 'Sitting'], ['swing', 'ExperimentIdle', 'ArmsSwing', 'Attacking'], ['lay', 'ExperimentLayDown', 'ArmsLayDown', 'Lying down']];
+  ['sit', 'ExperimentSit', 'ArmsSit', 'Sitting'], ['swing', 'ExperimentIdle', 'ArmsSwing', 'Attacking'], ['lay', 'ExperimentLayDown', 'ArmsLayDown', 'Lying down'],
+  ['pushups', 'ExperimentPushups', 'ArmsPushups', 'Push-ups'], ['squats', 'ExperimentSquats', 'ArmsSquats', 'Squats'], ['plank', 'ExperimentPlank', 'ArmsPlank', 'Plank']];
 function fillGearPoses() {
   const sel = $('#gearPose'); sel.innerHTML = GEAR_POSES.map(p => `<option value="${p[0]}" ${p[0] === GS.pose ? 'selected' : ''}>Pose: ${p[3]}</option>`).join('');
   sel.onchange = () => { GS.pose = sel.value; GS.t = 0; };
@@ -3878,7 +3879,8 @@ function animInspector(l) {
   const keys = Object.keys(sets);
   const used = new Set(keys);
   let h = `<h2>Animated sprite</h2><div class="sec">
-    <div class="row"><label>Animated</label><input id="animOn" type="checkbox" ${keys.length ? 'checked' : ''}><span class="muted">frames per action or injury</span></div>`;
+    <div class="row"><label>Animated</label><input id="animOn" type="checkbox" ${keys.length ? 'checked' : ''}><span class="muted">frames per action or injury</span></div>
+    <div class="row"><label>Animated loop</label><button id="loopGif" title="Turn a GIF / animated WebP, or several PNG frames (full transparency), into a looping animation for this part">Import GIF / WebP / PNG frames…</button></div>`;
   if (keys.length) {
     h += `<div class="muted" style="margin-bottom:6px">Draw each frame as its own layer on the same canvas spot. If the character does something this part has no set for, it uses a close one (falling → jumping → idle → always).</div>`;
     for (const k of keys) {
@@ -3896,8 +3898,53 @@ function animInspector(l) {
   h += `<div class="muted">Tip: name layers like <code>${esc(l.name)}_fall_1</code>, <code>${esc(l.name)}_fall_2</code>, <code>${esc(l.name)}_idle_1</code> or <code>${esc(l.name)}_frame_1</code> and <b>Auto setup</b> builds the sets for you.</div></div>`;
   return h;
 }
+// ---- quick loops: frames made for you, played all the time ("always"), in game too (other players see them)
+function addLoopFrames(l, frames, fps, tag) { // frames: [{w,h,rgba}] the size of the part, or the canvas, or any size (centred on the part)
+  pushUndo();
+  for (const o of doc.layers.filter(o => o.role.type === 'frame' && o.role.of === l.id && o.loopTag === tag)) RIG.removeLayers(doc, [o.id]);
+  const ids = []; const at = doc.layers.indexOf(l);
+  frames.forEach((f, i) => {
+    let x, y, w = f.w, h = f.h, rgba = f.rgba;
+    if (w === doc.width && h === doc.height) { const c = RIG.crop(rgba, w, h); if (!c) return; ({ x, y, w, h, rgba } = c); }
+    else { x = Math.round(l.x + l.w / 2 - w / 2); y = Math.round(l.y + l.h / 2 - h / 2); }
+    const fl = { id: RIG.newId(), name: l.name + '_' + tag + '_' + (i + 1), x, y, w, h, rgba, hidden: false, order: 0, role: { type: 'frame', of: l.id }, loopTag: tag };
+    doc.layers.splice(at + 1 + i, 0, fl); ids.push(fl.id);
+  });
+  doc.layers.forEach((o, i) => o.order = i);
+  doc.anims[l.id] = doc.anims[l.id] || {}; doc.anims[l.id].always = { fps, loop: true, frames: ids };
+  imgCache.clear(); refresh(); startTestIfOpen();
+  toast(ids.length + ' frames made, looping at ' + fps + ' fps all the time. See it in the Test tab. (Ctrl+Z to undo)', 6000);
+}
+async function gifLoop(l) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.gif,.png,.webp,image/gif,image/png'; inp.multiple = true;
+  inp.onchange = async () => {
+    const files = [...inp.files]; if (!files.length) return;
+    try {
+      const gif = files.find(f => /\.(gif|webp)$/i.test(f.name));
+      if (gif) {
+        if (!('ImageDecoder' in window)) { toast('Your browser can\'t read GIF frames. Use Chrome or Edge, or export the GIF as PNG frames and pick those.', 8000); return; }
+        const dec = new ImageDecoder({ data: await gif.arrayBuffer(), type: gif.type || 'image/gif' }); await dec.tracks.ready;
+        const n = dec.tracks.selectedTrack.frameCount; const frames = []; let dur = 0;
+        for (let i = 0; i < n; i++) {
+          const { image } = await dec.decode({ frameIndex: i }); const w = image.displayWidth, h = image.displayHeight;
+          const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.drawImage(image, 0, 0);
+          frames.push({ w, h, rgba: x.getImageData(0, 0, w, h).data }); dur += (image.duration || 100000); image.close();
+        }
+        const fps = Math.max(1, Math.min(60, Math.round(n / (dur / 1e6) * 2) / 2 || 10));
+        addLoopFrames(l, frames, fps, 'gif');
+      } else {
+        const pngs = files.filter(f => /\.png$/i.test(f.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+        const frames = []; for (const f of pngs) { const d = await decodePng(f); frames.push({ w: d.w, h: d.h, rgba: d.rgba }); }
+        const fps = Math.max(1, Math.min(60, parseFloat(prompt(frames.length + ' frames. Frames per second?', '12')) || 12));
+        addLoopFrames(l, frames, fps, 'gif');
+      }
+    } catch (e) { console.error(e); toast('Couldn\'t read that: ' + e.message, 6000); }
+  };
+  inp.click();
+}
 function bindAnimInspector(l) {
   const sets = () => (doc.anims[l.id] = doc.anims[l.id] || {});
+  const lg = $('#loopGif'); if (lg) lg.onclick = () => gifLoop(l);
   const on = $('#animOn'); if (!on) return;
   const markFrame = (id) => { const fl = RIG.layer(doc, id); if (fl && fl.id !== l.id && fl.role.type === 'ignore') fl.role = { type: 'frame', of: l.id }; };
   const unmark = (id) => { const still = Object.values(sets()).some(st => st.frames.includes(id)); const fl = RIG.layer(doc, id); if (!still && fl && fl.id !== l.id && fl.role.type === 'frame') fl.role = { type: 'ignore' }; };
