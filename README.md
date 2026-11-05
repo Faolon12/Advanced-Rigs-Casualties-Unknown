@@ -1,6 +1,6 @@
-# Advanced Rigs Editor
+# Luna Advanced Rig Systems Editor - Casualties Release V0.1 Alpha
 
-A browser-based character rig editor for **Advanced Rigs**, the BepInEx mod for *Casualties: Unknown* (get the mod on Nexus).
+A browser-based character rig editor for **Luna Advanced Rig Systems**, the BepInEx mod for *Casualties: Unknown* (get the mod on Nexus).
 Turn a layered drawing into a fully custom character, with moving tails, ears, hair floof and wings, and test it with the same physics as the mod.
 
 **No install:** open `index.html` in any modern browser. It also works offline, or hosted on GitHub Pages.
@@ -11,16 +11,27 @@ Turn a layered drawing into a fully custom character, with moving tails, ears, h
 - **Automatic setup:** body parts are matched from layer names (Head, Chest, Abdomen, Shoulder/Arm/Hand Front/Back, Thigh, Calf, Foot/Hoof, Tail1..N, Ear, Fringe, Hair, Wing, Antler...), lined up on the game's skeleton, and given bones.
 - **Bones:** drag joints (●) and tips (◆) on the canvas, or click *Auto bones*. Chains can have any number of pieces.
 - **Spring-bone physics** with presets (fluffy tail, whip tail, hair/ears, wings, rigid) and sliders for damping, springiness, stiffness, gravity, drag, wag and wing flap.
-- **Live test: DONT USE** idle, walk, run, jump, turn, play dead, or grab the character with the mouse and shake it. The simulation IS SO BAD ITS NOT ACCURATE LMAO, it will either be removed temporarily till i can fix it, but i just suggest testing in game for best results. 
+- **Live test:** idle, walk, run, jump, turn, play dead, or grab the character with the mouse and shake it. The simulation is the same as the mod's.
 - **Injurable parts** (optional, off by default): tick *Can be injured* on any tail, wing or hair part. Each piece then works like a real limb in game: it can be hit, bleed, get infected, have shards pulled out, and be bandaged, splinted, amputated or torn off.
 - **Injury art:** art for every state of injurable pieces (scratched, wounded, mangled, bleeding, bandaged, tourniquet, infected, shrapnel, broken, dislocated, splinted, stump), plus the head's states (jaw ripped off, healed scars...). Preview any state, or a part torn off, in the Test tab.
 - **Health screen editor:** the game's health screen with every part. Drag parts to place them, and give any part (the game's own 15 or your injurable pieces) its own outline/middle art.
 - **Animated sprites:** frame sets for any part, per action (idle, walk, run, jump, fall, climb, swim, attack, sleep, knocked down, dead, always) or per injury state, with their own speed and loop or play-once. Layers named `Wing_fall_1`, `Head_frame_2`... are set up automatically. Preview any action in the Test tab.
-- **Skins & gear:WIP** *Add sprites…* loads PNGs named like the game's sprites (body parts, eyes, worn gear like backpacks and helmets, bandages) and health-screen art. In game, the mod's **F9** key saves all of these from your character, ready to repaint.
+- **Skins & gear:** *Add sprites…* loads PNGs named like the game's sprites (body parts, eyes, worn gear like backpacks and helmets, bandages) and health-screen art. In game, the mod's **F9** key saves all of these from your character, ready to repaint.
+- **Game template (from your own game):** the mod writes `BepInEx/plugins/AdvancedRigs/GameTemplate` the first time you play (or F10). Load that folder once (click the template badge): you get the game's character put together exactly like the game (real pivots, near and far limbs, every mouth / jaw state and eye), every wearable to redraw, the health screen art, and the game's real animations and movement numbers for testing.
+- **Worn gear:** *Character → Worn gear* → pick any backpack, bag, helmet, gloves… → *Make mine* puts the game's sprite on your character to move and repaint. Your version shows only while you wear it.
+- **Animate:** change any game animation (running, jumping, the attack swing, sitting…) for your character by keying bone turns / moves; everything else stays the game's. Saved in the rig and played by the mod.
+- **Bends with:** extra pieces between two game parts (5-piece legs, knee pads) turn part-way toward the next part.
+- **Themes:** the Casualties lab-terminal look, or plain (*Theme* button). A PSD/PSB or PNGs named like the game's sprites (`experimentHeadBack`, `experimentUpArm`, `experimentEyeOpen`…) is put together the same way, even if the layers are scattered.
+- **Whole character as a PSD / PSB:** *Character → All layers → ⬇ PSD / ⬇ PSB* saves every layer in one file (extra art hidden). Repaint, add or rename layers in Photoshop, Krita, GIMP or Photopea, then *⬆ Update from PSD…* (or just open it again): same-named layers update in place and keep their bones, roles and animations; new layers are added where you drew them, recognised by name when possible (antlers, ears, tail pieces, frames like `Wing_fall_3`…), and anything the editor can't guess is marked **NEW** for you to pick.
+- **Edit in any art program:** *Download PNG* on any layer (or *Download all as PNGs*), paint it in Photoshop, Krita, Aseprite, Paint…, then *Replace…* (or drop the PNGs back in: layers with the same name are updated).
+- **Extra art for any part:** *Extra art for this part* → pick a state (any injury state, mouth / jaw for the head, any eye) → *Add* makes a copy to repaint.
+- **Layer order:** drag layers in the list (top = in front) or use *▲ Forward / ▼ Back*. The export keeps your stacking in game.
+- **Injury groups:** pick which pieces of a moving part can be hurt and which pieces form one limb.
+- **Test it like the game:** with the game template loaded, the test uses the game's own animations, blend trees and movement numbers; play with the keyboard (A/D, Shift to walk, Space to jump and wall-jump, S crouch, W/S ladders, swim in the pool, F attack, T talk, R ragdoll, Z sleep, X dead). The state picked, the eyes and the mouth follow the same rules as the game and the mod. Demos for every state too.
 - **Mouth & eyes:** give the head *Mouth half open* / *Mouth open* art and it moves when the character talks, whimpers, barks, yawns or pants in game.
 - **Sounds:** keep the game's character sounds, or pick your own `.wav`/`.ogg`/`.mp3` files for pain, bark, pant, growl, yawn and more (or any game sound by name). Preview them in the character panel.
 - **Export** a ready-to-use rig folder as a `.zip`.
-- **Known Bugs** tested in sandbox, when tails injured, cannot use heal command, and sometimes tail disappears from health screen.
+
 ## Using it
 
 1. Draw your character standing and **facing right**, at the game's scale (8 px = 1 unit; the game's character is about 50 px tall). Put each part on its own layer.
@@ -37,8 +48,14 @@ Turn a layered drawing into a fully custom character, with moving tails, ears, h
 | `src/ui.js`, `src/ui.html` | Interface |
 | `build.py` | `python build.py` bundles `src/` into `index.html` |
 | `test/test_core.js` | `node test/test_core.js MyChar.psb ...` checks parsing, auto-setup, simulation stability and export/import round-trips |
-| `tools/` | Command-line alternatives (Python + Pillow): `psb_extract.py`, `make_rig.py`, `preview_rig.py` |
 
 ## Rig format
 
 See the mod's README for the full `rig.json` reference. When you change the physics in `src/core.js`, change `RigInstance.cs` in the mod to match, or the preview will stop matching the game.
+
+## Disclaimer & credits
+
+Luna Advanced Rig Systems is a fan-made mod and tool. It is **not made by or affiliated with** the developer of *Casualties: Unknown*.
+
+* **The editor's Test tab is a simulation.** Its movement, wall jumps, states, eyes, mouth and injury rules are re-created from *Casualties: Unknown*'s code by **Orson**, to preview characters outside the game. It is not the game and won't match it exactly (the game's own animations and movement numbers aren't included).
+* **Nothing from the game is included.** The game template (the character's sprites, every wearable, the health screen art and the animations) is written by the mod from the player's own copy of the game, and loaded into the editor from there. *Casualties: Unknown*, its code and its art belong to Orson.

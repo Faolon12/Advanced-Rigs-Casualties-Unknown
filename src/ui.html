@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="casualties">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.1 Alpha)</title>
+<style>
+:root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+button,select,input{font:inherit;color:var(--text)}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:#555a66}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+select,input[type=text],input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+header{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
+header h1 span{color:var(--acc)}
+header .grow{flex:1}
+main{display:grid;grid-template-columns:260px 1fr 340px;min-height:0}
+aside{background:var(--panel);overflow:auto;min-height:0}
+aside.left{border-right:1px solid var(--line)}
+aside.right{border-left:1px solid var(--line)}
+h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 12px 6px}
+.layer{display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center;padding:5px 10px;border-bottom:1px solid #22242b;cursor:pointer}
+.layer:hover{background:#22252c}
+.layer.sel{background:#2b2236;box-shadow:inset 3px 0 0 var(--acc2)}
+.layer canvas{width:34px;height:34px;image-rendering:pixelated;background:#111;border-radius:4px}
+.layer .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.layer .nm small{color:var(--dim)}
+.layer select{width:100%;margin-top:2px;font-size:12px}
+.layer.hiddenL .nm{opacity:.55}
+#center{display:grid;grid-template-rows:auto 1fr auto;min-height:0;min-width:0}
+.tabs{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap}
+.tabs .sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+#stage{position:relative;min-height:0;overflow:hidden;background:#0e0f12}
+#dope{position:absolute;left:0;right:0;bottom:0;height:206px;background:rgba(12,14,17,.96);border-top:1px solid var(--line);display:flex;flex-direction:column}
+#dope .dopeBar{display:flex;gap:4px;align-items:center;flex-wrap:wrap;padding:5px 8px;border-bottom:1px solid var(--line)}
+#dope .dopeBar button{padding:3px 7px}
+#dope .dopeBar .sp{width:8px}
+#dope .seg3 button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+#dopeCv{flex:1;width:100%;min-height:0;cursor:pointer}
+#cv{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+#hint{padding:6px 12px;color:var(--dim);border-top:1px solid var(--line);font-size:12px;min-height:30px}
+.sec{padding:0 12px 10px}
+.row{display:flex;gap:6px;align-items:center;margin:6px 0}
+.row label{flex:0 0 110px;color:var(--dim)}
+.row .v{width:46px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+.row input[type=range]{flex:1}
+.seg{display:flex;gap:4px;align-items:center;padding:3px 0;border-bottom:1px solid #22242b}
+.seg span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg button{padding:1px 6px}
+.muted{color:var(--dim)}
+.empty{padding:30px 16px;text-align:center;color:var(--dim)}
+#drop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;text-align:center;color:var(--dim);pointer-events:none}
+#drop b{color:var(--text);font-size:16px}
+#drop.over{background:rgba(143,91,255,.12);outline:2px dashed var(--acc2);outline-offset:-10px}
+.pill{display:inline-block;padding:1px 7px;border-radius:9px;background:#2a2d36;color:var(--dim);font-size:11px}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#2b2e37;border:1px solid var(--line);padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:80vw}
+#toast.show{opacity:1}
+#help{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:5}
+#help.show{display:flex}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:6}
+.modal.show{display:flex}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;max-height:90vh;overflow:auto;padding:16px 18px}
+.tcard{border:1px solid var(--line);border-radius:6px;padding:6px;cursor:pointer;text-align:center;background:var(--panel2);position:relative;min-width:0}
+.tcard.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.tcard canvas{width:96px;height:72px;image-rendering:pixelated;background:#050607;display:block;margin:0 auto 4px}
+.tcard .nm{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tcard .tick{position:absolute;top:4px;left:6px;font-size:12px;color:var(--acc)}
+[data-theme=casualties] .modal .box{background:#0c0f11;border:1px solid #2a1416;border-radius:2px}
+[data-theme=casualties] .tcard{border-radius:2px;background:#0e1214}
+#help .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;max-width:660px;max-height:85vh;overflow:auto;padding:18px 22px}
+#help h3{margin:14px 0 4px}
+#help ol{padding-left:20px}
+details summary{cursor:pointer;color:var(--dim);margin:6px 0}
+
+/* ===== Casualties theme: a lab terminal from the facility. Swap with the theme button (top right). ===== */
+[data-theme=casualties]{--bg:#07080a;--panel:#0d0f12;--panel2:#13161a;--line:#1f2a24;--text:#d9e3d6;--dim:#7c8a7f;--acc:#c3272f;--acc2:#3fae6a;--ok:#6fe08a;--warn:#e7b04a;--glow:rgba(195,39,47,.35)}
+[data-theme=casualties] body{font-family:"Cascadia Mono","Consolas","DejaVu Sans Mono",ui-monospace,monospace;font-size:12.5px;
+  background:radial-gradient(1200px 600px at 50% -10%,rgba(63,174,106,.07),transparent 60%),var(--bg)}
+[data-theme=casualties] body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}
+[data-theme=casualties] header{background:linear-gradient(180deg,#101318,#0b0d10);border-bottom:1px solid #2a1416;box-shadow:0 1px 0 rgba(195,39,47,.25),0 6px 18px rgba(0,0,0,.5)}
+[data-theme=casualties] header{gap:5px}
+[data-theme=casualties] header button{font-size:10px;padding:4px 7px;letter-spacing:.04em}
+[data-theme=casualties] header #name{width:120px!important}
+[data-theme=casualties] header h1{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#e8efe6}
+[data-theme=casualties] header h1 span{color:var(--acc);text-shadow:0 0 10px var(--glow)}
+[data-theme=casualties] header h1::before{content:"▌";color:var(--acc);margin-right:6px;animation:blink 1.2s steps(1) infinite}
+[data-theme=casualties] header h1 small{border:1px solid #3a1a1d;padding:1px 6px;color:#e39a9e!important;letter-spacing:.1em;background:repeating-linear-gradient(45deg,rgba(195,39,47,.12) 0 6px,transparent 6px 12px)}
+@keyframes blink{50%{opacity:0}}
+[data-theme=casualties] button{border-radius:2px;background:linear-gradient(180deg,#171b20,#101317);border:1px solid #27322b;text-transform:uppercase;letter-spacing:.06em;font-size:11px;padding:5px 9px}
+[data-theme=casualties] button:hover{border-color:var(--acc2);box-shadow:0 0 0 1px rgba(63,174,106,.25) inset,0 0 10px rgba(63,174,106,.15)}
+[data-theme=casualties] button.primary{background:linear-gradient(180deg,#a51f26,#7c151b);border-color:#d0323a;color:#fff;box-shadow:0 0 12px var(--glow)}
+[data-theme=casualties] button.primary:hover{box-shadow:0 0 18px rgba(195,39,47,.6)}
+[data-theme=casualties] button.on{background:linear-gradient(180deg,#1d4a2e,#143521);border-color:var(--acc2);color:#c9ffd9;box-shadow:0 0 10px rgba(63,174,106,.3)}
+[data-theme=casualties] select,[data-theme=casualties] input[type=text],[data-theme=casualties] input[type=number]{background:#090b0d;border:1px solid #243028;border-radius:2px;color:#cfe0cf}
+[data-theme=casualties] input[type=range]{accent-color:var(--acc)}
+[data-theme=casualties] input[type=checkbox]{accent-color:var(--acc2)}
+[data-theme=casualties] aside{background:linear-gradient(180deg,#0d0f12,#0a0c0e)}
+[data-theme=casualties] h2{color:var(--acc2);letter-spacing:.18em;font-size:10.5px;border-bottom:1px dashed #1e2a22;padding-bottom:4px}
+[data-theme=casualties] h2::before{content:"// ";color:#3d5a46}
+[data-theme=casualties] .layer{border-bottom:1px solid #141a16}
+[data-theme=casualties] .layer:hover{background:#111612}
+[data-theme=casualties] .layer.sel{background:linear-gradient(90deg,rgba(195,39,47,.18),transparent);box-shadow:inset 3px 0 0 var(--acc)}
+[data-theme=casualties] .layer canvas{background:#050607;border:1px solid #1d2620;border-radius:0}
+[data-theme=casualties] #stage{background:
+  linear-gradient(rgba(63,174,106,.05) 1px,transparent 1px) 0 0/24px 24px,
+  linear-gradient(90deg,rgba(63,174,106,.05) 1px,transparent 1px) 0 0/24px 24px,#060708;
+  box-shadow:inset 0 0 80px rgba(0,0,0,.8)}
+[data-theme=casualties] #hint{background:#0a0c0e;color:#8fa392;border-top:1px solid #1f2a24}
+[data-theme=casualties] #hint::before{content:"> ";color:var(--acc2)}
+[data-theme=casualties] .tabs{background:#0b0d10;border-bottom:1px solid #1f2a24}
+[data-theme=casualties] .pill{border-radius:2px;background:#11161a;border:1px solid #233026}
+[data-theme=casualties] #toast{background:#0e1311;border:1px solid var(--acc2);color:#c9ffd9;border-radius:2px;box-shadow:0 0 20px rgba(63,174,106,.2)}
+[data-theme=casualties] #help .box{background:#0c0f11;border:1px solid #2a1416;border-radius:2px;box-shadow:0 0 0 1px rgba(195,39,47,.2),0 20px 60px rgba(0,0,0,.7)}
+[data-theme=casualties] #drop b{color:var(--acc);letter-spacing:.12em;text-transform:uppercase}
+[data-theme=casualties] #drop.over{background:rgba(195,39,47,.08);outline:2px dashed var(--acc)}
+[data-theme=casualties] .empty{color:#6f7f72}
+[data-theme=casualties] ::-webkit-scrollbar{width:9px;height:9px}
+[data-theme=casualties] ::-webkit-scrollbar-thumb{background:#1c2620;border:1px solid #2b3a30}
+[data-theme=casualties] ::-webkit-scrollbar-track{background:#08090b}
+
+/* the side panels never scroll sideways: rows wrap, inputs shrink */
+aside.right{overflow-x:hidden}
+.sec{overflow-wrap:anywhere}
+.row{flex-wrap:wrap;min-width:0}
+.row label{flex:0 0 96px;min-width:0}
+.row > select,.row > input[type=text],.row > input[type=range]{min-width:0;flex:1 1 100px;max-width:100%}
+.row > button{flex:0 0 auto}
+.row input[type=number]{min-width:0;max-width:70px}
+.seg{min-width:0}
+.seg select{max-width:120px}
+#insp select{max-width:100%}
+.layer select{max-width:100%}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.1 Alpha</small></h1>
+  <button id="btnOpen" class="primary">Open…</button>
+  <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden>
+  <button id="btnSave" title="Save this character as a project file (.luna) to keep working on it later. Open… loads it back.">Save</button>
+  <input id="fileTpl" type="file" webkitdirectory directory multiple hidden>
+  <button id="btnBrowse" title="See every asset from your game's template and pick which ones to use">Browse template</button>
+  <button id="btnTemplate" title="Start from the game's own character (every body part, mouth and jaw state and eye, put together exactly like the game). Comes from YOUR game: the mod saves it to BepInEx\plugins\AdvancedRigs\GameTemplate the first time you play (or press F10).">Game template</button>
+  <span id="gameBadge" class="pill" style="cursor:pointer" title="The game template (sprites, wearables, animations) from your game. Click to load / reload it."></span>
+  <button id="btnSprites" title="Add PNGs to this character: body parts, tail pieces, wings, frames (placed by name) — or skins / gear / health screen art named like the game's sprites (F9 in game saves them)">Add images…</button>
+  <input id="fileSprites" type="file" multiple accept=".png,.json" hidden>
+  <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
+  <span class="muted">Name</span><input id="name" type="text" value="MyCharacter" style="width:150px">
+  <div class="grow"></div>
+  <button id="btnTheme" title="Switch the editor's look (Casualties lab terminal / plain)">Theme</button>
+  <button id="btnHelp">How to</button>
+  <button id="btnExport" class="primary">Export rig (.zip)</button>
+</header>
+<main>
+  <aside class="left">
+    <h2>Layers</h2>
+    <div id="layers"><div class="empty">Open a PSD/PSB (or PNG layers) to start.</div></div>
+  </aside>
+  <section id="center">
+    <div class="tabs">
+      <button id="tabRig" class="on">Rig</button>
+      <button id="tabTest">Test</button>
+      <button id="tabHealth">Health screen</button>
+      <button id="tabAnim" title="Change how your character moves: add your own touch to any of the game's animations (run, jump, attack, sit…)">Animate</button>
+      <span class="sep"></span>
+      <span id="rigTools">
+        <button id="btnSkel" class="on" title="Show the game's skeleton your parts ride on">Game skeleton</button>
+        <button id="btnMoveSkel" title="Drag to line your drawing up with the game's skeleton">Move skeleton</button>
+        <button id="btnAlign">Auto-align</button>
+      </span>
+      <span id="animTools" style="display:none">
+        <select id="animClip" title="The game's animation to change"></select>
+        <span class="muted">← pick an animation · timeline below</span>
+      </span>
+      <span id="healthTools" style="display:none"><span class="muted">Drag parts to place them · click one to give it your own art</span></span>
+      <span id="testTools" style="display:none">
+        <select id="actPrev" title="What the character is doing: moves the body and plays that action's animation frames"></select>
+        <button id="btnTurn" title="Face the other way">Turn</button>
+        <select id="headState" title="Head art: automatic follows talking (hold T); or force a mouth / jaw state"><option value="">Head: automatic</option></select>
+        <select id="eyePrev" title="Eyes: automatic follows the state like the game (blinking, fear, falling, asleep…), or force one"></select>
+        <select id="wearPrev" title="Wear an item in the test (your version if you made one, the game's otherwise)"><option value="">Wearing: nothing</option></select>
+        <select id="injPrev" title="Preview injury art"><option value="">Healthy</option></select>
+        <select id="injWho" title="Which part shows the injury"><option value="">on every part</option></select>
+        <select id="tornPrev" title="Preview a part being torn off"><option value="">Nothing torn off</option></select>
+      </span>
+      <span class="sep"></span>
+      <button id="zoomOut">−</button><button id="zoomIn">+</button>
+    </div>
+    <div id="stage"><canvas id="cv"></canvas>
+      <div id="dope" style="display:none">
+        <div class="dopeBar">
+          <span class="seg3"><button data-amode="off" title="Use the game's animation as it is">Game default</button><button data-amode="add" title="Keep the game's animation and add your changes on top">Adjust</button><button data-amode="replace" title="Pose it yourself: keyed bones use your poses instead of the game's">Replace</button></span>
+          <span class="sp"></span>
+          <button id="dpFirst" title="Start">⏮</button><button id="dpPrevK" title="Previous key (,)">◆◀</button><button id="dpPlay" title="Play / pause (Space)">▶</button><button id="dpNextK" title="Next key (.)">▶◆</button><button id="dpLast" title="End">⏭</button>
+          <select id="dpSpeed" title="Preview speed"><option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+          <span class="sp"></span>
+          <button id="dpKey" title="Key the selected bone here (K)">◆ Key bone</button><button id="dpKeyAll" title="Key every bone here (Shift+K)">◆ Key all</button>
+          <button id="dpDel" title="Delete the selected keys (Delete)">✕ Keys</button>
+          <button id="dpCopy" title="Copy the whole pose here (Ctrl+C)">Copy pose</button><button id="dpPaste" title="Paste the copied pose here (Ctrl+V)">Paste pose</button>
+          <button id="dpOnion" title="Show the poses just before and after (onion skin)">Onion</button>
+          <span id="dpTime" class="muted"></span>
+        </div>
+        <canvas id="dopeCv"></canvas>
+      </div><div id="drop"><b>Drop your character here</b><span>a .psd / .psb, or PNG images (one per body part, tail piece, wing…),<br>or a rig folder's files (rig.json + PNGs), or a skin folder's experiment*.png</span></div></div>
+    <div id="hint">Open your character to begin.</div>
+  </section>
+  <aside class="right"><div id="insp"></div></aside>
+</main>
+</div>
+<div id="toast"></div>
+<div id="tplBrowser" class="modal"><div class="box" style="max-width:920px;width:92vw">
+  <div class="row" style="margin-top:0"><h2 style="margin:0;flex:1">Game template — your game's assets</h2><button id="tbClose">Close</button></div>
+  <div class="muted" style="margin:4px 0 8px">Tick what you want, then start a new character from it or add it to the one that's open. Wearables become <i>your version</i> of that item (shown only while you wear it).</div>
+  <div id="tbTabs" class="row"></div>
+  <div class="row"><button id="tbAll">Tick all here</button><button id="tbNone">Untick all here</button><span id="tbCount" class="muted" style="margin-left:auto"></span></div>
+  <div id="tbGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;max-height:52vh;overflow:auto;padding:4px"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:10px"><button id="tbAdd">Add ticked to my character</button><button id="tbNew" class="primary">New character from ticked</button></div>
+</div></div>
+<div id="help"><div class="box">
+  <h2 style="margin:0 0 6px;font-size:16px;letter-spacing:0;text-transform:none;color:var(--text)">Making a character rig</h2>
+  <ol>
+    <li><b>Draw</b> your character standing and <b>facing right</b>, at the game's scale (8 px = 1 unit; the game's character is about 50 px tall). Put every part on its own layer: head, chest, belly, each arm/leg piece (near and far side), and each tail/wing/hair piece you want to move.</li>
+    <li><b>Open</b> your .psd/.psb, or pick all your PNGs at once (one image per part is fine, cut out or full canvas). Parts are matched from names like <i>Head, Chest, Belly, Shoulder Front, Arm Back, Hand, Thigh, Calf, Foot, Tail, Ear, Hair, Wing</i>. Anything not recognised waits beside the character: pick its role in the dropdown on the left. Forgot something? <b>Add images…</b> (or drop more PNGs) adds them without starting over.</li>
+    <li><b>Place</b>: drag any part on the canvas (or use the arrow keys). The faint blue boxes are the game's own body parts your art rides on. <i>Auto-align</i> lines everything up at once.</li>
+    <li><b>Bones</b>: click your tail, wing, hair or ear. In the panel on the right, <b>Make it move</b> → choose what it is and how many bones → <b>Add bones</b>. One image is enough: it's cut into that many bendy pieces along its shape. Drag the yellow <b>●</b> joints (where it bends) and the <b>◆</b> tip to fit, then <i>Re-cut to bones</i>. Change the number of bones any time.</li>
+    <li><b>Test</b>: pick an action (walk, run, crouch, jump, fall, climb, swim, attack, sleep, dead…) from the <b>Action</b> list. The body moves like it does in game and your animation frames for that action play. Grab the character with the mouse and shake it. Tweak the motion sliders until the tail/wings feel right.</li>
+    <li><b>Export</b> and unzip into <code>BepInEx\plugins\AdvancedRigs\Rigs\</code>. In game press <b>F7</b> to pick it, <b>F8</b> to reload after changes.</li>
+  </ol>
+  <h3>Tips</h3>
+  <ul>
+    <li><b>Game template</b> gives you the game's own character to repaint: select a part → <i>Download PNG</i> → paint → <i>Replace…</i>. <i>Extra art for this part</i> adds injury looks for any part, mouth / jaw art for the head, and eyes.</li>
+    <li><b>Animate</b>: change any of the game's animations for your character (run, jump, attack swing, sit…): pick a bone, turn or move it at any moment. Only what you change is different; it plays in game for everyone who sees you.</li>
+    <li><b>More pieces than the game has</b> (a 5-piece leg, knee pads…): give several layers the same body part, and set <i>Bends with</i> on the in-between ones so they turn part-way toward the next part.</li>
+    <li><b>Layer order</b>: drag layers in the list (top = in front) or use ▲ / ▼ in the panel.</li>
+    <li><b>Test</b> → <i>Play it</i>: A/D move, Shift walk, Space jump (jump again against a wall to wall-jump), S crouch, W/S on the ladder, swim in the pool, F attack, T talk, R ragdoll, Z sleep, X dead.</li>
+    <li>Any number of tail pieces works. Cut your tail into as many layers as you like (Tail1 = base).</li>
+    <li>Skins in the sprite-replacer format (experimentHead.png etc.) can be opened too; they're added as sprite swaps, including the jaw / disfigured / eye states.</li>
+    <li>Injury art: set a layer's role to <i>Injury art</i> to show it instead of your head when the game rips the jaw off etc.</li>
+    <li><b>Injurable parts</b> (off by default): select a tail / wing / hair part and tick <i>Can be injured</i>. Each piece then works like a real limb: it can be hit, bleed, get infected, have shards pulled out, be bandaged, splinted, amputated, or torn off. Give pieces injury art (scratched, wounded, bandaged, stump…) by setting extra layers' role to <i>Injury art</i>, and place them on the <b>Health screen</b> tab.</li>
+    <li><b>Gear & skins</b>: in game press <b>F9</b> to save every sprite on your character (body, eyes, worn gear like backpacks and helmets, health screen) with its exact game name. Repaint them and load them with <i>Add sprites…</i>. Gear only changes while <i>you</i> wear it; everyone else (and the item on the ground) stays normal.</li>
+    <li>Hitboxes never change: your art rides on the game's own body parts.</li>
+  </ul>
+  <h3>Disclaimer</h3>
+  <p class="muted" style="margin-top:0">Luna Advanced Rig Systems is a fan-made mod and tool, not made by or affiliated with the developer of Casualties: Unknown. The <b>Test</b> tab is a <b>simulation</b>: its movement, states, eyes, mouth and injury rules are re-created from Casualties: Unknown's code by <b>Orson</b>, so you can preview a character outside the game. It is not the game and won't match it exactly. Nothing from the game is included in the editor: the game template (sprites, wearables, animations) is made by the mod from your own copy of the game. Casualties: Unknown, its code and its art belong to Orson.</p>
+  <div style="text-align:right;margin-top:10px"><button id="helpClose" class="primary">Got it</button></div>
+</div></div>
+<script>
+/*__CORE__*/
+</script>
+<script>
+/*__UI__*/
+</script>
+</body>
+</html>
