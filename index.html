@@ -1,0 +1,2213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Rigs – Rig Editor</title>
+<style>
+:root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+button,select,input{font:inherit;color:var(--text)}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:#555a66}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+select,input[type=text],input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+header{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
+header h1 span{color:var(--acc)}
+header .grow{flex:1}
+main{display:grid;grid-template-columns:270px 1fr 310px;min-height:0}
+aside{background:var(--panel);overflow:auto;min-height:0}
+aside.left{border-right:1px solid var(--line)}
+aside.right{border-left:1px solid var(--line)}
+h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 12px 6px}
+.layer{display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center;padding:5px 10px;border-bottom:1px solid #22242b;cursor:pointer}
+.layer:hover{background:#22252c}
+.layer.sel{background:#2b2236;box-shadow:inset 3px 0 0 var(--acc2)}
+.layer canvas{width:34px;height:34px;image-rendering:pixelated;background:#111;border-radius:4px}
+.layer .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.layer .nm small{color:var(--dim)}
+.layer select{width:100%;margin-top:2px;font-size:12px}
+.layer.hiddenL .nm{opacity:.55}
+#center{display:grid;grid-template-rows:auto 1fr auto;min-height:0;min-width:0}
+.tabs{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap}
+.tabs .sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+#stage{position:relative;min-height:0;overflow:hidden;background:#0e0f12}
+#cv{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+#hint{padding:6px 12px;color:var(--dim);border-top:1px solid var(--line);font-size:12px;min-height:30px}
+.sec{padding:0 12px 10px}
+.row{display:flex;gap:6px;align-items:center;margin:6px 0}
+.row label{flex:0 0 110px;color:var(--dim)}
+.row .v{width:46px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+.row input[type=range]{flex:1}
+.seg{display:flex;gap:4px;align-items:center;padding:3px 0;border-bottom:1px solid #22242b}
+.seg span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg button{padding:1px 6px}
+.muted{color:var(--dim)}
+.empty{padding:30px 16px;text-align:center;color:var(--dim)}
+#drop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;text-align:center;color:var(--dim);pointer-events:none}
+#drop b{color:var(--text);font-size:16px}
+#drop.over{background:rgba(143,91,255,.12);outline:2px dashed var(--acc2);outline-offset:-10px}
+.pill{display:inline-block;padding:1px 7px;border-radius:9px;background:#2a2d36;color:var(--dim);font-size:11px}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#2b2e37;border:1px solid var(--line);padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:80vw}
+#toast.show{opacity:1}
+#help{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:5}
+#help.show{display:flex}
+#help .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;max-width:660px;max-height:85vh;overflow:auto;padding:18px 22px}
+#help h3{margin:14px 0 4px}
+#help ol{padding-left:20px}
+details summary{cursor:pointer;color:var(--dim);margin:6px 0}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <h1>Advanced Rigs <span>Rig Editor</span></h1>
+  <button id="btnOpen" class="primary">Open…</button>
+  <input id="file" type="file" multiple accept=".psd,.psb,.png,.json" hidden>
+  <button id="btnSprites" title="Add PNGs to this character: body parts, tail pieces, wings, frames (placed by name) — or skins / gear / health screen art named like the game's sprites (F9 in game saves them)">Add images…</button>
+  <input id="fileSprites" type="file" multiple accept=".png,.json" hidden>
+  <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
+  <span class="muted">Name</span><input id="name" type="text" value="MyCharacter" style="width:150px">
+  <div class="grow"></div>
+  <button id="btnHelp">How to</button>
+  <button id="btnExport" class="primary">Export rig (.zip)</button>
+</header>
+<main>
+  <aside class="left">
+    <h2>Layers</h2>
+    <div id="layers"><div class="empty">Open a PSD/PSB (or PNG layers) to start.</div></div>
+  </aside>
+  <section id="center">
+    <div class="tabs">
+      <button id="tabRig" class="on">Rig</button>
+      <button id="tabTest">Test</button>
+      <button id="tabHealth">Health screen</button>
+      <span class="sep"></span>
+      <span id="rigTools">
+        <button id="btnSkel" class="on" title="Show the game's skeleton your parts ride on">Game skeleton</button>
+        <button id="btnMoveSkel" title="Drag to line your drawing up with the game's skeleton">Move skeleton</button>
+        <button id="btnAlign">Auto-align</button>
+      </span>
+      <span id="healthTools" style="display:none"><span class="muted">Drag parts to place them · click one to give it your own art</span></span>
+      <span id="testTools" style="display:none">
+        <select id="actPrev" title="What the character is doing: moves the body and plays that action's animation frames"></select>
+        <button id="btnTurn" title="Face the other way">Turn</button>
+        <select id="headState" title="Preview the head's mouth / injury art"><option value="">Head: normal</option></select>
+        <select id="injPrev" title="Preview injury art on injurable parts"><option value="">Parts: healthy</option></select>
+        <select id="tornPrev" title="Preview a part being torn off"><option value="">Nothing torn off</option></select>
+      </span>
+      <span class="sep"></span>
+      <button id="zoomOut">−</button><button id="zoomIn">+</button>
+    </div>
+    <div id="stage"><canvas id="cv"></canvas><div id="drop"><b>Drop your character here</b><span>a .psd / .psb, or PNG images (one per body part, tail piece, wing…),<br>or a rig folder's files (rig.json + PNGs), or a skin folder's experiment*.png</span></div></div>
+    <div id="hint">Open your character to begin.</div>
+  </section>
+  <aside class="right"><div id="insp"></div></aside>
+</main>
+</div>
+<div id="toast"></div>
+<div id="help"><div class="box">
+  <h2 style="margin:0 0 6px;font-size:16px;letter-spacing:0;text-transform:none;color:var(--text)">Making a character rig</h2>
+  <ol>
+    <li><b>Draw</b> your character standing and <b>facing right</b>, at the game's scale (8 px = 1 unit; the game's character is about 50 px tall). Put every part on its own layer: head, chest, belly, each arm/leg piece (near and far side), and each tail/wing/hair piece you want to move.</li>
+    <li><b>Open</b> your .psd/.psb, or pick all your PNGs at once (one image per part is fine, cut out or full canvas). Parts are matched from names like <i>Head, Chest, Belly, Shoulder Front, Arm Back, Hand, Thigh, Calf, Foot, Tail, Ear, Hair, Wing</i>. Anything not recognised waits beside the character: pick its role in the dropdown on the left. Forgot something? <b>Add images…</b> (or drop more PNGs) adds them without starting over.</li>
+    <li><b>Place</b>: drag any part on the canvas (or use the arrow keys). The faint blue boxes are the game's own body parts your art rides on. <i>Auto-align</i> lines everything up at once.</li>
+    <li><b>Bones</b>: click your tail, wing, hair or ear. In the panel on the right, <b>Make it move</b> → choose what it is and how many bones → <b>Add bones</b>. One image is enough: it's cut into that many bendy pieces along its shape. Drag the yellow <b>●</b> joints (where it bends) and the <b>◆</b> tip to fit, then <i>Re-cut to bones</i>. Change the number of bones any time.</li>
+    <li><b>Test</b>: pick an action (walk, run, crouch, jump, fall, climb, swim, attack, sleep, dead…) from the <b>Action</b> list. The body moves like it does in game and your animation frames for that action play. Grab the character with the mouse and shake it. Tweak the motion sliders until the tail/wings feel right.</li>
+    <li><b>Export</b> and unzip into <code>BepInEx\plugins\AdvancedRigs\Rigs\</code>. In game press <b>F7</b> to pick it, <b>F8</b> to reload after changes.</li>
+  </ol>
+  <h3>Tips</h3>
+  <ul>
+    <li>Any number of tail pieces works. Cut your tail into as many layers as you like (Tail1 = base).</li>
+    <li>Skins in the sprite-replacer format (experimentHead.png etc.) can be opened too; they're added as sprite swaps, including the jaw / disfigured / eye states.</li>
+    <li>Injury art: set a layer's role to <i>Injury art</i> to show it instead of your head when the game rips the jaw off etc.</li>
+    <li><b>Injurable parts</b> (off by default): select a tail / wing / hair part and tick <i>Can be injured</i>. Each piece then works like a real limb: it can be hit, bleed, get infected, have shards pulled out, be bandaged, splinted, amputated, or torn off. Give pieces injury art (scratched, wounded, bandaged, stump…) by setting extra layers' role to <i>Injury art</i>, and place them on the <b>Health screen</b> tab.</li>
+    <li><b>Gear & skins</b>: in game press <b>F9</b> to save every sprite on your character (body, eyes, worn gear like backpacks and helmets, health screen) with its exact game name. Repaint them and load them with <i>Add sprites…</i>. Gear only changes while <i>you</i> wear it; everyone else (and the item on the ground) stays normal.</li>
+    <li>Hitboxes never change: your art rides on the game's own body parts.</li>
+  </ul>
+  <div style="text-align:right;margin-top:10px"><button id="helpClose" class="primary">Got it</button></div>
+</div></div>
+<script>
+// ===================== Advanced Rigs editor: core (no DOM) =====================
+// Everything here must match the mod (RigDefinition.cs / RigInstance.cs).
+'use strict';
+
+const RIG = {};
+
+// ---------- game skeleton (from the game's scene: rest pose of Experiment/Body) ----------
+RIG.PPU = 8;
+RIG.PARTS = ['Head', 'UpTorso', 'DownTorso', 'UpArmF', 'DownArmF', 'HandF', 'UpArmB', 'DownArmB', 'HandB',
+  'ThighF', 'CrusF', 'FootF', 'ThighB', 'CrusB', 'FootB'];
+RIG.PART_LABEL = {
+  Head: 'Head', UpTorso: 'Chest (upper torso)', DownTorso: 'Belly (lower torso)',
+  UpArmF: 'Upper arm (near)', DownArmF: 'Forearm (near)', HandF: 'Hand (near)',
+  UpArmB: 'Upper arm (far)', DownArmB: 'Forearm (far)', HandB: 'Hand (far)',
+  ThighF: 'Thigh (near)', CrusF: 'Shin (near)', FootF: 'Foot (near)',
+  ThighB: 'Thigh (far)', CrusB: 'Shin (far)', FootB: 'Foot (far)', tail: 'Tail base (game tail)'
+};
+// units, y up, degrees
+RIG.REST = {
+  Head: [0, 2.5, 0], UpTorso: [0, 1.25, 0], DownTorso: [0, 0.25, 0],
+  UpArmF: [-0.118, 0.876, 0], DownArmF: [-0.118, -0.373, 0], HandF: [-0.118, -1.24, 0],
+  UpArmB: [-0.118, 0.876, 0], DownArmB: [-0.118, -0.373, 0], HandB: [-0.118, -1.24, 0],
+  ThighF: [-0.119, -0.563, 0], CrusF: [-0.005, -1.501, 0], FootF: [0.157, -2.415, 30],
+  ThighB: [-0.119, -0.563, 0], CrusB: [-0.005, -1.501, 0], FootB: [0.157, -2.415, 30],
+  tail: [0, -0.103, 23.6]
+};
+RIG.ORDER = {
+  Head: 50, UpTorso: 20, DownTorso: 10, UpArmF: 150, DownArmF: 160, HandF: 170, UpArmB: -50, DownArmB: -60, HandB: -40,
+  ThighF: 100, CrusF: 90, FootF: 80, ThighB: -10, CrusB: -20, FootB: -30, tail: 0
+};
+// size of the game's own sprites (for the ghost skeleton)
+RIG.VANILLA_SIZE = {
+  Head: [26, 12], UpTorso: [8, 10], DownTorso: [8, 10], UpArmF: [4, 12], DownArmF: [4, 14], HandF: [6, 4],
+  UpArmB: [4, 12], DownArmB: [4, 14], HandB: [5, 4], ThighF: [6, 11], CrusF: [4, 8], FootF: [6, 11],
+  ThighB: [6, 11], CrusB: [4, 8], FootB: [6, 11]
+};
+// rough joint (hinge) positions, units – only used for the walk animation in the preview
+RIG.HINGE = { UpArm: [-0.118, 1.5], DownArm: [-0.118, 0.45], Hand: [-0.118, -1.0], Thigh: [-0.119, 0.05], Crus: [-0.005, -1.1], Foot: [0.05, -1.95] };
+RIG.HEAD_STATES = ['experimentHeadBackMouth', 'experimentHeadBackMouthMini', 'experimentHeadDisfigured1', 'experimentHeadDisfigured1Healed', 'experimentHeadDisfigured2',
+  'experimentHeadDisfigured2Healed', 'experimentHeadDisfigured3', 'experimentHeadDisfigured3Healed'];
+RIG.HIDEABLE = ['Eyes', 'Nosebleed'];
+// character sounds a rig can replace (the mod also accepts any exact game sound name)
+RIG.SOUNDS = [['pain', 'Whimper / pain'], ['bark', 'Bark'], ['growl', 'Growl'], ['speech', 'Talking blips'], ['speechbad', 'Talking blips (impaired)'],
+  ['yawn', 'Yawn'], ['pant', 'Panting / breathing loop'], ['exert', 'Effort grunt'], ['vomit', 'Vomit'], ['dogshake', 'Shake off water'],
+  ['stretch', 'Stretch'], ['gore', 'Gore (getting hurt)'], ['disfigure', 'Disfigured']];
+RIG.HEAD_STATE_LABEL = { experimentHeadBack: 'Normal head (the game\'s default)', experimentHeadBackMouth: 'Mouth open (talking, eating, whimpering, barking)',
+  experimentHeadBackMouthMini: 'Mouth half open (talking, eating)', experimentHeadDisfigured1: 'Jaw ripped off 1', experimentHeadDisfigured2: 'Jaw ripped off 2',
+  experimentHeadDisfigured3: 'Jaw ripped off 3', experimentHeadDisfigured1Healed: 'Jaw ripped off 1 (healed)', experimentHeadDisfigured2Healed: 'Jaw ripped off 2 (healed)',
+  experimentHeadDisfigured3Healed: 'Jaw ripped off 3 (healed)' };
+// injury states an injurable piece can show art for (most important first, same order as the mod)
+RIG.INJURY_STATES = [
+  ['stump', 'Stump (the piece after it was torn off)'], ['broken', 'Broken'], ['dislocated', 'Dislocated'], ['splinted', 'Splinted'],
+  ['shrapnel', 'Shards / shrapnel in it'], ['bandaged', 'Bandaged'], ['tourniquet', 'Tourniquet'], ['infected', 'Infected'],
+  ['bleeding', 'Bleeding'], ['mangled', 'Mangled (muscle < 35%)'], ['wounded', 'Wounded (skin < 40%)'], ['scratched', 'Scratched (skin < 75%)']];
+// actions a part can have animation frames for (same as the mod), and what each falls back to
+RIG.ACTIONS = [['always', 'Always (loops all the time)'], ['idle', 'Idle'], ['walk', 'Walking'], ['run', 'Running'], ['crouch', 'Crouching'],
+  ['jump', 'Jumping (going up)'], ['fall', 'Falling'], ['climb', 'Climbing'], ['swim', 'Swimming'], ['attack', 'Attacking'],
+  ['sleep', 'Sleeping'], ['down', 'Knocked down / unconscious'], ['dead', 'Dead']];
+RIG.ACTION_FALLBACK = { jump: ['fall', 'idle'], fall: ['jump', 'idle'], run: ['walk', 'idle'], walk: ['idle'], crouch: ['idle'], climb: ['idle'],
+  swim: ['idle'], attack: ['idle'], sleep: ['down', 'idle'], down: ['idle'], dead: ['down', 'idle'], idle: [] };
+// every key an animation set can have: actions, then injury states (an injury animation beats the action one)
+RIG.ANIM_KEYS = [...RIG.ACTIONS, ...[
+  ['stump', 'Stump'], ['broken', 'Broken'], ['dislocated', 'Dislocated'], ['splinted', 'Splinted'], ['shrapnel', 'Shards in it'],
+  ['bandaged', 'Bandaged'], ['tourniquet', 'Tourniquet'], ['infected', 'Infected'], ['bleeding', 'Bleeding'], ['mangled', 'Mangled'],
+  ['wounded', 'Wounded'], ['scratched', 'Scratched']].map(([k, l]) => [k, 'When injured: ' + l])];
+RIG.isInjuryKey = (k) => RIG.INJURY_STATES.some(([s]) => s === k);
+RIG.resolveAction = function (sets, action) {
+  if (!sets) return null;
+  if (sets[action]) return action;
+  for (const f of (RIG.ACTION_FALLBACK[action] || [])) if (sets[f]) return f;
+  return sets.always ? 'always' : null;
+};
+RIG.FRAME_RE = /^(.*?)[\s_\-]*(always|idle|walk|walking|run|running|crouch|jump|jumping|fall|falling|climb|swim|attack|sleep|down|dead|stump|broken|dislocated|splinted|shrapnel|bandaged|tourniquet|infected|bleeding|mangled|wounded|scratched|frame|f|anim)[\s_\-]*(\d+)$/i;
+RIG.defaultInjury = (name) => ({ enabled: false, name: name || 'Part', tearOff: true, gameShading: true, vital: false });
+// which game sprite each part shows (for drawing skins / sprite swaps)
+RIG.PART_SPRITE = { Head: 'experimentHead', UpTorso: 'experimentUpTorso', DownTorso: 'experimentDownTorso', UpArmF: 'experimentUpArm', UpArmB: 'experimentUpArm',
+  DownArmF: 'experimentDownArm', DownArmB: 'experimentDownArm', HandF: 'experimentHandF', HandB: 'experimentHandB', ThighF: 'experimentThigh', ThighB: 'experimentThigh',
+  CrusF: 'experimentCrus', CrusB: 'experimentCrus', FootF: 'experimentFoot', FootB: 'experimentFoot', tail: 'experimentTail' };
+
+RIG.PRESETS = {
+  'Fluffy tail': { damping: 0.15, elasticity: 0.06, elasticityFalloff: 0.5, stiffness: 0.1, stiffnessFalloff: 0.5, gravity: 4, drag: 2, inertia: 0.3, maxBend: 55, wagAmplitude: 10, wagSpeed: 1.4, wagPhase: 0.9, wagWhileMoving: 0.3, flapAmplitude: 0, flapSpeed: 2.5, flapPhase: 0.5, flapWhen: 'never', deadGravity: 2.5 },
+  'Long whip tail': { damping: 0.2, elasticity: 0.1, elasticityFalloff: 0.4, stiffness: 0.1, stiffnessFalloff: 0.4, gravity: 4, drag: 2, inertia: 0.3, maxBend: 25, wagAmplitude: 4, wagSpeed: 1.2, wagPhase: 0.4, wagWhileMoving: 0.3, flapAmplitude: 0, flapSpeed: 2.5, flapPhase: 0.5, flapWhen: 'never', deadGravity: 2.5 },
+  'Stiff tail': { damping: 0.2, elasticity: 0.2, elasticityFalloff: 0.7, stiffness: 0.4, stiffnessFalloff: 0.7, gravity: 2, drag: 1, inertia: 0.5, maxBend: 30, wagAmplitude: 6, wagSpeed: 2, wagPhase: 0.6, wagWhileMoving: 0.3, flapAmplitude: 0, flapSpeed: 2.5, flapPhase: 0.5, flapWhen: 'never', deadGravity: 2.5 },
+  'Hair / ears floof': { damping: 0.22, elasticity: 0.2, elasticityFalloff: 1, stiffness: 0.35, stiffnessFalloff: 1, gravity: 2.5, drag: 1.5, inertia: 0.4, maxBend: 20, wagAmplitude: 0, wagSpeed: 1.5, wagPhase: 0.7, wagWhileMoving: 0.3, flapAmplitude: 0, flapSpeed: 2.5, flapPhase: 0.5, flapWhen: 'never', deadGravity: 2.5 },
+  'Wings': { damping: 0.2, elasticity: 0.25, elasticityFalloff: 0.8, stiffness: 0.5, stiffnessFalloff: 0.8, gravity: 1.5, drag: 1, inertia: 0.5, maxBend: 40, wagAmplitude: 3, wagSpeed: 0.5, wagPhase: 0.4, wagWhileMoving: 1, flapAmplitude: 30, flapSpeed: 3, flapPhase: 0.5, flapWhen: 'air', deadGravity: 2.5 },
+  'Rigid (no physics)': null
+};
+RIG.MOTION_KEYS = ['damping', 'elasticity', 'elasticityFalloff', 'stiffness', 'stiffnessFalloff', 'gravity', 'drag', 'inertia',
+  'maxBend', 'wagAmplitude', 'wagSpeed', 'wagPhase', 'wagWhileMoving', 'flapAmplitude', 'flapSpeed', 'flapPhase', 'deadGravity'];
+RIG.defaultMotion = () => Object.assign({}, RIG.PRESETS['Fluffy tail']);
+
+// body-space rest position of a part in canvas pixels (relative to the body origin, y down)
+RIG.restPx = (part) => { const r = RIG.REST[part]; return { x: r[0] * RIG.PPU, y: -r[1] * RIG.PPU }; };
+RIG.J = (doc, part) => { const r = RIG.restPx(part); return { x: +(r.x + doc.align.x).toFixed(3), y: +(r.y + doc.align.y).toFixed(3) }; };
+
+// ===================== PSD / PSB reader =====================
+RIG.readPSD = function (buf) {
+  const dv = new DataView(buf); let p = 0;
+  const u8 = () => dv.getUint8(p++);
+  const u16 = () => { const v = dv.getUint16(p); p += 2; return v; };
+  const i16 = () => { const v = dv.getInt16(p); p += 2; return v; };
+  const u32 = () => { const v = dv.getUint32(p); p += 4; return v; };
+  const i32 = () => { const v = dv.getInt32(p); p += 4; return v; };
+  const u64 = () => { const hi = u32(), lo = u32(); return hi * 4294967296 + lo; };
+  const str = (n) => { let s = ''; for (let i = 0; i < n; i++) s += String.fromCharCode(u8()); return s; };
+  if (str(4) !== '8BPS') throw new Error('Not a PSD/PSB file');
+  const ver = u16(); const big = ver === 2; p += 6;
+  const channels = u16(), H = u32(), W = u32(), depth = u16(), mode = u16();
+  if (depth !== 8) throw new Error('Only 8-bit PSD/PSB files are supported (this one is ' + depth + '-bit). In Photoshop: Image > Mode > 8 Bits/Channel.');
+  if (mode !== 3) throw new Error('Only RGB colour mode is supported. In Photoshop: Image > Mode > RGB Color.');
+  const L = big ? u64 : u32;
+  { const n = u32(); p += n; } // colour mode data
+  { const n = u32(); p += n; } // image resources
+  const lmLen = L(); if (lmLen === 0) throw new Error('This file has no layers.');
+  L(); // layer info length
+  const count = Math.abs(i16());
+  const recs = [];
+  for (let n = 0; n < count; n++) {
+    const top = i32(), left = i32(), bottom = i32(), right = i32();
+    const nch = u16(); const chans = [];
+    for (let c = 0; c < nch; c++) chans.push({ id: i16(), len: L() });
+    p += 4; p += 4; // blend sig + key
+    const opacity = u8(); u8(); const flags = u8(); u8();
+    const extra = u32(); const end = p + extra;
+    { const n = u32(); p += n; } { const n = u32(); p += n; } // mask, blending ranges
+    const nl = u8(); let name = str(nl); p += (4 - (nl + 1) % 4) % 4;
+    let isDivider = false;
+    while (p < end - 12) {
+      const sig = str(4), key = str(4);
+      if (sig !== '8BIM' && sig !== '8B64') break;
+      const ln = (big && ['LMsk', 'Lr16', 'Lr32', 'Layr', 'Mt16', 'Mt32', 'Mtrn', 'Alph', 'FMsk', 'lnk2', 'FEid', 'FXid', 'PxSD'].includes(key)) ? u64() : u32();
+      const start = p;
+      if (key === 'luni') { const n2 = u32(); let s = ''; for (let i = 0; i < n2; i++) s += String.fromCharCode(u16()); name = s.replace(/\0+$/, ''); }
+      if (key === 'lsct' || key === 'lsdk') { const t = u32(); if (t === 1 || t === 2 || t === 3) isDivider = true; }
+      p = start + ln + (ln % 2);
+    }
+    p = end;
+    recs.push({ name, top, left, bottom, right, chans, hidden: !!(flags & 2), opacity, isDivider });
+  }
+  const layers = [];
+  recs.forEach((r, idx) => {
+    const w = r.right - r.left, h = r.bottom - r.top;
+    const planes = {};
+    for (const ch of r.chans) {
+      const start = p; const comp = u16();
+      if (w > 0 && h > 0 && ch.id >= -1) {
+        if (comp === 0) planes[ch.id] = new Uint8Array(buf, p, w * h);
+        else if (comp === 1) {
+          const counts = []; for (let y = 0; y < h; y++) counts.push(big ? u32() : u16());
+          const out = new Uint8Array(w * h); let o = 0;
+          for (let y = 0; y < h; y++) {
+            const rowEnd = p + counts[y]; let x = 0;
+            while (p < rowEnd && x < w) {
+              let hdr = dv.getInt8(p++);
+              if (hdr >= 0) { for (let i = 0; i <= hdr && x < w; i++, x++) out[o++] = dv.getUint8(p++); }
+              else if (hdr !== -128) { const v = dv.getUint8(p++); for (let i = 0; i < 1 - hdr && x < w; i++, x++) out[o++] = v; }
+            }
+            o = (y + 1) * w; p = rowEnd;
+          }
+          planes[ch.id] = out;
+        } else throw new Error('This PSD uses ZIP compression, which isn\'t supported yet. Re-save it without compression or export the layers as PNGs.');
+      }
+      p = start + ch.len;
+    }
+    if (w <= 0 || h <= 0 || r.isDivider) return;
+    const rgba = new Uint8ClampedArray(w * h * 4);
+    const R = planes[0], G = planes[1], B = planes[2], A = planes[-1];
+    for (let i = 0; i < w * h; i++) {
+      rgba[i * 4] = R ? R[i] : 0; rgba[i * 4 + 1] = G ? G[i] : 0; rgba[i * 4 + 2] = B ? B[i] : 0; rgba[i * 4 + 3] = A ? A[i] : 255;
+    }
+    layers.push({ name: r.name, x: r.left, y: r.top, w, h, rgba, hidden: r.hidden, order: idx });
+  });
+  return { width: W, height: H, layers };
+};
+
+// crop an RGBA image to its visible pixels
+RIG.crop = function (rgba, w, h) {
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (rgba[(y * w + x) * 4 + 3] > 0) {
+    if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y;
+  }
+  if (x1 < 0) return null;
+  const cw = x1 - x0 + 1, ch = y1 - y0 + 1; const out = new Uint8ClampedArray(cw * ch * 4);
+  for (let y = 0; y < ch; y++) out.set(rgba.subarray(((y + y0) * w + x0) * 4, ((y + y0) * w + x0 + cw) * 4), y * cw * 4);
+  return { x: x0, y: y0, w: cw, h: ch, rgba: out };
+};
+
+RIG.alpha = (l, x, y) => (x >= 0 && y >= 0 && x < l.w && y < l.h) ? l.rgba[(y * l.w + x) * 4 + 3] : 0;
+
+// ===================== auto-assign layers by name =====================
+RIG.classify = function (name) {
+  const n = name.toLowerCase().replace(/[\s_\-.]+/g, '');
+  let side = null;
+  if (/(back|far|behind|rear)/.test(n)) side = 'B';
+  else if (/(front|near)/.test(n)) side = 'F';
+  const has = (re) => re.test(n);
+  if (has(/wing/)) return { kind: 'wing', side };
+  if (has(/tail/)) return { kind: 'tail', num: parseFloat((name.match(/(\d+(?:\.\d+)?)/) || [0, 0])[1]) || 0 };
+  if (has(/(antler|horn)/)) return { kind: 'rigidHead', side };
+  if (has(/(head|face|skull)/)) return { kind: 'part', base: 'Head' };
+  if (has(/(chest|thorax|uppertorso|uptorso|torso|ribs)/) && !has(/(lower|down|belly|abdomen)/)) return { kind: 'part', base: 'UpTorso' };
+  if (has(/(abdomen|belly|stomach|hip|pelvis|lowertorso|downtorso|waist)/)) return { kind: 'part', base: 'DownTorso' };
+  if (has(/(shoulder|upperarm|uparm|bicep)/)) return { kind: 'limb', base: 'UpArm', side };
+  if (has(/(hand|paw|claw|fist)/)) return { kind: 'limb', base: 'Hand', side };
+  if (has(/(forearm|forarm|lowerarm|downarm|arm)/)) return { kind: 'limb', base: 'DownArm', side };
+  if (has(/(thigh|theigh|upperleg|upleg)/)) return { kind: 'limb', base: 'Thigh', side };
+  if (has(/(calf|crus|shin|lowerleg|downleg)/)) return { kind: 'limb', base: 'Crus', side };
+  if (has(/(foot|feet|hoof|hooves|toe)/)) return { kind: 'limb', base: 'Foot', side };
+  if (has(/(ear|fringe|hair|bang|floof|mane|tuft|cheek|whisker|ponytail)/)) return { kind: 'floof', side };
+  return { kind: 'ignore' };
+};
+
+// ===================== document =====================
+let _id = 1;
+RIG.newId = () => 'i' + (_id++);
+
+RIG.newDoc = function (name, width, height, layers) {
+  const doc = { name: name || 'MyCharacter', width, height, layers: [], chains: [], align: { x: width / 2, y: height * 0.56 },
+    hideObjects: [], hideVanillaTail: true, spriteSwaps: {}, healthScreen: {}, anims: {}, sounds: {} };
+  for (const l of layers) {
+    const c = RIG.crop(l.rgba, l.w, l.h);
+    if (!c) continue;
+    doc.layers.push({ id: RIG.newId(), name: l.name, x: l.x + c.x, y: l.y + c.y, w: c.w, h: c.h, rgba: c.rgba, order: l.order, hidden: !!l.hidden,
+      role: { type: 'ignore' } });
+  }
+  doc.layers.sort((a, b) => a.order - b.order);
+  doc.layers.forEach((l, i) => l.order = i);
+  return doc;
+};
+
+RIG.layer = (doc, id) => doc.layers.find(l => l.id === id);
+RIG.chain = (doc, id) => doc.chains.find(c => c.id === id);
+RIG.center = (l) => ({ x: l.x + l.w / 2, y: l.y + l.h / 2 });
+
+RIG.autoAssign = function (doc) {
+  // undo any cuts first: the original images come back and get sorted out by name again
+  const cutPieces = []; for (const ch of doc.chains) if (ch.source) ch.segs.forEach(s => cutPieces.push(s.layer));
+  if (cutPieces.length) RIG.removeLayers(doc, cutPieces);
+  doc.layers.forEach(l => delete l.cutSource);
+  doc.chains = [];
+  const groups = {}; // base -> layers needing a side
+  const tails = [], wings = [];
+  const frames = [];
+  doc.anims = {};
+  for (const l of doc.layers) {
+    l.role = { type: 'ignore' };
+    const fm = l.name.match(RIG.FRAME_RE);
+    if (fm) { frames.push({ l, base: fm[1], key: fm[2].toLowerCase(), n: +fm[3] }); l.role = { type: 'frame', of: null }; continue; }
+    if (l.hidden) continue;
+    const c = RIG.classify(l.name);
+    if (c.kind === 'part') l.role = { type: 'part', part: c.base };
+    else if (c.kind === 'limb') (groups[c.base] = groups[c.base] || []).push({ l, side: c.side });
+    else if (c.kind === 'tail') tails.push({ l, num: c.num });
+    else if (c.kind === 'wing') wings.push({ l, side: c.side });
+    else if (c.kind === 'floof' || c.kind === 'rigidHead') {
+      const ch = RIG.addChain(doc, l.name, 'Head', [l.id], c.kind === 'rigidHead' ? 'Rigid (no physics)' : 'Hair / ears floof');
+      l.role = { type: 'chain', chain: ch.id };
+    }
+  }
+  // near/far: keep explicit sides unless they clash; otherwise lower layer = far side, higher = near side
+  for (const base in groups) {
+    const g = groups[base].sort((a, b) => a.l.order - b.l.order);
+    const f = g.filter(x => x.side === 'F').length, b = g.filter(x => x.side === 'B').length;
+    const clean = g.length <= 2 && f <= 1 && b <= 1 && (f + b === g.length);
+    g.forEach((x, i) => {
+      let side = clean ? x.side : (g.length === 1 ? (x.side || 'F') : (i === 0 ? 'B' : 'F'));
+      x.l.role = { type: 'part', part: base + side };
+    });
+  }
+  if (tails.length) {
+    tails.sort((a, b) => a.num - b.num || b.l.order - a.l.order);
+    const ch = RIG.addChain(doc, 'Tail', 'tail', tails.map(t => t.l.id), 'Fluffy tail');
+    tails.forEach(t => t.l.role = { type: 'chain', chain: ch.id });
+  }
+  wings.sort((a, b) => a.l.order - b.l.order);
+  wings.forEach((w, i) => {
+    const side = w.side || (wings.length > 1 && i === 0 ? 'B' : 'F');
+    const ch = RIG.addChain(doc, 'Wing ' + (side === 'B' ? 'far' : 'near'), 'UpTorso', [w.l.id], 'Wings');
+    w.l.role = { type: 'chain', chain: ch.id };
+  });
+  RIG.autoAlign(doc);
+  for (const ch of doc.chains) RIG.autoBones(doc, ch);
+  // link animation frames ("Wing_fall_2", "Head frame 3"...) to the layer they animate
+  const norm = (x) => x.toLowerCase().replace(/[\s_\-.]+/g, '');
+  const alias = { walking: 'walk', running: 'run', jumping: 'jump', falling: 'fall', frame: 'always', f: 'always', anim: 'always' };
+  frames.sort((a, b) => a.n - b.n);
+  for (const fr of frames) {
+    const target = doc.layers.find(o => o.role.type !== 'frame' && norm(o.name) === norm(fr.base));
+    if (!target) { fr.l.role = { type: 'ignore' }; continue; }
+    const key = alias[fr.key] || fr.key;
+    const sets = doc.anims[target.id] = doc.anims[target.id] || {};
+    const set = sets[key] = sets[key] || { fps: 8, loop: !['dead', 'down'].includes(key), frames: key === 'always' ? [target.id] : [] };
+    set.frames.push(fr.l.id);
+    fr.l.role = { type: 'frame', of: target.id };
+  }
+  if (doc.layers.some(l => l.role.type === 'part' && l.role.part === 'Head')) doc.hideObjects = ['Eyes', 'Nosebleed'];
+  doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail');
+};
+
+RIG.addChain = function (doc, name, attachTo, layerIds, preset) {
+  const m = RIG.PRESETS[preset];
+  const ch = { id: RIG.newId(), name, attachTo, segs: layerIds.map(id => ({ layer: id, joint: { x: 0, y: 0 }, tip: null, restAngle: 0, maxBend: -1 })),
+    physics: !!m, motion: Object.assign(RIG.defaultMotion(), m || {}), preset, offset: { x: 0, y: 0 }, injury: RIG.defaultInjury(name) };
+  doc.chains.push(ch);
+  return ch;
+};
+
+// one translation that puts the drawing on the game's skeleton (fit on near-side parts)
+RIG.autoAlign = function (doc) {
+  const use = ['Head', 'UpTorso', 'DownTorso', 'UpArmF', 'DownArmF', 'HandF', 'ThighF', 'CrusF', 'FootF'];
+  let sx = 0, sy = 0, n = 0;
+  for (const l of doc.layers) if (l.role.type === 'part' && use.includes(l.role.part)) {
+    const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++;
+  }
+  if (!n) for (const l of doc.layers) if (l.role.type === 'part') { const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++; }
+  if (n) doc.align = { x: Math.round(sx / n * 2) / 2, y: Math.round(sy / n * 2) / 2 };
+};
+
+// centre of the opaque pixels of layer l lying across the axis at "t" (projection along unit dir d from origin o)
+function crossCenter(l, o, d, t) {
+  let sx = 0, sy = 0, n = 0;
+  for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) {
+    if (!RIG.alpha(l, x, y)) continue;
+    const px = l.x + x + 0.5, py = l.y + y + 0.5;
+    const pr = (px - o.x) * d.x + (py - o.y) * d.y;
+    if (Math.abs(pr - t) <= 1.0) { sx += px; sy += py; n++; }
+  }
+  return n ? { x: sx / n, y: sy / n } : null;
+}
+function extent(l, o, d) {
+  let lo = 1e9, hi = -1e9;
+  for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) {
+    if (!RIG.alpha(l, x, y)) continue;
+    const pr = (l.x + x + 0.5 - o.x) * d.x + (l.y + y + 0.5 - o.y) * d.y;
+    if (pr < lo) lo = pr; if (pr > hi) hi = pr;
+  }
+  return [lo, hi];
+}
+const r1 = (v) => Math.round(v * 2) / 2;
+
+// place joints automatically
+RIG.autoBones = function (doc, ch) {
+  const base = RIG.J(doc, ch.attachTo === 'tail' ? 'DownTorso' : ch.attachTo);
+  const segs = ch.segs.map(s => RIG.layer(doc, s.layer)).filter(Boolean);
+  if (!segs.length) return;
+  const restRot = (RIG.REST[ch.attachTo] || [0, 0, 0])[2];
+  ch.segs.forEach(s => { s.restAngle = 0; s.tip = null; });
+  ch.segs[0].restAngle = -restRot;
+  if (segs.length === 1) {
+    // single piece (ear, hair, wing): joint = its pixel nearest the body part, tip = farthest pixel from there
+    const l = segs[0]; let best = null, bd = 1e9;
+    for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) if (RIG.alpha(l, x, y)) {
+      const px = l.x + x + 0.5, py = l.y + y + 0.5, d = (px - base.x) ** 2 + (py - base.y) ** 2;
+      if (d < bd) { bd = d; best = { x: px, y: py }; }
+    }
+    let far = null, fd = -1;
+    for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) if (RIG.alpha(l, x, y)) {
+      const px = l.x + x + 0.5, py = l.y + y + 0.5, d = (px - best.x) ** 2 + (py - best.y) ** 2;
+      if (d > fd) { fd = d; far = { x: px, y: py }; }
+    }
+    ch.segs[0].joint = { x: r1(best.x), y: r1(best.y) };
+    ch.segs[0].tip = { x: r1(far.x), y: r1(far.y) };
+    return;
+  }
+  // chain: axis from the first piece toward the last
+  const c0 = RIG.center(segs[0]), cN = RIG.center(segs[segs.length - 1]);
+  let d = { x: cN.x - c0.x, y: cN.y - c0.y }; const dl = Math.hypot(d.x, d.y) || 1; d = { x: d.x / dl, y: d.y / dl };
+  const ext = segs.map(l => extent(l, c0, d));
+  segs.forEach((l, k) => {
+    let t = k === 0 ? ext[0][0] + 1.5 : (ext[k - 1][1] + ext[k][0]) / 2;
+    const p = crossCenter(l, c0, d, t) || RIG.center(l);
+    ch.segs[k].joint = { x: r1(p.x), y: r1(p.y) };
+  });
+  // the last piece points to its far end
+  const lastT = ext[segs.length - 1][1] - 0.5;
+  const tp = crossCenter(segs[segs.length - 1], c0, d, lastT) || RIG.center(segs[segs.length - 1]);
+  ch.segs[segs.length - 1].tip = { x: r1(tp.x), y: r1(tp.y) };
+};
+
+// ===================== loose images (cropped PNGs) & adding images to a character =====================
+const normName = (x) => x.toLowerCase().replace(/[\s_\-.]+/g, '');
+RIG.isSideB = (name) => /(back|far|behind|rear)/.test(normName(name));
+// stacking key, so loose images land in a sensible front-to-back order
+RIG.sortKey = function (doc, l) {
+  const r = l.role;
+  if (r.type === 'part') return RIG.ORDER[r.part];
+  if (r.type === 'chain') {
+    const ch = RIG.chain(doc, r.chain); if (!ch) return 300;
+    const k = ch.segs.findIndex(s => s.layer === l.id) * 0.01;
+    if (ch.attachTo === 'tail') return 5 + k;
+    if (ch.attachTo === 'Head') return (RIG.isSideB(ch.name) ? 45 : 55) + k;
+    if (ch.attachTo === 'UpTorso' && /wing/i.test(ch.name)) return (RIG.isSideB(ch.name) ? -100 : -5) + k;
+    return (RIG.ORDER[ch.attachTo] || 0) + 1 + k;
+  }
+  if (r.of) { const t = RIG.layer(doc, r.of); if (t && t !== l) return RIG.sortKey(doc, t) + 0.001; }
+  return 300;
+};
+// put a cropped image where it belongs on the game skeleton
+RIG.placeLoose = function (doc, l) {
+  const r = l.role, rd = Math.round;
+  const at = (cx, cy) => { l.x = rd(cx - l.w / 2); l.y = rd(cy - l.h / 2); };
+  if (r.type === 'part') { const J = RIG.J(doc, r.part); at(J.x, J.y); return; }
+  if (r.type === 'chain') {
+    const ch = RIG.chain(doc, r.chain); const k = ch.segs.findIndex(s => s.layer === l.id);
+    const prev = k > 0 ? RIG.layer(doc, ch.segs[k - 1].layer) : null;
+    if (ch.attachTo === 'tail') {
+      if (prev) { l.x = prev.x + 1 - l.w; l.y = rd(prev.y + prev.h / 2 - l.h / 2); }
+      else { const A = RIG.J(doc, 'tail'); l.x = rd(A.x + 1 - l.w); l.y = rd(A.y - l.h / 2); }
+      return;
+    }
+    if (ch.attachTo === 'Head') {
+      const H = RIG.J(doc, 'Head'); const head = doc.layers.find(o => o.role.type === 'part' && o.role.part === 'Head');
+      const top = head ? head.y : H.y - 6;
+      if (prev) { l.x = rd(prev.x + prev.w / 2 - l.w / 2); l.y = prev.y - l.h + 1; return; }
+      l.x = rd(H.x - l.w / 2 + (RIG.isSideB(ch.name) ? -2 : 1)); l.y = top - l.h + 3; return;
+    }
+    if (ch.attachTo === 'UpTorso') { const U = RIG.J(doc, 'UpTorso'); if (prev) { l.x = prev.x - l.w + 1; l.y = prev.y; return; } l.x = rd(U.x - l.w + 2); l.y = rd(U.y - l.h + 3); return; }
+    const J = RIG.J(doc, ch.attachTo); if (prev) { l.x = rd(prev.x + prev.w / 2 - l.w / 2); l.y = prev.y + prev.h - 1; return; } at(J.x, J.y); return;
+  }
+  if (r.of) { const t = RIG.layer(doc, r.of); if (t) { at(t.x + t.w / 2, t.y + t.h / 2); return; } }
+  // not recognised: park it beside the character so it can be picked up and used
+  const parked = doc.layers.filter(o => o._parked && o !== l);
+  const y0 = parked.length ? Math.max(...parked.map(o => o.y + o.h)) + 2 : RIG.J(doc, 'Head').y - 8;
+  l.x = rd(doc.align.x + 18); l.y = y0; l._parked = true;
+};
+// grow / shift the canvas so every layer is inside it (everything moves together, nothing changes visually)
+RIG.fitCanvas = function (doc, margin) {
+  margin = margin === undefined ? 4 : margin;
+  let x0 = doc.align.x - 16, y0 = RIG.J(doc, 'Head').y - 12, x1 = doc.align.x + 16, y1 = RIG.J(doc, 'FootF').y + 8;
+  for (const l of doc.layers) { if (l.cutSource) continue; x0 = Math.min(x0, l.x); y0 = Math.min(y0, l.y); x1 = Math.max(x1, l.x + l.w); y1 = Math.max(y1, l.y + l.h); }
+  const dx = Math.round(margin - x0), dy = Math.round(margin - y0);
+  if (dx || dy) RIG.shiftAll(doc, dx, dy);
+  doc.width = Math.max(doc.width, Math.ceil(x1 - x0 + margin * 2)); doc.height = Math.max(doc.height, Math.ceil(y1 - y0 + margin * 2));
+  if (x0 < 0 || y0 < 0 || dx || dy) { doc.width = Math.ceil(x1 - x0 + margin * 2); doc.height = Math.ceil(y1 - y0 + margin * 2); }
+};
+RIG.shiftAll = function (doc, dx, dy) {
+  for (const l of doc.layers) { l.x += dx; l.y += dy; }
+  for (const ch of doc.chains) for (const s of ch.segs) { s.joint = { x: s.joint.x + dx, y: s.joint.y + dy }; if (s.tip) s.tip = { x: s.tip.x + dx, y: s.tip.y + dy }; }
+  doc.align = { x: doc.align.x + dx, y: doc.align.y + dy };
+};
+// give one new layer a role from its name (without touching the rest of the character)
+RIG.assignOne = function (doc, l) {
+  const fm = l.name.match(RIG.FRAME_RE);
+  if (fm) {
+    const target = doc.layers.find(o => o !== l && o.role.type !== 'frame' && !o.cutSource && normName(o.name) === normName(fm[1]));
+    if (target) {
+      const alias = { walking: 'walk', running: 'run', jumping: 'jump', falling: 'fall', frame: 'always', f: 'always', anim: 'always' };
+      const key = alias[fm[2].toLowerCase()] || fm[2].toLowerCase();
+      const sets = doc.anims[target.id] = doc.anims[target.id] || {};
+      const set = sets[key] = sets[key] || { fps: 8, loop: !['dead', 'down'].includes(key), frames: key === 'always' ? [target.id] : [] };
+      set.frames.push(l.id); l.role = { type: 'frame', of: target.id }; return null;
+    }
+  }
+  const c = RIG.classify(l.name);
+  const takePart = (part) => { for (const o of doc.layers) if (o !== l && o.role.type === 'part' && o.role.part === part) o.role = { type: 'ignore' }; l.role = { type: 'part', part }; };
+  if (c.kind === 'part') { takePart(c.base); return null; }
+  if (c.kind === 'limb') {
+    const used = (sd) => doc.layers.some(o => o !== l && o.role.type === 'part' && o.role.part === c.base + sd);
+    takePart(c.base + (c.side || (!used('F') ? 'F' : !used('B') ? 'B' : 'F'))); return null;
+  }
+  if (c.kind === 'tail') {
+    let ch = doc.chains.find(x => x.attachTo === 'tail' && !x.source);
+    if (!ch) ch = RIG.addChain(doc, 'Tail', 'tail', [], 'Fluffy tail');
+    ch.segs.push({ layer: l.id, joint: { x: 0, y: 0 }, tip: null, restAngle: 0, maxBend: -1 }); l.role = { type: 'chain', chain: ch.id };
+    const num = (s) => { const x = RIG.layer(doc, s.layer); return x ? (RIG.classify(x.name).num || 0) : 0; };
+    ch.segs.sort((a, b) => num(a) - num(b));
+    doc.hideVanillaTail = true; return ch;
+  }
+  if (c.kind === 'wing') {
+    const n = doc.chains.filter(x => /wing/i.test(x.name)).length;
+    const far = c.side === 'B' || (!c.side && n === 1);
+    const ch = RIG.addChain(doc, 'Wing ' + (far ? 'far' : 'near'), 'UpTorso', [l.id], 'Wings'); l.role = { type: 'chain', chain: ch.id }; return ch;
+  }
+  if (c.kind === 'floof' || c.kind === 'rigidHead') {
+    const ch = RIG.addChain(doc, l.name, 'Head', [l.id], c.kind === 'rigidHead' ? 'Rigid (no physics)' : 'Hair / ears floof'); l.role = { type: 'chain', chain: ch.id }; return ch;
+  }
+  l.role = { type: 'ignore' }; return null;
+};
+// add images ({name, w, h, rgba}) to a character. Full-canvas images keep their spot; smaller (cropped) ones are placed by name.
+RIG.addImages = function (doc, imgs) {
+  const added = [];
+  const isFull = (im) => im.w === doc.width && im.h === doc.height;
+  const isFrame = (im) => RIG.FRAME_RE.test(im.name);
+  const sorted = [...imgs].sort((a, b) => (isFrame(a) - isFrame(b)) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const touched = new Set();
+  for (const im of sorted) {
+    const c = RIG.crop(im.rgba, im.w, im.h); if (!c) continue;
+    const loose = !isFull(im);
+    const l = { id: RIG.newId(), name: im.name, x: loose ? 0 : c.x, y: loose ? 0 : c.y, w: c.w, h: c.h, rgba: c.rgba, order: doc.layers.length, hidden: false, role: { type: 'ignore' } };
+    doc.layers.push(l); added.push(l);
+    const ch = RIG.assignOne(doc, l); if (ch) touched.add(ch);
+    l._loose = loose;
+  }
+  // place loose ones (chain pieces in chain order so each one hangs off the previous)
+  const place = [...added.filter(l => l._loose && l.role.type !== 'chain' && l.role.type !== 'frame'),
+    ...doc.chains.flatMap(ch => ch.segs.map(s => RIG.layer(doc, s.layer)).filter(l => l && added.includes(l) && l._loose)),
+    ...added.filter(l => l._loose && l.role.type === 'frame')];
+  for (const l of place) RIG.placeLoose(doc, l);
+  added.forEach(l => { delete l._loose; delete l._parked; });
+  // stacking: slot each new layer in by its key
+  const fresh = new Set(added);
+  const old = doc.layers.filter(l => !fresh.has(l));
+  for (const l of added.sort((a, b) => RIG.sortKey(doc, a) - RIG.sortKey(doc, b))) {
+    const k = RIG.sortKey(doc, l); let i = old.length;
+    while (i > 0 && RIG.sortKey(doc, old[i - 1]) > k && old[i - 1].role.type !== 'ignore') i--;
+    if (k === 300) i = old.length;
+    old.splice(i, 0, l);
+  }
+  doc.layers = old; doc.layers.forEach((l, i) => l.order = i);
+  for (const ch of touched) RIG.autoBones(doc, ch);
+  RIG.fitCanvas(doc);
+  if (doc.layers.some(l => l.role.type === 'part' && l.role.part === 'Head') && !doc.hideObjects.includes('Eyes')) doc.hideObjects = ['Eyes', 'Nosebleed'];
+  return added;
+};
+// a character from separate (cropped) PNG files
+RIG.docFromLoose = function (name, imgs) {
+  const doc = RIG.newDoc(name, 96, 96, []);
+  doc.align = { x: 48, y: 48 };
+  RIG.addImages(doc, imgs);
+  return doc;
+};
+
+// ===================== bones on one image: cut it into pieces that bend =====================
+RIG.removeLayers = function (doc, ids) {
+  const set = new Set(ids);
+  for (const id of ids) { delete doc.anims[id]; delete doc.healthScreen['seg:' + id]; }
+  for (const k in doc.anims) for (const a in doc.anims[k]) { const st = doc.anims[k][a]; st.frames = st.frames.filter(f => !set.has(f)); if (!st.frames.length) delete doc.anims[k][a]; }
+  for (const l of doc.layers) if (l.role.of && set.has(l.role.of)) l.role = { type: 'ignore' };
+  doc.layers = doc.layers.filter(l => !set.has(l.id)); doc.layers.forEach((l, i) => l.order = i);
+};
+// things attached to pieces that a re-cut would drop (frames, injury art)
+RIG.pieceExtras = function (doc, ch) {
+  const ids = new Set(ch.segs.map(s => s.layer));
+  return doc.layers.filter(l => (l.role.type === 'injury' || l.role.type === 'frame') && ids.has(l.role.of)).length + ch.segs.filter(s => doc.anims[s.layer]).length;
+};
+function opaquePixels(l) { const px = []; for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) if (l.rgba[(y * l.w + x) * 4 + 3]) px.push(x, y); return px; }
+function makePiece(src, name, pick) { // pick(i) -> include pixel #i
+  const rgba = new Uint8ClampedArray(src.w * src.h * 4); let any = false;
+  const px = opaquePixels(src);
+  for (let i = 0; i < px.length; i += 2) if (pick(i / 2)) { const o = (px[i + 1] * src.w + px[i]) * 4; rgba.set(src.rgba.subarray(o, o + 4), o); any = true; }
+  const c = any ? RIG.crop(rgba, src.w, src.h) : null;
+  return c ? { x: src.x + c.x, y: src.y + c.y, w: c.w, h: c.h, rgba: c.rgba } : { x: src.x, y: src.y, w: 1, h: 1, rgba: new Uint8ClampedArray(4) };
+}
+// distance along the shape (8-connected) from the opaque pixel nearest to point "from"
+function shapeDistances(src, from) {
+  const px = opaquePixels(src), n = px.length / 2; const idx = new Int32Array(src.w * src.h).fill(-1);
+  for (let i = 0; i < n; i++) idx[px[2 * i + 1] * src.w + px[2 * i]] = i;
+  let start = 0, bd = 1e18;
+  for (let i = 0; i < n; i++) { const d = (src.x + px[2 * i] + 0.5 - from.x) ** 2 + (src.y + px[2 * i + 1] + 0.5 - from.y) ** 2; if (d < bd) { bd = d; start = i; } }
+  const dist = new Float64Array(n).fill(Infinity); dist[start] = 0;
+  // Dijkstra with a simple bucket queue (steps 1 and 1.414)
+  const q = [[start, 0]]; let head = 0;
+  const nb = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
+  while (head < q.length) {
+    // pick the smallest of a small window (good enough, near-BFS order)
+    const [i, d] = q[head++]; if (d > dist[i]) continue;
+    const x = px[2 * i], y = px[2 * i + 1];
+    for (const [ox, oy, w] of nb) {
+      const X = x + ox, Y = y + oy; if (X < 0 || Y < 0 || X >= src.w || Y >= src.h) continue;
+      const j = idx[Y * src.w + X]; if (j < 0) continue;
+      if (d + w < dist[j] - 1e-9) { dist[j] = d + w; q.push([j, d + w]); }
+    }
+  }
+  for (let i = 0; i < n; i++) if (!isFinite(dist[i])) dist[i] = Math.hypot(px[2 * i] - px[2 * start], px[2 * i + 1] - px[2 * start + 1]);
+  return { px, n, dist, start };
+}
+// cut "src" into n pieces along its shape, starting at the end nearest the body; fills ch.segs with new piece layers
+RIG.cutInto = function (doc, ch, src, n) {
+  const from = RIG.J(doc, ch.attachTo === 'tail' ? 'tail' : ch.attachTo);
+  const { px, n: np, dist } = shapeDistances(src, from);
+  let Lmax = 0; for (let i = 0; i < np; i++) Lmax = Math.max(Lmax, dist[i]);
+  n = Math.max(1, Math.min(n | 0, Math.floor(Lmax / 2) || 1, 40));
+  const band = (lo, hi) => { let sx = 0, sy = 0, c = 0; for (let i = 0; i < np; i++) if (dist[i] >= lo && dist[i] <= hi) { sx += px[2 * i]; sy += px[2 * i + 1]; c++; } return c ? { x: r1(src.x + sx / c + 0.5), y: r1(src.y + sy / c + 0.5) } : null; };
+  const seg = Lmax / n;
+  const pieceOf = (i) => Math.min(n - 1, Math.floor(dist[i] / seg));
+  // old pieces go away
+  const oldIds = ch.segs.map(s => s.layer).filter(id => id !== src.id);
+  const at = doc.layers.indexOf(src);
+  const pieces = [];
+  for (let k = 0; k < n; k++) {
+    // each piece also keeps a thin strip of the next one underneath it, so bends don't open gaps
+    const p = makePiece(src, '', (i) => pieceOf(i) === k || (pieceOf(i) === k + 1 && dist[i] < (k + 1) * seg + 1.5));
+    pieces.push(Object.assign({ id: RIG.newId(), name: n === 1 ? src.name : src.name + ' ' + (k + 1), hidden: false, role: { type: 'chain', chain: ch.id }, order: 0 }, p));
+  }
+  RIG.removeLayers(doc, oldIds);
+  doc.layers.splice(doc.layers.indexOf(src) + 1, 0, ...pieces);
+  doc.layers.forEach((l, i) => l.order = i);
+  src.role = { type: 'ignore' }; src.cutSource = ch.id; ch.source = src.id;
+  const restRot = (RIG.REST[ch.attachTo] || [0, 0, 0])[2];
+  ch.segs = pieces.map((p, k) => ({ layer: p.id, joint: band(k === 0 ? 0 : k * seg - 1, k === 0 ? 1.5 : k * seg + 1) || RIG.center(p), tip: null, restAngle: k === 0 ? -restRot : 0, maxBend: -1 }));
+  ch.segs[n - 1].tip = band(Lmax - 1.5, Lmax + 1) || RIG.center(pieces[n - 1]);
+  return ch;
+};
+// re-cut the original image by the bones as they are now (after dragging joints)
+RIG.recut = function (doc, ch) {
+  const src = ch.source && RIG.layer(doc, ch.source); if (!src) return false;
+  const pts = ch.segs.map(s => s.joint).concat([ch.segs[ch.segs.length - 1].tip || ch.segs[ch.segs.length - 1].joint]);
+  const px = opaquePixels(src), np = px.length / 2, n = ch.segs.length;
+  const dseg = (p, a, b) => { const ab = V.sub(b, a), l2 = ab.x * ab.x + ab.y * ab.y; let t = l2 ? ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / l2 : 0; t = Math.max(0, Math.min(1, t)); return Math.hypot(p.x - a.x - ab.x * t, p.y - a.y - ab.y * t); };
+  const best = new Int32Array(np), dd = [];
+  for (let i = 0; i < np; i++) {
+    const p = { x: src.x + px[2 * i] + 0.5, y: src.y + px[2 * i + 1] + 0.5 }; const d = [];
+    for (let k = 0; k < n; k++) d.push(dseg(p, pts[k], pts[k + 1]));
+    let b = 0; for (let k = 1; k < n; k++) if (d[k] < d[b] - 1e-6) b = k;
+    best[i] = b; dd.push(d);
+  }
+  ch.segs.forEach((s, k) => {
+    const l = RIG.layer(doc, s.layer); if (!l) return;
+    const p = makePiece(src, '', (i) => best[i] === k || (best[i] === k + 1 && dd[i][k] <= dd[i][k + 1] + 1.2));
+    Object.assign(l, p);
+  });
+  return true;
+};
+// change the number of bones: re-cuts the original image (merging separate pieces into one first if needed)
+RIG.setBoneCount = function (doc, ch, n) {
+  let src = ch.source && RIG.layer(doc, ch.source);
+  if (!src) {
+    const ls = ch.segs.map(s => RIG.layer(doc, s.layer)).filter(Boolean);
+    if (ls.length === 1) { src = ls[0]; }
+    else { // merge the pieces into one image, in drawing order
+      const x0 = Math.min(...ls.map(l => l.x)), y0 = Math.min(...ls.map(l => l.y));
+      const w = Math.max(...ls.map(l => l.x + l.w)) - x0, h = Math.max(...ls.map(l => l.y + l.h)) - y0;
+      const rgba = new Uint8ClampedArray(w * h * 4);
+      for (const l of [...ls].sort((a, b) => a.order - b.order)) for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) {
+        const o = (y * l.w + x) * 4, a = l.rgba[o + 3] / 255; if (!a) continue;
+        const d = ((l.y - y0 + y) * w + (l.x - x0 + x)) * 4, da = rgba[d + 3] / 255, oa = a + da * (1 - a);
+        for (let c = 0; c < 3; c++) rgba[d + c] = (l.rgba[o + c] * a + rgba[d + c] * da * (1 - a)) / oa;
+        rgba[d + 3] = oa * 255;
+      }
+      const first = ls.reduce((a, b) => a.order < b.order ? a : b);
+      src = { id: RIG.newId(), name: ch.name, x: x0, y: y0, w, h, rgba, hidden: false, role: { type: 'ignore' }, order: first.order };
+      doc.layers.splice(doc.layers.indexOf(first), 0, src);
+    }
+    ch.segs.forEach(s => { if (s.layer === src.id) s.layer = null; });
+  }
+  RIG.cutInto(doc, ch, src, n);
+  return ch;
+};
+// back to a single image with one bone
+RIG.uncut = function (doc, ch) {
+  const src = ch.source && RIG.layer(doc, ch.source); if (!src) return;
+  RIG.removeLayers(doc, ch.segs.map(s => s.layer));
+  delete src.cutSource; delete ch.source; src.role = { type: 'chain', chain: ch.id };
+  ch.segs = [{ layer: src.id, joint: { x: 0, y: 0 }, tip: null, restAngle: 0, maxBend: -1 }];
+  RIG.autoBones(doc, ch);
+};
+// make any layer a moving part (tail, wing, hair...) with n bones
+RIG.KINDS = {
+  tail: { label: 'Tail', attachTo: 'tail', preset: 'Fluffy tail', bones: 6 },
+  wing: { label: 'Wing', attachTo: 'UpTorso', preset: 'Wings', bones: 3 },
+  hair: { label: 'Hair / ear / floof', attachTo: 'Head', preset: 'Hair / ears floof', bones: 3 },
+  other: { label: 'Something else that dangles', attachTo: 'UpTorso', preset: 'Fluffy tail', bones: 3 }
+};
+RIG.kindOf = (name) => { const c = RIG.classify(name); return c.kind === 'tail' ? 'tail' : c.kind === 'wing' ? 'wing' : (c.kind === 'floof' || c.kind === 'rigidHead') ? 'hair' : 'other'; };
+RIG.makeMoving = function (doc, l, kind, n, attachTo) {
+  const K = RIG.KINDS[kind] || RIG.KINDS.other;
+  for (const c of doc.chains) c.segs = c.segs.filter(s => s.layer !== l.id);
+  doc.chains = doc.chains.filter(c => c.segs.length || c.source);
+  const name = kind === 'wing' ? (RIG.isSideB(l.name) ? 'Wing far' : 'Wing near') : l.name;
+  const ch = RIG.addChain(doc, name, attachTo || K.attachTo, [l.id], K.preset);
+  l.role = { type: 'chain', chain: ch.id };
+  if (n > 1) RIG.cutInto(doc, ch, l, n); else RIG.autoBones(doc, ch);
+  if (ch.attachTo === 'tail') doc.hideVanillaTail = true;
+  return ch;
+};
+
+// ===================== export to rig.json =====================
+RIG.fileName = function (doc, l) {
+  if (l._file) return l._file;
+  const used = new Set(doc.layers.filter(x => x._file).map(x => x._file.toLowerCase()));
+  let base = (l.name || 'layer').replace(/[^A-Za-z0-9_\-]+/g, '_').replace(/^_+|_+$/g, '') || 'layer', f = base + '.png', i = 2;
+  while (used.has(f.toLowerCase())) f = base + '_' + (i++) + '.png';
+  l._file = f; return f;
+};
+
+// absolute draw order for a layer, keeping the drawing's stacking as far as the game's fixed part order allows
+function absOrder(doc, l) {
+  if (l.role.type === 'part') return RIG.ORDER[l.role.part];
+  // above every game part that is below it in the drawing
+  let below = null;
+  for (const o of doc.layers) if (o.order < l.order && o.role.type === 'part') below = below === null ? RIG.ORDER[o.role.part] : Math.max(below, RIG.ORDER[o.role.part]);
+  if (below === null) {
+    let lowest = null;
+    for (const o of doc.layers) if (o.role.type === 'part') lowest = lowest === null ? RIG.ORDER[o.role.part] : Math.min(lowest, RIG.ORDER[o.role.part]);
+    return lowest === null ? 0 : lowest - 5;
+  }
+  return below + 1;
+}
+
+RIG.exportAnims = function (doc, layerId, seg, add) {
+  const sets = doc.anims && doc.anims[layerId];
+  if (!sets) return;
+  const out = {};
+  for (const key in sets) {
+    const st = sets[key];
+    const fr = st.frames.map(id => RIG.layer(doc, id)).filter(Boolean);
+    if (!fr.length) continue;
+    out[key] = { fps: +st.fps || 8, loop: st.loop !== false, frames: fr.map(f => ({ file: add(f), x: f.x, y: f.y })) };
+  }
+  if (Object.keys(out).length) seg.animations = out;
+};
+
+RIG.buildRig = function (doc) {
+  doc.layers.forEach(l => delete l._file);
+  const files = {};
+  const chains = [];
+  const add = (l) => { const f = RIG.fileName(doc, l); files[f] = l; return f; };
+  const addImg = (name, img) => { files[name] = img; return name; };
+  const hsOut = (key, d) => {
+    if (!d) return null;
+    const o = { scale: d.scale || 3 };
+    const tag = key.replace(/[^A-Za-z0-9]+/g, '_');
+    if (d.outline) o.outline = addImg('hs_' + tag + '_outline.png', d.outline);
+    if (d.middle) o.middle = addImg('hs_' + tag + '_middle.png', d.middle);
+    if (d.x !== undefined && d.y !== undefined) { o.x = +(+d.x).toFixed(1); o.y = +(+d.y).toFixed(1); }
+    if (d.rotation) o.rotation = +d.rotation; if (d.mirror) o.mirror = true;
+    return o;
+  };
+  // rigid body parts, in drawing order
+  for (const l of doc.layers) {
+    if (l.role.type !== 'part') continue;
+    const part = l.role.part, J = RIG.J(doc, part);
+    const sameBefore = doc.layers.filter(o => o.order < l.order && o.role.type === 'part' && o.role.part === part).length;
+    const seg = { file: add(l), x: l.x, y: l.y, joint: J, restAngle: -RIG.REST[part][2] };
+    RIG.exportAnims(doc, l.id, seg, add);
+    const arts = doc.layers.filter(a => a.role.type === 'injury' && a.role.of === l.id);
+    if (arts.length) { seg.injuryArt = {}; for (const a of arts) seg.injuryArt[a.role.state] = { file: add(a), x: a.x, y: a.y }; }
+    const states = doc.layers.filter(s => s.role.type === 'state' && s.role.of === l.id);
+    if (states.length) { seg.states = {}; for (const s of states) seg.states[s.role.state] = { file: add(s), x: s.x, y: s.y }; }
+    chains.push({ name: l.name, attachTo: part, anchor: J, hideTarget: true, physics: false, sortingOrderOffset: sameBefore, segments: [seg] });
+  }
+  for (const ch of doc.chains) {
+    const ls = ch.segs.map(s => RIG.layer(doc, s.layer)).filter(Boolean);
+    if (!ls.length) continue;
+    const anchor = RIG.J(doc, ch.attachTo);
+    const minOrder = Math.min(...ls.map(l => l.order));
+    const lowest = ls.find(l => l.order === minOrder);
+    // stack relative to the layer of the part it hangs on (ears behind/in front of the head), else globally
+    const host = doc.layers.find(o => o.role.type === 'part' && o.role.part === ch.attachTo);
+    // count only drawn layers (body parts and moving pieces), not frames / injury art sitting in between
+    const drawn = doc.layers.filter(o => o.role.type === 'part' || o.role.type === 'chain');
+    const rank = (o) => drawn.indexOf(o);
+    const sortOff = host ? Math.max(-9, Math.min(9, rank(lowest) - rank(host))) : absOrder(doc, lowest) - RIG.ORDER[ch.attachTo];
+    const drawnL = doc.layers.filter(o => o.role.type === 'part' || o.role.type === 'chain');
+    const segs = ch.segs.filter(s => RIG.layer(doc, s.layer)).map((s, k) => {
+      const l = RIG.layer(doc, s.layer);
+      const o = { file: add(l), x: l.x, y: l.y, joint: { x: s.joint.x, y: s.joint.y }, order: drawnL.indexOf(l) - drawnL.indexOf(lowest) };
+      if (s.tip) o.tip = { x: s.tip.x, y: s.tip.y };
+      if (s.restAngle) o.restAngle = +(+s.restAngle).toFixed(2);
+      if (s.maxBend >= 0) o.maxBend = s.maxBend;
+      const arts = doc.layers.filter(a => a.role.type === 'injury' && a.role.of === s.layer);
+      if (arts.length) { o.injuryArt = {}; for (const a of arts) o.injuryArt[a.role.state] = { file: add(a), x: a.x, y: a.y }; }
+      if (ch.injury && ch.injury.enabled) { const h = hsOut('seg_' + ch.name + '_' + k, doc.healthScreen['seg:' + s.layer]); if (h) o.healthScreen = h; }
+      RIG.exportAnims(doc, s.layer, o, add);
+      return o;
+    });
+    const motion = {}; for (const k of RIG.MOTION_KEYS) motion[k] = +ch.motion[k]; motion.flapWhen = ch.motion.flapWhen || 'never';
+    const out = { name: ch.name, attachTo: ch.attachTo, anchor, offset: { x: ch.offset.x, y: ch.offset.y },
+      sortingOrderOffset: sortOff, physics: !!ch.physics, motion, segments: segs };
+    if (ch.injury && ch.injury.enabled) out.injury = { enabled: true, name: ch.injury.name || ch.name, tearOff: !!ch.injury.tearOff, gameShading: !!ch.injury.gameShading, vital: !!ch.injury.vital };
+    chains.push(out);
+  }
+  const rig = { name: doc.name, pixelsPerUnit: RIG.PPU, hideVanillaTail: !!doc.hideVanillaTail, hideObjects: doc.hideObjects.slice(), chains,
+    editor: { width: doc.width, height: doc.height, align: doc.align } };
+  const hsParts = {};
+  for (const p of RIG.PARTS) { const h = hsOut(p, doc.healthScreen[p]); if (h) hsParts[p] = h; }
+  if (Object.keys(hsParts).length) rig.healthScreen = { parts: hsParts };
+  if (doc.sounds) {
+    const snd = {};
+    for (const key in doc.sounds) {
+      const list = doc.sounds[key].map(f => { const name = 'snd_' + key + '_' + f.file.replace(/[^A-Za-z0-9_.\-]+/g, '_'); files[name] = { raw: f.data }; return name; });
+      if (list.length) snd[key] = list;
+    }
+    if (Object.keys(snd).length) rig.sounds = snd;
+  }
+  const swaps = Object.keys(doc.spriteSwaps);
+  if (swaps.length) { rig.spriteSwaps = {}; for (const k of swaps) { rig.spriteSwaps[k] = k + '.png'; files[k + '.png'] = doc.spriteSwaps[k]; } }
+  return { rig, files };
+};
+
+// rebuild an editor document from an exported rig (rig.json + its images, already decoded to {w,h,rgba})
+RIG.docFromRig = function (rig, images) {
+  const ed = rig.editor || {};
+  const doc = { name: rig.name || 'Rig', width: ed.width || 64, height: ed.height || 64, layers: [], chains: [], align: ed.align || { x: 32, y: 36 },
+    hideObjects: rig.hideObjects || [], hideVanillaTail: rig.hideVanillaTail !== false, spriteSwaps: {}, healthScreen: {}, anims: {}, sounds: {} };
+  if (rig.sounds) for (const k in rig.sounds) doc.sounds[k] = [].concat(rig.sounds[k]).filter(f => images[f] && images[f].raw).map(f => ({ file: f.replace(/^snd_[^_]+_/, ''), data: images[f].raw }));
+  const importAnims = (s, l) => {
+    if (!s.animations) return;
+    const sets = doc.anims[l.id] = {};
+    for (const key in s.animations) {
+      const a = s.animations[key];
+      const ids = (a.frames || []).map((f, i) => {
+        const file = typeof f === 'string' ? f : f.file;
+        const fl = mk(file, typeof f === 'string' ? s.x : f.x, typeof f === 'string' ? s.y : f.y);
+        if (fl !== l) { fl.role = { type: 'frame', of: l.id }; fl._abs = (l._abs || 0) + 0.0001 * (i + 1); }
+        return fl.id;
+      });
+      sets[key] = { fps: a.fps || 8, loop: a.loop !== false, frames: ids };
+    }
+  };
+  let order = 0; const byFile = {};
+  const hsIn = (h) => h ? { outline: h.outline ? images[h.outline] : null, middle: h.middle ? images[h.middle] : null,
+    x: h.x, y: h.y, scale: h.scale || 3, rotation: h.rotation || 0, mirror: !!h.mirror } : null;
+  const mk = (file, x, y) => {
+    const key = file + '@' + x + ',' + y; if (byFile[key]) return byFile[key];
+    const img = images[file]; if (!img) throw new Error('Missing image ' + file);
+    const l = { id: RIG.newId(), name: file.replace(/\.png$/i, ''), x, y, w: img.w, h: img.h, rgba: img.rgba, order: 0, hidden: false, role: { type: 'ignore' } };
+    doc.layers.push(l); byFile[key] = l; return l;
+  };
+  const pending = [];
+  for (const c of rig.chains || []) {
+    const base = RIG.ORDER[c.attachTo] !== undefined ? RIG.ORDER[c.attachTo] : 0;
+    if (c.hideTarget && c.physics === false && RIG.PARTS.includes(c.attachTo) && c.segments.length === 1) {
+      const s = c.segments[0]; const l = mk(s.file, s.x, s.y); l.role = { type: 'part', part: c.attachTo }; l._abs = base + (c.sortingOrderOffset || 0);
+      if (c.name) l.name = c.name;
+      if (!rig.editor && s.joint && c.anchor) doc.align = { x: s.joint.x - RIG.restPx(c.attachTo).x, y: s.joint.y - RIG.restPx(c.attachTo).y };
+      importAnims(s, l);
+      if (s.injuryArt) for (const st in s.injuryArt) { const v = s.injuryArt[st]; const f = typeof v === 'string' ? v : v.file;
+        const al = mk(f, typeof v === 'string' ? s.x : v.x, typeof v === 'string' ? s.y : v.y); al.role = { type: 'injury', of: l.id, state: st }; al._abs = l._abs + 0.002; }
+      if (s.states) for (const st in s.states) { const v = s.states[st]; const f = typeof v === 'string' ? v : v.file;
+        const sl = mk(f, typeof v === 'string' ? s.x : v.x, typeof v === 'string' ? s.y : v.y); sl.role = { type: 'state', of: l.id, state: st }; sl._abs = l._abs + 0.5; }
+      continue;
+    }
+    pending.push(c);
+  }
+  for (const c of pending) {
+    const base = RIG.ORDER[c.attachTo] !== undefined ? RIG.ORDER[c.attachTo] : 0;
+    const ch = { id: RIG.newId(), name: c.name || 'Chain', attachTo: c.attachTo || 'tail', segs: [], physics: c.physics !== false,
+      motion: Object.assign(RIG.defaultMotion(), c.motion || {}), preset: 'Custom', offset: c.offset || { x: 0, y: 0 },
+      injury: Object.assign(RIG.defaultInjury(c.name), c.injury || {}) };
+    c.segments.forEach((s, k) => {
+      const l = mk(s.file, s.x, s.y); l.role = { type: 'chain', chain: ch.id }; l._abs = base + (c.sortingOrderOffset || 0) + (s.order !== undefined ? s.order : k) * 0.01;
+      if (c.segments.length === 1 && c.name) l.name = c.name;
+      ch.segs.push({ layer: l.id, joint: s.joint || { x: s.x, y: s.y }, tip: s.tip || null, restAngle: s.restAngle || 0, maxBend: s.maxBend !== undefined ? s.maxBend : -1 });
+      if (s.injuryArt) for (const st in s.injuryArt) { const v = s.injuryArt[st]; const f = typeof v === 'string' ? v : v.file;
+        const al = mk(f, typeof v === 'string' ? s.x : v.x, typeof v === 'string' ? s.y : v.y); al.role = { type: 'injury', of: l.id, state: st }; al._abs = l._abs + 0.001; }
+      if (s.healthScreen) doc.healthScreen['seg:' + l.id] = hsIn(s.healthScreen);
+      importAnims(s, l);
+    });
+    doc.chains.push(ch);
+  }
+  doc.layers.sort((a, b) => (a._abs || 0) - (b._abs || 0)); doc.layers.forEach((l, i) => { l.order = i; delete l._abs; });
+  if (rig.healthScreen && rig.healthScreen.parts) for (const p in rig.healthScreen.parts) doc.healthScreen[p] = hsIn(rig.healthScreen.parts[p]);
+  if (rig.spriteSwaps) for (const k in rig.spriteSwaps) { const v = rig.spriteSwaps[k]; const f = typeof v === 'string' ? v : v.file; if (images[f]) doc.spriteSwaps[k] = images[f]; }
+  return doc;
+};
+
+// ===================== tiny zip writer (store) =====================
+RIG.crcTable = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+RIG.crc32 = (u8) => { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = RIG.crcTable[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+RIG.zip = function (entries) { // [{name, data:Uint8Array}]
+  const enc = new TextEncoder(); const parts = []; const central = []; let offset = 0;
+  for (const e of entries) {
+    const name = enc.encode(e.name), crc = RIG.crc32(e.data), size = e.data.length;
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint32(14, crc, true); h.setUint32(18, size, true); h.setUint32(22, size, true); h.setUint16(26, name.length, true);
+    parts.push(new Uint8Array(h.buffer), name, e.data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+    c.setUint32(16, crc, true); c.setUint32(20, size, true); c.setUint32(24, size, true); c.setUint16(28, name.length, true); c.setUint32(42, offset, true);
+    central.push(new Uint8Array(c.buffer), name);
+    offset += 30 + name.length + size;
+  }
+  const cdSize = central.reduce((a, b) => a + b.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  const all = [...parts, ...central, new Uint8Array(end.buffer)];
+  const out = new Uint8Array(all.reduce((a, b) => a + b.length, 0)); let o = 0; for (const a of all) { out.set(a, o); o += a.length; }
+  return out;
+};
+
+// ===================== 2D transforms (same maths as Unity's Transform for our use) =====================
+// matrix [a,b,c,d,e,f]: x' = a*x + c*y + e, y' = b*x + d*y + f
+const M = {
+  I: () => [1, 0, 0, 1, 0, 0],
+  mul: (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
+    m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]],
+  T: (x, y) => [1, 0, 0, 1, x, y],
+  R: (deg) => { const r = deg * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return [c, s, -s, c, 0, 0]; },
+  S: (x, y) => [x, 0, 0, y, 0, 0],
+  vec: (m, v) => ({ x: m[0] * v.x + m[2] * v.y, y: m[1] * v.x + m[3] * v.y }),
+  pt: (m, v) => ({ x: m[0] * v.x + m[2] * v.y + m[4], y: m[1] * v.x + m[3] * v.y + m[5] }),
+  ivec: (m, v) => { const det = m[0] * m[3] - m[2] * m[1]; return { x: (m[3] * v.x - m[2] * v.y) / det, y: (-m[1] * v.x + m[0] * v.y) / det }; }
+};
+RIG.M = M;
+const V = {
+  add: (a, b) => ({ x: a.x + b.x, y: a.y + b.y }), sub: (a, b) => ({ x: a.x - b.x, y: a.y - b.y }), mul: (a, k) => ({ x: a.x * k, y: a.y * k }),
+  len: (a) => Math.hypot(a.x, a.y), norm: (a) => { const l = Math.hypot(a.x, a.y) || 1; return { x: a.x / l, y: a.y / l }; },
+  rot: (a, deg) => { const r = deg * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return { x: a.x * c - a.y * s, y: a.x * s + a.y * c }; },
+  sang: (a, b) => Math.atan2(a.x * b.y - a.y * b.x, a.x * b.x + a.y * b.y) * 180 / Math.PI
+};
+RIG.V = V;
+const deltaAngle = (a, b) => { let d = ((b - a) % 360 + 540) % 360 - 180; return d; };
+
+// ===================== runtime: same simulation as the mod =====================
+// rig = output of buildRig().rig ; frames(part) -> world matrix of a body part
+RIG.Runtime = class {
+  constructor(rig, images) {
+    this.rig = rig; this.images = images; this.chains = []; this.acc = 0; this.time = 0; this.clock = 0; this.animState = new Map();
+    const ppu = rig.pixelsPerUnit || 8;
+    for (const c of rig.chains) {
+      const segs = c.segments.map((s, k) => {
+        let dir;
+        if (s.tip) dir = V.sub(s.tip, s.joint);
+        else if (k + 1 < c.segments.length) dir = V.sub(c.segments[k + 1].joint, s.joint);
+        else { dir = k > 0 ? V.sub(s.joint, c.segments[k - 1].joint) : { x: -1, y: 0 }; const img = images[s.file]; dir = V.mul(V.norm(dir), Math.max(img.w, img.h) * 0.6); }
+        if (V.len(dir) < 0.1) dir = { x: -1, y: 0 };
+        const prevJ = k === 0 ? c.anchor : c.segments[k - 1].joint;
+        return { def: s, local: { x: (s.joint.x - prevJ.x) / ppu, y: -(s.joint.y - prevJ.y) / ppu }, dirLocal: V.norm({ x: dir.x, y: -dir.y }),
+          len: V.len(dir) / ppu, angle: s.restAngle || 0, p: { x: 0, y: 0 }, prev: { x: 0, y: 0 } };
+      });
+      const off = c.offset || { x: 0, y: 0 };
+      this.chains.push({ def: c, segs, offset: { x: off.x / ppu, y: off.y / ppu }, init: false, lastRoot: null, wagBlend: 1, flapBlend: 0,
+        motion: Object.assign(RIG.defaultMotion(), c.motion || {}) });
+    }
+  }
+  // world matrices of every segment for the current angles
+  segMatrices(c, attachM) {
+    let parent = M.mul(attachM, M.T(c.offset.x, c.offset.y)); const out = [];
+    for (const s of c.segs) { const m = M.mul(M.mul(parent, M.T(s.local.x, s.local.y)), M.R(s.angle)); out.push({ parent, m }); parent = m; }
+    return out;
+  }
+  restTip(parentM, s, angle) {
+    const pos = M.pt(parentM, s.local);
+    return V.add(pos, M.vec(parentM, V.mul(V.rot(s.dirLocal, angle), s.len)));
+  }
+  reset(c, attachM) {
+    for (const s of c.segs) s.angle = s.def.restAngle || 0;
+    const ms = this.segMatrices(c, attachM);
+    c.segs.forEach((s, i) => { s.p = this.restTip(ms[i].parent, s, s.angle); s.prev = { ...s.p }; });
+    c.lastRoot = M.pt(ms[0].parent, c.segs[0].local); c.init = true;
+  }
+  // state: {frames: part->matrix, alive, moving, airborne}
+  update(dt, state) {
+    this.clock += dt;
+    const STEP = 1 / 60;
+    this.acc = Math.min(this.acc + dt, STEP * 5); let steps = 0;
+    while (this.acc >= STEP) { this.acc -= STEP; steps++; }
+    for (const c of this.chains) {
+      const attachM = state.frames[c.def.attachTo]; if (!attachM) continue;
+      const root = M.pt(M.mul(attachM, M.T(c.offset.x, c.offset.y)), c.segs[0].local);
+      if (!c.def.physics) { c.segs.forEach(s => s.angle = s.def.restAngle || 0); continue; }
+      if (!c.init || (c.lastRoot && V.len(V.sub(root, c.lastRoot)) > 3)) this.reset(c, attachM);
+      if (!steps) continue;
+      const stepDelta = V.mul(V.sub(root, c.lastRoot), 1 / steps);
+      const m = c.motion;
+      const flapping = m.flapAmplitude !== 0 && state.alive && (m.flapWhen === 'always' || (m.flapWhen === 'air' && state.airborne));
+      for (let k = 0; k < steps; k++) {
+        this.time += STEP;
+        const tw = state.alive ? (state.moving ? m.wagWhileMoving : 1) : 0;
+        c.wagBlend += Math.max(-STEP * 2, Math.min(STEP * 2, tw - c.wagBlend));
+        c.flapBlend += Math.max(-STEP * 3, Math.min(STEP * 3, (flapping ? 1 : 0) - c.flapBlend));
+        this.simulate(c, m, state.alive, stepDelta, attachM);
+      }
+      c.lastRoot = root;
+    }
+  }
+  simulate(c, m, alive, rootDelta, attachM) {
+    const STEP = 1 / 60, t = this.time;
+    const accel = V.sub({ x: 0, y: -(m.gravity * (alive ? 1 : m.deadGravity)) }, V.mul(rootDelta, m.drag / STEP));
+    const a = V.mul(accel, STEP * STEP);
+    for (const s of c.segs) {
+      const vel = V.mul(V.sub(s.p, s.prev), 1 - m.damping);
+      s.prev = V.add(s.p, V.mul(rootDelta, m.inertia));
+      s.p = V.add(V.add(V.add(s.p, vel), a), V.mul(rootDelta, m.inertia));
+    }
+    const frame = M.mul(attachM, M.T(c.offset.x, c.offset.y));
+    let parent = frame, restAbs = 0; const n = c.segs.length;
+    for (let i = 0; i < n; i++) {
+      const s = c.segs[i];
+      const u = n > 1 ? i / (n - 1) : 0;
+      const elast = m.elasticity * (1 + (m.elasticityFalloff - 1) * u);
+      const stiff = m.stiffness * (1 + (m.stiffnessFalloff - 1) * u);
+      const rest = (s.def.restAngle || 0)
+        + Math.sin(t * m.wagSpeed * Math.PI * 2 - i * m.wagPhase) * m.wagAmplitude * c.wagBlend
+        + Math.sin(t * m.flapSpeed * Math.PI * 2 - i * m.flapPhase) * m.flapAmplitude * c.flapBlend;
+      restAbs += rest;
+      const joint = M.pt(parent, s.local);
+      const toTarget = M.vec(frame, V.mul(V.rot(s.dirLocal, restAbs), s.len));
+      const target = V.add(joint, toTarget); const len = V.len(toTarget);
+      let q = s.p;
+      q = V.add(q, V.mul(V.sub(target, q), elast));
+      if (stiff > 0) { const maxDev = len * 2 * (1 - stiff); const d = V.sub(q, target); const dl = V.len(d); if (dl > maxDev) q = V.add(target, V.mul(d, maxDev / dl)); }
+      let dq = V.sub(q, joint); if (V.len(dq) < 1e-5) dq = toTarget;
+      q = V.add(joint, V.mul(V.norm(dq), len));
+      const v = M.ivec(parent, V.sub(q, joint));
+      let ang = V.sang(s.dirLocal, v);
+      const bend = (s.def.maxBend !== undefined && s.def.maxBend >= 0) ? s.def.maxBend : m.maxBend;
+      ang = rest + Math.max(-bend, Math.min(bend, deltaAngle(rest, ang)));
+      s.angle = ang;
+      const segM = M.mul(M.mul(parent, M.T(s.local.x, s.local.y)), M.R(ang));
+      s.p = this.restTip(parent, s, ang);
+      parent = segM;
+    }
+  }
+  // draw list: [{file, matrix(units), pivot px, order}]
+  drawList(state) {
+    const out = [];
+    for (const c of this.chains) {
+      const attachM = state.frames[c.def.attachTo]; if (!attachM) continue;
+      const base = (RIG.ORDER[c.def.attachTo] || 0) + (c.def.sortingOrderOffset || 0);
+      const ms = this.segMatrices(c, attachM);
+      const inj = c.def.injury && c.def.injury.enabled;
+      const cut = inj && state.tornAt !== undefined && state.tornAt !== null ? Math.max(1, Math.min(c.segs.length, state.tornAt)) : c.segs.length + 1;
+      c.segs.forEach((s, k) => {
+        if (k >= cut) return;
+        let file = s.def.file;
+        // injuries apply to injurable pieces and to anything riding on a game limb (custom body parts...)
+        const canHurt = inj || c.def.attachTo !== 'tail';
+        const art = canHurt && s.def.injuryArt ? s.def.injuryArt : null;
+        const anims = s.def.animations || null;
+        const pick = (st) => { const v = art && art[st]; return v ? (typeof v === 'string' ? v : v.file) : null; };
+        const play = (key) => { // frame of an animation set; restarts when the set changes
+          const set = anims && anims[key]; if (!set || !set.frames || !set.frames.length) return null;
+          const id = s; let st = this.animState.get(id);
+          if (!st || st.key !== key) { st = { key, start: this.clock }; this.animState.set(id, st); }
+          const n = set.frames.length, f = Math.floor((this.clock - st.start) * Math.max(0.01, set.fps || 8));
+          return set.frames[set.loop === false ? Math.min(f, n - 1) : f % n];
+        };
+        let chosen = null;
+        const stumpHere = inj && k === cut - 1 && cut <= c.segs.length;
+        const hurtKey = stumpHere ? 'stump' : (canHurt ? state.injury : null);
+        if (hurtKey) { const fr = play(hurtKey); if (fr) chosen = fr; else { const f = pick(hurtKey); if (f) file = f; else if (hurtKey === 'stump' && state.injury) { const fr2 = play(state.injury); if (fr2) chosen = fr2; else if (pick(state.injury)) file = pick(state.injury); } } }
+        if (!chosen && file === s.def.file && !(state.headState && s.def.states && s.def.states[state.headState]) && anims) {
+          const key = RIG.resolveAction(anims, state.action || 'idle'); if (key) chosen = play(key);
+        }
+        if (chosen) file = typeof chosen === 'string' ? chosen : chosen.file;
+        if (state.headState && s.def.states && s.def.states[state.headState] && c.def.attachTo === 'Head') { const v = s.def.states[state.headState]; file = typeof v === 'string' ? v : v.file; }
+        let px = s.def.x, py = s.def.y; // art for a state may sit at its own spot on the canvas
+        for (const src of [s.def.injuryArt, s.def.states]) if (src) for (const st in src) { const v = src[st]; if (v && typeof v === 'object' && v.file === file) { px = v.x; py = v.y; } }
+        if (chosen && typeof chosen === 'object') { px = chosen.x; py = chosen.y; }
+        out.push({ file, m: ms[k].m, joint: s.def.joint, x: px, y: py, order: base + (s.def.order !== undefined ? s.def.order : k) });
+      });
+    }
+    out.sort((a, b) => a.order - b.order);
+    return out;
+  }
+};
+
+// ===================== simple body animation for the preview =====================
+RIG.bodyFrames = function (body) {
+  // body: {x, y, facing(+1/-1), walk(phase), stride 0..1, run 0..1, crouch 0..1, lie 0..1, climb 0..1, swim 0..1, attack 0..1, t(seconds), tailAngle}
+  const st = body.stride || 0, run = body.run || 0, cr = body.crouch || 0, lie = body.lie || 0, cl = body.climb || 0, sw = body.swim || 0, at = body.attack || 0, t = body.t || 0;
+  const ph = body.walk || 0, s1 = Math.sin(ph);
+  const idle = Math.max(0, 1 - st - cl - sw - lie);
+  const breath = Math.sin(t * 2.2) * 0.05 * idle;
+  const bob = -Math.abs(s1) * (0.1 + 0.14 * run) * st + breath + Math.sin(t * 3) * 0.12 * sw + Math.sin(ph * 2) * 0.06 * cl;
+  const drop = 0.95 * cr + 2.55 * lie;
+  const lean = -(3 + 10 * run) * st - 14 * cr - 8 * at + Math.sin(t * 1.1) * 0.8 * idle;
+  const root = M.mul(M.mul(M.T(body.x, body.y), M.S(body.facing, 1)), M.mul(M.T(0, bob - drop), M.R(90 * lie)));
+  const pivot = 0.75; // chest, head and arms lean around this point; belly, legs and tail don't
+  const L = M.mul(M.mul(M.T(0, pivot), M.R(lean)), M.T(0, -pivot));
+  const bend = {};
+  const legAmp = (28 + 14 * run) * st, knee = (30 + 45 * run) * st;
+  const leg = (side, p) => {
+    const s = Math.sin(p), c = Math.cos(p);
+    const th = legAmp * s + 68 * cr + 25 * lie + cl * (25 + 35 * Math.max(0, s)) + sw * 22 * s;
+    const kn = -knee * Math.max(0, c) - 6 * st - 110 * cr - 25 * lie - cl * (40 + 45 * Math.max(0, s)) - sw * (20 + 18 * Math.max(0, c));
+    bend['Thigh' + side] = th; bend['Crus' + side] = kn; bend['Foot' + side] = -(th + kn) * 0.6;
+  };
+  leg('F', ph); leg('B', ph + Math.PI);
+  const arm = (side, p, near) => {
+    const s = Math.sin(p);
+    let ua = -(22 + 20 * run) * s * st + Math.sin(t * 1.3 + (near ? 0 : 1)) * 2.5 * idle + 25 * cr + cl * (150 + 22 * s) + sw * (70 + 55 * s) + 30 * lie;
+    let da = (12 + 60 * run) * st + 15 * cr + 18 * cl + 25 * sw + 8 * idle + 10 * lie;
+    if (near) { ua += 95 * at; da *= (1 - at); }
+    bend['UpArm' + side] = ua; bend['DownArm' + side] = da; bend['Hand' + side] = 0.3 * da;
+  };
+  arm('F', ph + Math.PI, true); arm('B', ph, false);
+  const pose = {};
+  const nod = s1 * 1.5 * st;
+  pose.Head = { x: RIG.REST.Head[0], y: RIG.REST.Head[1], r: -lean * 0.5 + nod, up: true };
+  pose.UpTorso = { x: RIG.REST.UpTorso[0], y: RIG.REST.UpTorso[1], r: 0, up: true };
+  pose.DownTorso = { x: RIG.REST.DownTorso[0], y: RIG.REST.DownTorso[1], r: lean * 0.25, up: false };
+  const chains = [['UpArm', 'DownArm', 'Hand'], ['Thigh', 'Crus', 'Foot']];
+  for (const side of ['F', 'B']) for (const names of chains) {
+    let total = 0, h = null; const up = names[0] === 'UpArm';
+    names.forEach((n, i) => {
+      const key = n + side; total += bend[key] || 0;
+      const hinge = h || { x: RIG.HINGE[n][0], y: RIG.HINGE[n][1] };
+      const off = V.rot({ x: RIG.REST[key][0] - RIG.HINGE[n][0], y: RIG.REST[key][1] - RIG.HINGE[n][1] }, total);
+      pose[key] = { x: hinge.x + off.x, y: hinge.y + off.y, r: RIG.REST[key][2] + total, up };
+      if (i + 1 < names.length) { const nh = RIG.HINGE[names[i + 1]]; const d = V.rot({ x: nh[0] - RIG.HINGE[n][0], y: nh[1] - RIG.HINGE[n][1] }, total); h = { x: hinge.x + d.x, y: hinge.y + d.y }; }
+    });
+  }
+  const frames = {};
+  for (const k in pose) frames[k] = M.mul(root, M.mul(pose[k].up ? L : M.T(0, 0), M.mul(M.T(pose[k].x, pose[k].y), M.R(pose[k].r))));
+  const dt = pose.DownTorso;
+  frames.tail = M.mul(root, M.mul(M.mul(M.T(dt.x, dt.y), M.T(0, -0.353)), M.R((body.tailAngle !== undefined ? body.tailAngle : 23.6) + dt.r)));
+  return frames;
+};
+
+if (typeof module !== 'undefined') module.exports = RIG;
+
+// The game's health screen (WoundView): layout of its 15 limb images (UI units, centre origin, y up) and their art.
+RIG.HS_LAYOUT = [{"part": "Head", "outline": "headoutline", "middle": "headMiddle", "x": 0.0, "y": 238.5, "w": 138, "h": 135, "mirror": false}, {"part": "UpTorso", "outline": "thoraxOutline", "middle": "thoraxMiddle", "x": 0, "y": 124.5, "w": 114, "h": 99, "mirror": false}, {"part": "DownTorso", "outline": "abdomenOutline", "middle": "abdomenMiddle", "x": 0, "y": 30, "w": 120, "h": 90, "mirror": false}, {"part": "UpArmF", "outline": "armOutline", "middle": "armMiddle", "x": -96.0, "y": 139.5, "w": 108, "h": 63, "mirror": false}, {"part": "DownArmF", "outline": "forearmOutline", "middle": "forearmMiddle", "x": -201.0, "y": 130.5, "w": 102, "h": 51, "mirror": false}, {"part": "HandF", "outline": "handOutline", "middle": "handMiddle", "x": -292.5, "y": 130.5, "w": 87, "h": 81, "mirror": false}, {"part": "UpArmB", "outline": "armOutline", "middle": "armMiddle", "x": 96.0, "y": 139.5, "w": 108, "h": 63, "mirror": true}, {"part": "DownArmB", "outline": "forearmOutline", "middle": "forearmMiddle", "x": 201.0, "y": 130.5, "w": 102, "h": 51, "mirror": true}, {"part": "HandB", "outline": "handOutline", "middle": "handMiddle", "x": 292.5, "y": 130.5, "w": 87, "h": 81, "mirror": true}, {"part": "ThighF", "outline": "thighOutline", "middle": "thighMiddle", "x": -46.5, "y": -66.0, "w": 93, "h": 132, "mirror": false}, {"part": "CrusF", "outline": "crusOutline", "middle": "crusMiddle", "x": -48.0, "y": -160.47, "w": 72, "h": 75, "mirror": false}, {"part": "FootF", "outline": "footOutline", "middle": "footMiddle", "x": -48.0, "y": -233.97, "w": 72, "h": 96, "mirror": false}, {"part": "ThighB", "outline": "thighOutline", "middle": "thighMiddle", "x": 46.5, "y": -66.0, "w": 93, "h": 132, "mirror": true}, {"part": "CrusB", "outline": "crusOutline", "middle": "crusMiddle", "x": 48.2, "y": -160.47, "w": 72, "h": 75, "mirror": true}, {"part": "FootB", "outline": "footOutline", "middle": "footMiddle", "x": 48.2, "y": -233.97, "w": 72, "h": 96, "mirror": true}];
+RIG.HS_IMAGES = {"headoutline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAtCAYAAADRLVmZAAAABWZkRUNSJJPjAOWrYpkAAAI+SURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhqvwvMgCPB9B/BeDpAPRfAXg8BmBvgCYA/hVAJwE8EUAnAfwrgCYA9mYAagEKUAuQvQHsDdAEQC1AEwB7A2RvALUABahlACYBCjAJkATA3gCZBFALUIAEoAC1AJkEsDdAEgCTAAWYZAASgAJMAgTgyQAkATAJ0ATAJEASAE8GIACTAAVIGABAASYBAvBUAQKwL4AAPFWAAEwCFMAA1AIE4OkCZF8Ani5AAGoZgEmAAPw3AgRgkgEU4H8JoAbgf5EBSAAC8N8MEICEAfhfZAD+FxmA/0UG4H+RAfhfZAD+FxmA/0UG4H+RAfhfZAASgAL8NwMUIGEA/hcZQAASgAL8NwIUIAGIAZgECMB/I0AAJhmA/0UG4H+RAfhfZAD+FxmA/0UGYBKgAP+NAAWYZAD+FxkAQAD+FwACYABqAQrw3wRQgFoGYG+AAvw3ABRgbwYgAQjAfzNAABIGYBIgAAlAAfYnQAESgABMMgCPB1CA/QFQgMdjAGoBAjAJUID/JEABJgECUMsA7A0QgEmAAvwnAAowCRCAvRmAfQEEYBKgkwCeTYBOApgECMC+GIDHAwjA3gAFeDYACrA3QAAejwF4IoBMApgE6CSApwLQSQCTAJkE8EQMwJMFCMDeAJ0EsC+ATgLYGyAAT5YBeCoAqQVQC9B9AagFSC2Ap+L/AM9G48FoiWbUAAAAAElFTkSuQmCC", "headMiddle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAtCAYAAADRLVmZAAAABWZkRUNSJJPjAOWrYpkAAAGzSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhqvwvMgD/iwzA/yID8K8AujeAZwOgewP4VwzA4wE0AbA3QCcBPBWATgLYG6AJgMdjAPYFUIAnA9AEwBMBNAHwZAAKsC8GYG+AAjxVgALsC6AATxWgAHszALUABXi6AN0XgKcLUIBaBmASoAD/jQAFmGQA/hcZgP9FBiABKMB/M0ABEgbgf5EB+F9kAP4XGYD/RQbgf5EB+F9kAP4XGYD/RQbgf5EBSAAC8N8MEICEAfhfZAAmAQLw3wgQgEkGYBKgAP+NAAWYZAD+FxmA/0UG4H+RAfhfZAD+FxmASYAA/DcCBGCSAfhfZAD+FxmAWoAA/DcBBKCWAdgbIAD/DQAB2JsB+F9kAPYFEID9CRCAfTEAjwcQgP0BEIDHYwCeCCAA/0mAADwRA/CvAALwnwAIwL9iAJ4MQCYBPJsAmQTwZBiApwoQgGcDIABPlQF4OgCZBPBUADIJ4OkwAM8UIJMA9gWQSQDPlAF4NgGyLwDPpv8DQ7W1z2Gr4PEAAAAASUVORK5CYII=", "thoraxOutline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACYAAAAhCAYAAAC1ONkWAAAABWZkRUNSJJPjAOWrYpkAAAGZSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhqjwZqqoJVeXpUFVNqCpPhgH4VwAFSAAK8FQACpAAFOBfMQBPBFCASYAAPBWAAEwCFOCJGIB9ATQBMAkQgKcDEIBJgCYA9sUA1AI0AVALEIBnAhCAWoAmAGoZgEmAAtQCJAHwbAAkAVALUIBJBmBfAEkA/DsAkgDYFwOQABRgfwIUIGEAagGSAPhPACQBUMsA/DcyAIAC/DcAFMAATAIEYH8ABGCSAfhvZAAF+G8CqAFIAAKwPwECkDAA/40MwH8jA/DfyAD8NzIA/40MwH8jA5AAFGB/AhQgYQD+GxlAAP6bAGIAJgEKsD8ACjDJAPw3MgCAAPw3AATAANQCFOA/CVCAWgZgb4AC/CcACrA3A5AABGASoAD/ToACTAIEIGEAJgECMAlQgH8HQAEmAQIwyQDUAgRgEqAJgGcDoAmASYAA1DIAewMEoBagCYCnA9AEQC1AAPb2f8rgn8MOSxZvAAAAAElFTkSuQmCC", "thoraxMiddle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACYAAAAhCAYAAAC1ONkWAAAABWZkRUNSJJPjAOWrYpkAAAE+SURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3Whqvw3MgBPFaBPBcBTZQCeCkABngpAAZ4KA/BkAQrwdAAK8GQZgCcDUIBnAlCAJ8MAPBFAEwDPBkATAE/EAOwLoAmAfwdAEwD7YgD+GxmAWoAmAP4TAE0A1DIA/40MwH8jAzAJUID9AVCASQbgv5EB+G9kABKAAuxPgAIkDMB/IwPw38gA/DcyAP+NDMB/IwPw38gAJAAB2J8AAUgYgP9GBuC/kQGYBAjA/gAIwCQD8N/IAPw3MgC1AAH4TwIEoJYB2BsgAP8JgADszQDsCyAA/06AAOyLAXg8gAD8OwAC8HgMwBMBJAHwbAAkAfBEDMCTAUgC4OkAJAHwZPwfA5GTwQ/JRtMAAAAASUVORK5CYII=", "abdomenOutline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAeCAYAAABe3VzdAAAABWZkRUNSJJPjAOWrYpkAAAFdSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhquyLqup/kqqyLwZgb4AC7AsgzwTAvgAKsDcDUAtQgEmA1AJ4JgCpBTAJUIBaBmASoACTAAH4dwIEYBKgAJMMwL4AAvCfAAjAvhiABKAACUAA/pMAAUgACpAwAP/NDACgAAlAAPYHQAASgAIYgP9mBlCABCAA+xMgAAlADcB/MwOQAATgvwEgAAkD8N/MAPw3MwD/zQzAfzMD8N/MAPw3MwD/zQzAfzMD8N/MAPw3MwAJQAH+GwAKkDAA/80MIAAJQAH2J0ABEoAYAEAAEoAC7A+AAiQAATAACUAAEoAC/CcBCpAABCBhACYBApAAFOA/AVCABCAAkwxALUASAIAmAP4dAE0AAJIAqGUA9gWQBACg/w4AgCQA9uX/ADj6w6v/JeIKAAAAAElFTkSuQmCC", "abdomenMiddle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAeCAYAAABe3VzdAAAABWZkRUNSJJPjAOWrYpkAAAEdSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3Whqvw3MwBPBaDPBMBTYQCeCKC1AJ4JQGsBPBED8HgABfh3AhTg8RiAfQEU4D8BUIB9MQB7AxTgPwlQgL0ZgP9mBqAWoAD7A6AAtQzAfzMDMAlQgP0JUIBJBuC/mQFIAArw3wBQgIQB+G9mAP6bGYD/Zgbgv5kB+G9mAP6bGYD/Zgbgv5kB+G9mAP6bGYAEIAD/DQABSBiA/2YGYBIgAPsTIACTDEAtQAD2B0AAahmAvQEC8J8ECMDeDMC+AALwnwAIwL4YgMcDSALg3wGQBMDjMQD/CiD/DgD/yv8BDAubw+a1zvoAAAAASUVORK5CYII=", "armOutline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAVCAYAAAAuJkyQAAAABWZkRUNSJJPjAOWrYpkAAADxSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3Whqvw3MQDPFkCfCQAD8EwAOgngmQDUADxVgE4C2BsgTxUAIAbgyQI0AbA3QCYBPFWAABiAWoA+HoBagEwCeLoABUgYQGsB/CuAJACeDYAAJAzAvgDyeAD+XQxAApBaAPuDAQAE4L+BAQTgv4UB+G9iAAX4b2EA/psYgP8mBgBQgP8GBiABKMB/CqAAezMAkwAF2J8MQC1AJwH8pxlAEgB7A/TfBWBfDEACkEkA+8v/Ad/zr6M0U93xAAAAAElFTkSuQmCC", "armMiddle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAVCAYAAAAuJkyQAAAABWZkRUNSJJPjAOWrYpkAAADSSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3Whqvw3MQD/TQzAfxMD8GwD9KkCSBiAZwOgkwCeLgPwdAE6CeDpAgQgYQCeKkATAM82A7AvgD4egH8XA5AAtBbA/mAAAAXYHwABmGQABfhvYQD+mxhAAPYHQABqGYD/Jgbgv4kBAATgv4EBSAAC8J8CCMDeDMAkQAD2JwNQC5BJAP9pBuDxAPLvArAvBuC/yf8BCvaNvTwLPdUAAAAASUVORK5CYII=", "forearmOutline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACIAAAARCAYAAAC4qX7BAAAABWZkRUNSJJPjAOWrYpkAAADfSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhqjzbVFWfLFUlYQCeLkD3BeDJAjRhABKAPlUATwSQxwNQywAACvB0AbIvAI8HkARAwgAKMAmQpwrg6QIEwAAAMglgfzAA/w0MwH8DA/DfwAACsL8ZgP8GBlCA/c0AAAqwPwAKYAD2F0ABEgYgAegTAZgE6L8CsDdAawFMMoAA/CuATgL4VwDdG8C+AGIAAHk8AI8HkL0B/CuA1AL4Py+GqKvnMt4pAAAAAElFTkSuQmCC", "forearmMiddle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACIAAAARCAYAAAC4qX7BAAAABWZkRUNSJJPjAOWrYpkAAAC7SURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3Whqvw3MAD/DQzAvwugjweglgF4pgDdF4DHA2gCIGEAagH6VAE8XYACGABAJwHsDwbgv4EB+G9gAP4bGEAB9jcD8N/AAAKwvxkAQAD2B0AADMD+AghAwgAkAHkiAJMA+VcA9gZILYBJBuDJAGQSwL8CyN4AHo8B+G/wf8yehrtCAYw9AAAAAElFTkSuQmCC", "handOutline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB0AAAAbCAYAAACAyoQSAAAABWZkRUNSJJPjAOWrYpkAAAFoSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhqjwVqqr7oqo8WQbgyQIUYF8AnQTwRAzA0wFIAmBvgCYA9sUAPFWAACQAmQRQC9AEQC0D8GwBJAFQC1CASQbg2QZIAmBfDACgTwZAAlCAfwUQgASgAAkDKMBTBSjAUwEogAGYBMhTAfCvAAIwCVADkAAE4N8BEIAEIAbgP80A/CcAApAwAP9pBiABKMB/ggGYBOgkgH8XAzAJkEkA/y4GIAEIwH+CAfhPMwAJQAH+EwzAJEAB/h0ABUgYQAAmAQrwbAIUIAGoAQAEYBKgAM8GQAEmAWIAEoAATAIU4OkAdBLAJEAADMAkQAAmAQrwZAGaANgbIAAJA1ALEIBJgAI8EUATALUAmQQwyQDsDRCASYA+EYBagCQA9sUA7AsgAE8FIAmAJ/J/GL2T0sfAs4gAAAAASUVORK5CYII=", "handMiddle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB0AAAAbCAYAAACAyoQSAAAABWZkRUNSJJPjAOWrYpkAAAEdSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhqvynGYD/NAPwdACaAHiqDMBTBShAAtBJAE+GAXi2AJoAeCIG4NkGaAJgXwzAUwUIwL8CKMDeDMDTAQjA02EAJgH6VAD8K4AC1DIACUAB/h0ABZhkAP7TDMB/AqAACQPwn2YAEoAA/CcYgEmATAL4dzEAkwCdBPDvYgASgAL8JxiA/zQDkAAE4D/BAEwCBODfARCAhAGoBQjAswkQgEkGYG+AADwbAAGoZQD2BRCApwOQSQB7MwCPBxCAJwuQBMATMQBPBBCAJwJIAuDJMAD/CiBPBOCpMAD/af8Hn1Z13jqlh1sAAAAASUVORK5CYII=", "thighOutline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB8AAAAsCAYAAACdQGM6AAAABWZkRUNSJJPjAOWrYpkAAAGxSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhqjxZqqoJVeXZYACeDEABEoACPFMG4F8BFKAWoADPhAF4IoACTAJkEsAzYQAeD6AAkwABeLYYgCcDEIBnCtBJBmBfAAVIAALwbAAEIGEA9gYowL8LIAAG4IkAAvDvYABqAQqQAATg38UA7C8GYF8AAfh3MgCTAAX4TzEA+4sB2BsgAP9uBiABKMB/kgHYXwxALUAA/hMMAKAA/2kGYH8xAJMAAfhPMQD7iwHYXwygAPuDAfhPAxTAACQAAfhPMgD/SYACJAzA/mIA/lMABUgAYgD2FwPwnwAoQAIQAAOwvxiAfzdAARKAACQMwP5iAP6dAAVIAAIwyQDsLwbg3wVQgAQgALUMQAJQgGcLoABPxAA82wAFmAQIwN4MIAAJQAGeCUABJgECsC8GoBagAE8HoACTAAF4PAYAEIBJgCYA/hVAJwFMAgTgiRiABCAAtQBNAEwCtBbAJEAmAfwrBmASILUAEoBOAkgAsjeAp+L/AEl5ivPeN3psAAAAAElFTkSuQmCC", "thighMiddle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB8AAAAsCAYAAACdQGM6AAAABWZkRUNSJJPjAOWrYpkAAAFfSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhquwvBmB/MQD7iwF4KgDdG8DTYQCeLEAB9gZoAuCpMABPBqAATwTQfwVgkgH4VwAFeDYACpAwAP9pgAIYgCcCKMC/gwF4PIAC/LsYgP3FAOwLoAD/TgZgfzEA+4sB2BugAP9uBmB/MQD7iwGoBSjAf4IB2F8MwP5iACYBCvCfYgD2FwOwvxiA/cUA/KcBAmAAEoAC/CcZgP8kQAASBmB/MQD/KYAATDIA+4sB+E8ABKCWAdhfDMC/GyAAezMA+4sB+HcCBGBfDMD+YgD+XQABeDwGIAEIwLMFEIAnYgCebYAA/CsGYBIgAM8EIABPhgGoBQjA0wEIwJNlAPYGSALgXwFkEsBTYQAeDyAJgEmA1AJ4ugzAvwLIJIBny/8BGX14+g6lbj0AAAAASUVORK5CYII=", "crusOutline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAZCAYAAAArK+5dAAAABWZkRUNSJJPjAOWrYpkAAAD3SURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3WhqjxbVFUnqSoJA/BMADoJYBKgAAbQBMDTAUgtgEmAGoBnEyAAkwzAsw0QgIQB+HcyAP9OBuDfyQD8OxmAZxugAAkD8O9kAP5dADEA/04GIAEowLPNAPw7GUAAEoACPJsMwL+TAQAE4NkAKMAkA1ALUIBniwH4dwAEwAAkAAFIAArwbDAA/04GYBIgAAlAEwBPBqAJgFoG4IkAmgDYF0ATAIBMAkgYgFqAJABqAbovAIAkAPb2fxXVZd59Cb09AAAAAElFTkSuQmCC", "crusMiddle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAZCAYAAAArK+5dAAAABWZkRUNSJJPjAOWrYpkAAADcSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3Whqvw7GYB/JwOQADQB8HgA/VcAahmAWoA+HoB/BVCASQbg2QYoQMIA/DsZgH8nA/DvZAD+nQzAsw0QgIQB+HcyAP9OBuDfyQAkAAF4thmAfycDMAkQgGeTAfh3MgDPJkAAJhmAWoAAPFsMwL+TAdgbIADPBgPw72QA9gWQBMCTAUgCoJYBeCKAJAD2BZAEwL4YgCcDkH0BeCL/BxhqW+nGsfTwAAAAAElFTkSuQmCC", "footOutline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAgCAYAAAAIXrg4AAAABWZkRUNSJJPjAOWrYpkAAAEzSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3Whqvw7qKqqKgbg38kAPNsABQDUAPw7GYAnAmgC4MkCBCBhAP6dDMC/kwF4tgEKkDAAjwdQgGfCAPy7AGIA/hVAAJ4OA7AvgAI8Uwbg38kA7A1QgAQgAE8WoACTDMC/kwF4PIAAPB2AABiASYAmAJ4tBiABKMCzzQAACjAJkATAM2UAagEC8GwxgAIkAAF4ugAFqGUA/p0MQAIQgGcDIAAJA/DvZAD+nQzAv5MB+HcyAAlAAZ4uQAH2ZgAmAQrwZAE6CWBfDCAAkwCdBJAAdF8A9gYIwCQDAAjA3gBNADwRQCYB1DIACUAmAewLIPsC8Hj+D5dSaPEruPfAAAAAAElFTkSuQmCC", "footMiddle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAgCAYAAAAIXrg4AAAABWZkRUNSJJPjAOWrYpkAAAEGSURBVHgB5cRjtCVn2oDh+3mravPY57RtxLYzM0kGydi2bdu2EYxi22bbPH2szap6n2/Vj7PWXr06mWimZ773x3Whqvw7GYB/JwPwbAE0ATDJADxTgCYA9mYAngxAHw9ALUABEgbg38kA/DsZgGcbIAAJA/DvZAD+nQzAvwIowNNhAP6dDMC/kwF4IoACPFmAAEwyAP9OBuDxAArwTBiAfycD8O9kAPYGaALgmTIAtQAFeLYYgEmAAjxdgADUMgD/TgYgASjAs80A/DsZgH8nA/DvZAD+nQxAAhCApwsQgL0ZgEmAADxZgEwC2BcDUAuQSQAJQPYF4F8xAI8HkATA02UA/p3+D+ceW/d5ZNlaAAAAAElFTkSuQmCC"};
+
+</script>
+<script>
+'use strict';
+(function () {
+const $ = (s) => document.querySelector(s);
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let doc = null;           // editor document (see core.js)
+let selLayer = null;      // selected layer id
+let selChain = null;      // selected chain id
+let tab = 'rig';
+const view = { zoom: 8, panX: 0, panY: 0 }; // rig view: screen = canvasPx*zoom + pan
+let showSkel = true, moveSkel = false;
+const imgCache = new Map(); // layer/obj -> canvas
+
+function toast(msg, ms) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2600); }
+function hint(msg) { $('#hint').innerHTML = msg; }
+
+function layerCanvas(l) {
+  let c = imgCache.get(l);
+  if (!c) { c = document.createElement('canvas'); c.width = l.w; c.height = l.h; c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(l.rgba), l.w, l.h), 0, 0); imgCache.set(l, c); }
+  return c;
+}
+
+// ---------------------------------------------------------------- loading
+async function decodePng(file) {
+  const bmp = await createImageBitmap(file);
+  const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+  const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
+  return { w: c.width, h: c.height, rgba: g.getImageData(0, 0, c.width, c.height).data };
+}
+
+const psd_or_rig = (files) => files.some(f => /\.ps[db]$/i.test(f.name) || /^rig\.json$/i.test(f.name));
+async function openFiles(list) {
+  const files = [...list]; if (!files.length) return;
+  try {
+    const psd = files.find(f => /\.ps[db]$/i.test(f.name));
+    const json = files.find(f => /\.json$/i.test(f.name));
+    if (!psd_or_rig(files) && files.some(f => /^(health_|experiment)/i.test(f.name) || /^sprites\.json$/i.test(f.name)) &&
+        files.every(f => /^(health_|experiment)/i.test(f.name) || /^sprites\.json$/i.test(f.name))) { await addSprites(files); return; }
+    const allPngs = files.filter(f => /\.png$/i.test(f.name) && !/^health_/i.test(f.name));
+    const skin = allPngs.filter(f => /^experiment/i.test(f.name));
+    const pngs = allPngs.filter(f => !/^experiment/i.test(f.name) || json);
+    if (psd) {
+      const parsed = RIG.readPSD(await psd.arrayBuffer());
+      doc = RIG.newDoc(psd.name.replace(/\.ps[db]$/i, ''), parsed.width, parsed.height, parsed.layers);
+      RIG.autoAssign(doc);
+      toast('Opened ' + psd.name + ' — ' + doc.layers.length + ' layers, parts matched automatically');
+    } else if (json) {
+      const rig = JSON.parse(await json.text());
+      const images = {}; for (const f of pngs) images[f.name] = await decodePng(f);
+      for (const f of files.filter(f => /\.(wav|ogg|mp3)$/i.test(f.name))) images[f.name] = { raw: new Uint8Array(await f.arrayBuffer()) };
+      doc = RIG.docFromRig(rig, images);
+      toast('Opened rig ' + doc.name);
+    } else if (pngs.length) {
+      const decoded = []; let W = 0, H = 0;
+      for (let i = 0; i < pngs.length; i++) { const d = await decodePng(pngs[i]); W = Math.max(W, d.w); H = Math.max(H, d.h); decoded.push({ name: pngs[i].name.replace(/\.png$/i, ''), x: 0, y: 0, w: d.w, h: d.h, rgba: d.rgba, order: i }); }
+      const sameSize = decoded.every(d => d.w === decoded[0].w && d.h === decoded[0].h) && decoded.length > 1;
+      if (sameSize) { // full-canvas layers exported from an art program: positions are already right
+        doc = RIG.newDoc('MyCharacter', W, H, decoded); RIG.autoAssign(doc);
+        toast(pngs.length + ' layers opened and matched by name. Fix any part with the dropdown next to it.', 5000);
+      } else { // separate cut-out images: each one is put on the body by its name
+        doc = RIG.docFromLoose('MyCharacter', decoded);
+        const lost = doc.layers.filter(l => l.role.type === 'ignore').length;
+        toast(pngs.length + ' images placed on the body by name.' + (lost ? ' ' + lost + ' not recognised: they wait beside the character, pick a role for them on the left.' : '') + ' Drag any image to move it.', 7000);
+      }
+    }
+    const hsFiles = files.filter(f => /^health_/i.test(f.name));
+    if (hsFiles.length && doc) await addSprites(hsFiles);
+    if (skin.length && !json) {
+      if (!doc || (!psd && !pngs.length && !doc.layers.length)) doc = doc || RIG.newDoc('MySkin', 64, 64, []);
+      for (const f of skin) doc.spriteSwaps[f.name.replace(/\.png$/i, '')] = await decodePng(f);
+      doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail');
+      toast(skin.length + ' skin sprites added (sprite-replacer format). They show on the body; add a PSD for moving parts.', 5000);
+    }
+    if (!doc) return;
+    imgCache.clear(); selLayer = null; selChain = doc.chains[0] ? doc.chains[0].id : null;
+    $('#name').value = doc.name; $('#drop').style.display = 'none';
+    fitView(); refresh(); hint(rigHint()); if (tab === 'test') startTest();
+  } catch (e) { console.error(e); toast('Could not open: ' + e.message, 6000); }
+}
+
+// Add images to the open character: body parts / tail pieces / frames become layers (placed by name),
+// images named like the game's sprites (experiment*, health_*) become skins and health screen art.
+const isGameSprite = (f) => /^(health_|experiment)/i.test(f.name) || /^sprites\.json$/i.test(f.name);
+async function addImages(list) {
+  const files = [...list]; if (!files.length) return;
+  const art = files.filter(f => /\.png$/i.test(f.name) && !isGameSprite(f));
+  const game = files.filter(isGameSprite);
+  if (!doc && art.length) { await openFiles(art); if (game.length) await addSprites(game); return; }
+  if (art.length) {
+    const imgs = []; for (const f of art) { const d = await decodePng(f); imgs.push({ name: f.name.replace(/\.png$/i, ''), w: d.w, h: d.h, rgba: d.rgba }); }
+    const added = RIG.addImages(doc, imgs);
+    imgCache.clear(); $('#drop').style.display = 'none';
+    const lost = added.filter(l => l.role.type === 'ignore');
+    selLayer = added.length === 1 ? added[0].id : selLayer; selChain = null;
+    fitView(); refresh();
+    toast(added.length + ' image' + (added.length === 1 ? '' : 's') + ' added' + (lost.length ? ' — ' + lost.length + ' not recognised by name, set ' + (lost.length === 1 ? 'its' : 'their') + ' role on the left' : '') + '. Drag to move.', 6000);
+  }
+  if (game.length) await addSprites(game);
+}
+async function addSprites(list) {
+  const files = [...list]; if (!files.length) return;
+  if (!doc) doc = RIG.newDoc('MyCharacter', 64, 64, []);
+  let swaps = 0, hs = 0;
+  const dump = files.find(f => /^sprites\.json$/i.test(f.name));
+  let dumpInfo = null; if (dump) { try { dumpInfo = JSON.parse(await dump.text()); } catch (e) { } }
+  for (const f of files.filter(f => /\.png$/i.test(f.name))) {
+    const base = f.name.replace(/\.png$/i, '');
+    const m = base.match(/^health_([A-Za-z]+)_(outline|middle)$/);
+    const img = await decodePng(f);
+    if (m && RIG.PARTS.includes(m[1])) {
+      const e = doc.healthScreen[m[1]] = doc.healthScreen[m[1]] || { scale: 3 };
+      e[m[2]] = img; hs++;
+      const pos = dumpInfo && dumpInfo.healthScreen && dumpInfo.healthScreen[m[1]];
+      if (pos && e.x === undefined) { e.x = pos.x; e.y = pos.y; e.mirror = !!pos.mirror; e.scale = pos.scale || 3; }
+    } else { doc.spriteSwaps[base] = img; swaps++; }
+  }
+  imgCache.clear(); $('#drop').style.display = 'none';
+  if (!doc.layers.length) fitView();
+  refresh();
+  toast((swaps ? swaps + ' skin/gear sprites' : '') + (swaps && hs ? ' and ' : '') + (hs ? hs + ' health screen images' : '') + ' added', 4000);
+}
+$('#btnSprites').onclick = () => $('#fileSprites').click();
+$('#fileSprites').onchange = (e) => { addImages(e.target.files); e.target.value = ''; };
+$('#btnOpen').onclick = () => $('#file').click();
+$('#file').onchange = (e) => { openFiles(e.target.files); e.target.value = ''; };
+const stage = $('#stage');
+stage.addEventListener('dragover', (e) => { e.preventDefault(); $('#drop').classList.add('over'); $('#drop').style.display = 'flex'; });
+stage.addEventListener('dragleave', () => { $('#drop').classList.remove('over'); if (doc) $('#drop').style.display = 'none'; });
+stage.addEventListener('drop', (e) => {
+  e.preventDefault(); $('#drop').classList.remove('over');
+  const fs = [...e.dataTransfer.files];
+  // with a character open, dropped images are added to it; a PSD or rig.json starts over
+  if (doc && !psd_or_rig(fs)) addImages(fs); else openFiles(fs);
+});
+$('#btnAuto').onclick = () => { if (!doc) return; RIG.autoAssign(doc); selChain = doc.chains[0] ? doc.chains[0].id : null; refresh(); toast('Parts and bones set up automatically'); };
+$('#name').oninput = (e) => { if (doc) doc.name = e.target.value.replace(/[^A-Za-z0-9_\- ]/g, '') || 'MyCharacter'; };
+$('#btnHelp').onclick = () => $('#help').classList.add('show');
+$('#helpClose').onclick = () => $('#help').classList.remove('show');
+
+// ---------------------------------------------------------------- left: layers
+function roleOptions(l) {
+  let h = `<option value="ignore">— not used —</option><optgroup label="Body part (replaces the game's)">`;
+  for (const p of RIG.PARTS) h += `<option value="part:${p}">${RIG.PART_LABEL[p]}</option>`;
+  h += `</optgroup><optgroup label="Moving part (tail, wing, hair…)">`;
+  for (const c of doc.chains) h += `<option value="chain:${c.id}">${esc(c.name)}</option>`;
+  h += `<option value="newchain">+ New moving part…</option></optgroup>`;
+  const injurable = doc.chains.filter(c => c.injury && c.injury.enabled);
+  const partLayers = doc.layers.filter(o => o.role.type === 'part' && o.id !== l.id);
+  if (injurable.length || partLayers.length) {
+    h += `<optgroup label="Injury art (shown while that part is hurt)">`;
+    for (const c of injurable) c.segs.forEach((sg, k) => { if (sg.layer !== l.id) h += `<option value="injury:${sg.layer}">${esc(c.name)} piece ${k + 1}</option>`; });
+    for (const o of partLayers) h += `<option value="injury:${o.id}">${esc(o.name)} (${RIG.PART_LABEL[o.role.part]})</option>`;
+    h += `</optgroup>`;
+  }
+  if (l.role.type === 'frame') h += `<option value="frame:${l.role.of}">Animation frame of ${esc((RIG.layer(doc, l.role.of) || {}).name || '?')}</option>`;
+  const heads = doc.layers.filter(o => o.role.type === 'part' && o.role.part === 'Head');
+  if (heads.length) { h += `<optgroup label="Head art: mouth & injuries">`; for (const st of RIG.HEAD_STATES) h += `<option value="state:${heads[0].id}:${st}">${RIG.HEAD_STATE_LABEL[st] || st}</option>`; h += `</optgroup>`; }
+  return h;
+}
+function roleValue(l) {
+  const r = l.role; if (r.type === 'part') return 'part:' + r.part; if (r.type === 'chain') return 'chain:' + r.chain;
+  if (r.type === 'state') return 'state:' + r.of + ':' + r.state;
+  if (r.type === 'injury') return 'injury:' + r.of;
+  if (r.type === 'frame') return 'frame:' + r.of; return 'ignore';
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function renderLayers() {
+  const box = $('#layers');
+  if (!doc || !doc.layers.length) { box.innerHTML = doc && Object.keys(doc.spriteSwaps).length ? '<div class="empty">Skin-only rig (sprite swaps). Open a PSD too if you want moving parts.</div>' : '<div class="empty">Open a PSD/PSB (or PNG layers) to start.</div>'; return; }
+  box.innerHTML = '';
+  [...doc.layers].filter(l => !l.cutSource).reverse().forEach((l) => { // top of the stack first, like Photoshop
+    const row = document.createElement('div'); row.className = 'layer' + (l.id === selLayer ? ' sel' : '') + (l.role.type === 'ignore' ? ' hiddenL' : '');
+    const th = document.createElement('canvas'); th.width = 34; th.height = 34;
+    const g = th.getContext('2d'); g.imageSmoothingEnabled = false; const s = Math.min(34 / l.w, 34 / l.h);
+    g.drawImage(layerCanvas(l), (34 - l.w * s) / 2, (34 - l.h * s) / 2, l.w * s, l.h * s);
+    const right = document.createElement('div');
+    right.innerHTML = `<div class="nm">${esc(l.name)} ${l.hidden ? '<small>(hidden)</small>' : ''}</div><select>${roleOptions(l)}</select>`;
+    const sel = right.querySelector('select'); sel.value = roleValue(l);
+    sel.onclick = (e) => e.stopPropagation();
+    sel.onchange = () => setRole(l, sel.value);
+    row.append(th, right);
+    row.onclick = () => selectLayer(l.id);
+    box.appendChild(row);
+  });
+}
+
+function removeFrame(l) {
+  for (const id in doc.anims) for (const k in doc.anims[id]) {
+    const set = doc.anims[id][k]; set.frames = set.frames.filter(f => f !== l.id || f === id);
+    if (!set.frames.length) delete doc.anims[id][k];
+  }
+}
+function setRole(l, v) {
+  if (v.startsWith('frame:')) return;
+  removeFromChain(l); removeFrame(l);
+  if (v === 'ignore') l.role = { type: 'ignore' };
+  else if (v.startsWith('part:')) { l.role = { type: 'part', part: v.slice(5) }; }
+  else if (v.startsWith('state:')) { const [, of, st] = v.split(':'); l.role = { type: 'state', of, state: st }; }
+  else if (v.startsWith('injury:')) { l.role = { type: 'injury', of: v.slice(7), state: guessState(l.name) }; selLayer = l.id; selChain = null; }
+  else if (v === 'newchain') {
+    const ch = RIG.addChain(doc, l.name, 'tail', [l.id], 'Fluffy tail'); l.role = { type: 'chain', chain: ch.id };
+    if (/ear|hair|fringe|floof/i.test(l.name)) { ch.attachTo = 'Head'; applyPreset(ch, 'Hair / ears floof'); }
+    if (/wing/i.test(l.name)) { ch.attachTo = 'UpTorso'; applyPreset(ch, 'Wings'); }
+    RIG.autoBones(doc, ch); selChain = ch.id;
+  } else if (v.startsWith('chain:')) {
+    const ch = RIG.chain(doc, v.slice(6)); l.role = { type: 'chain', chain: ch.id };
+    ch.segs.push({ layer: l.id, joint: RIG.center(l), tip: null, restAngle: 0, maxBend: -1 });
+    RIG.autoBones(doc, ch); selChain = ch.id;
+  }
+  doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail');
+  refresh();
+}
+function guessState(name) {
+  const n = name.toLowerCase();
+  for (const [k] of RIG.INJURY_STATES) if (n.includes(k)) return k;
+  if (/bandage/.test(n)) return 'bandaged'; if (/scratch/.test(n)) return 'scratched'; if (/wound|cut|hurt/.test(n)) return 'wounded';
+  if (/stub|stump|torn/.test(n)) return 'stump'; if (/bleed|blood/.test(n)) return 'bleeding'; if (/shard|glass/.test(n)) return 'shrapnel';
+  return 'wounded';
+}
+function pieceName(layerId) {
+  for (const c of doc.chains) { const k = c.segs.findIndex(s => s.layer === layerId); if (k >= 0) return c.name + ' piece ' + (k + 1); }
+  return '?';
+}
+function removeFromChain(l) {
+  for (const c of doc.chains) c.segs = c.segs.filter(s => s.layer !== l.id);
+  doc.chains = doc.chains.filter(c => c.segs.length);
+  if (selChain && !RIG.chain(doc, selChain)) selChain = null;
+}
+function selectLayer(id) {
+  selLayer = id; animFocus = false; const l = RIG.layer(doc, id);
+  selChain = l && l.role.type === 'chain' ? l.role.chain : null;
+  refresh();
+}
+
+// ---------------------------------------------------------------- right: inspector
+function applyPreset(ch, name) {
+  ch.preset = name; const p = RIG.PRESETS[name];
+  if (!p) { ch.physics = false; return; }
+  ch.physics = true; Object.assign(ch.motion, p);
+}
+const SLIDERS = [
+  ['damping', 'Damping', 0, 0.6, 0.01, 'Calmer ↔ bouncier'], ['elasticity', 'Springiness', 0, 0.6, 0.01, 'Pull back to the drawn shape'],
+  ['elasticityFalloff', 'Spring at tip', 0.05, 1.5, 0.05, 'Lower = looser, whippier tip'], ['stiffness', 'Stiffness', 0, 1, 0.01, 'How far it can be pushed out of shape'],
+  ['stiffnessFalloff', 'Stiffness at tip', 0.05, 1.5, 0.05, ''], ['gravity', 'Gravity', 0, 12, 0.1, 'Droop'],
+  ['drag', 'Air drag', 0, 8, 0.1, 'Trails behind when moving'], ['inertia', 'Follow body', 0, 1, 0.01, '1 = moves stiffly with the body'],
+  ['maxBend', 'Max bend°', 0, 120, 1, 'Per piece'], ['wagAmplitude', 'Wag°', 0, 40, 0.5, 'Idle wag'], ['wagSpeed', 'Wag speed', 0, 5, 0.05, 'Per second'],
+  ['wagPhase', 'Wag wave', 0, 2, 0.05, 'Delay toward the tip'], ['wagWhileMoving', 'Wag when running', 0, 1, 0.05, ''],
+  ['flapAmplitude', 'Flap°', 0, 70, 1, 'Wing beat'], ['flapSpeed', 'Flap speed', 0, 6, 0.05, 'Beats per second'], ['flapPhase', 'Flap wave', 0, 2, 0.05, '']
+];
+function renderInspector() {
+  const box = $('#insp');
+  if (!doc) { box.innerHTML = '<div class="empty">Nothing open yet.<br><br><button onclick="document.querySelector(\'#btnHelp\').click()">How it works</button></div>'; return; }
+  if (tab === 'health') { box.innerHTML = hsInspector(); bindHsInspector(); return; }
+  let h = '';
+  const ch = selChain && RIG.chain(doc, selChain);
+  const l = selLayer && RIG.layer(doc, selLayer);
+  if (ch) {
+    h += `<h2>Moving part</h2><div class="sec">
+      <div class="row"><label>Name</label><input id="chName" type="text" value="${esc(ch.name)}" style="flex:1"></div>
+      <div class="row"><label>Attached to</label><select id="chAttach" style="flex:1">${['tail', ...RIG.PARTS].map(p => `<option value="${p}" ${p === ch.attachTo ? 'selected' : ''}>${RIG.PART_LABEL[p]}</option>`).join('')}</select></div>
+      <div class="muted" style="margin:8px 0 4px">Pieces (base → tip)</div>
+      ${ch.segs.map((s, i) => { const sl = RIG.layer(doc, s.layer); const na = doc.anims[s.layer] ? Object.keys(doc.anims[s.layer]).length : 0; return `<div class="seg"><span>${i + 1}. ${esc(sl ? sl.name : '?')}</span><button data-anim="${s.layer}" title="Animated sprite / frames for this piece">🎞${na ? ' ' + na : ''}</button><button data-up="${i}" title="Move toward base">↑</button><button data-down="${i}" title="Move toward tip">↓</button></div>`; }).join('')}
+      ${bonesBox(ch)}
+      <div class="row"><label>Preset</label><select id="chPreset" style="flex:1">${Object.keys(RIG.PRESETS).map(p => `<option ${p === ch.preset ? 'selected' : ''}>${p}</option>`).join('')}${RIG.PRESETS[ch.preset] === undefined ? '<option selected>Custom</option>' : ''}</select></div>
+      <div class="row"><label>Physics</label><input id="chPhys" type="checkbox" ${ch.physics ? 'checked' : ''}><span class="muted">off = moves rigidly with the body</span></div>
+    </div>
+    <h2>Injuries</h2><div class="sec">
+      <div class="row"><label>Can be injured</label><input id="injOn" type="checkbox" ${ch.injury.enabled ? 'checked' : ''}><span class="muted">off by default</span></div>
+      ${ch.injury.enabled ? `
+      <div class="muted" style="margin-bottom:6px">Each piece becomes a real limb: hits, bleeding, pain, infection, shards, bandages, splints, amputation, and it can be torn off. Hitboxes don't change.</div>
+      <div class="row"><label>Health screen name</label><input id="injName" type="text" value="${esc(ch.injury.name)}" style="flex:1"></div>
+      <div class="row"><label>Can be torn off</label><input id="injTear" type="checkbox" ${ch.injury.tearOff ? 'checked' : ''}><span class="muted">bitten / ripped off when destroyed</span></div>
+      <div class="row"><label>Game wound shading</label><input id="injShade" type="checkbox" ${ch.injury.gameShading ? 'checked' : ''}><span class="muted">the game's own wound/dirt look</span></div>
+      <div class="row"><label>Vital</label><input id="injVital" type="checkbox" ${ch.injury.vital ? 'checked' : ''}><span class="muted" style="color:var(--warn)">destroying it kills!</span></div>
+      <div class="muted" style="margin:6px 0 2px">Injury art per piece</div>
+      ${ch.segs.map((sg, k) => { const arts = doc.layers.filter(a => a.role.type === 'injury' && a.role.of === sg.layer); return `<div class="seg"><span>${k + 1}. ${arts.length ? arts.map(a => `<span class="pill">${a.role.state}</span>`).join(' ') : '<span class="muted">none yet</span>'}</span></div>`; }).join('')}
+      <div class="muted" style="margin-top:4px">Add art: set an extra layer's role to <i>Injury art → ${esc(ch.name)} piece N</i>. Place pieces on the <b>Health screen</b> tab.</div>` : ''}
+    </div>`;
+    if (ch.physics) {
+      h += `<h2>Motion</h2><div class="sec">` + SLIDERS.map(([k, label, mn, mx, st, tip]) =>
+        `<div class="row" title="${tip}"><label>${label}</label><input type="range" data-k="${k}" min="${mn}" max="${mx}" step="${st}" value="${ch.motion[k]}"><span class="v" id="v_${k}">${(+ch.motion[k]).toFixed(st < 1 ? 2 : 0)}</span></div>`).join('') +
+        `<div class="row"><label>Flap when</label><select id="chFlapWhen">${['never', 'air', 'always'].map(o => `<option ${o === ch.motion.flapWhen ? 'selected' : ''}>${o}</option>`).join('')}</select></div>
+        <div class="muted">Changes apply live in the Test tab.</div></div>`;
+    }
+  } else if (l) {
+    h += `<h2>Layer</h2><div class="sec"><b>${esc(l.name)}</b><br><span class="muted">${l.w}×${l.h}px at ${l.x},${l.y}</span><br><br>`;
+    if (l.role.type === 'part') h += `Rides on the game's <b>${RIG.PART_LABEL[l.role.part]}</b> and hides the game's own sprite for it. It moves, ragdolls and can be cut off exactly like the original part.`;
+    else if (l.role.type === 'state') h += `Shown instead of your head art when the game switches the head to <b>${RIG.HEAD_STATE_LABEL[l.role.state] || l.role.state}</b>. The game opens the mouth by itself while talking, eating, whimpering, barking, yawning and panting, so mouth-open art makes your character's mouth move.`;
+    else if (l.role.type === 'injury') h += `Injury art for <b>${esc(pieceName(l.role.of))}</b>, shown when it is:<div class="row"><select id="injState" style="flex:1">${RIG.INJURY_STATES.map(([k, lab]) => `<option value="${k}" ${k === l.role.state ? 'selected' : ''}>${lab}</option>`).join('')}</select></div><span class="muted">Draw it on the same canvas as the piece (same spot). If several states apply, the one highest in this list wins. Preview it in the Test tab.</span>`;
+    else if (l.role.type === 'frame') h += `An animation frame of <b>${esc((RIG.layer(doc, l.role.of) || {}).name || '?')}</b>. Select that layer to edit its animations.`;
+    else if (l.role.type === 'chain') h += `A piece of <b>${esc((RIG.chain(doc, l.role.chain) || {}).name || '?')}</b>. <button id="backChain">Edit the moving part</button>`;
+    else h += `Not used. Pick a role in the dropdown on the left.`;
+    h += `</div>`;
+    if (l.role.type === 'part' || l.role.type === 'ignore') h += moveBox(l);
+    if (l.role.type === 'part' || l.role.type === 'chain') h += animInspector(l);
+  } else h += `<div class="empty">Click a layer on the left, or a part on the canvas.</div>`;
+
+  h += `<h2>Character</h2><div class="sec">
+    ${RIG.HIDEABLE.map(o => `<div class="row"><label>Hide game ${o.toLowerCase()}</label><input type="checkbox" data-hide="${o}" ${doc.hideObjects.includes(o) ? 'checked' : ''}></div>`).join('')}
+    <div class="row"><label>Hide game tail</label><input type="checkbox" id="hideTail" ${doc.hideVanillaTail ? 'checked' : ''}></div>
+    <div class="row"><label>Skin swaps</label><span class="pill">${Object.keys(doc.spriteSwaps).length} sprites</span>${Object.keys(doc.spriteSwaps).length ? '<button id="clearSwaps">Clear</button>' : ''}</div>
+    <div class="row"><label>Sounds</label><span class="pill">${Object.keys(doc.sounds || {}).length} replaced</span></div>
+    ${soundsInspector()}
+    <div class="muted">Skin swaps replace the game's own sprites by name (add experiment*.png files with <i>Add images…</i>).</div>
+  </div>`;
+  box.innerHTML = h;
+
+  if (ch) {
+    $('#chName').oninput = (e) => { ch.name = e.target.value || 'Part'; renderLayers(); };
+    $('#chAttach').onchange = (e) => { ch.attachTo = e.target.value; RIG.autoBones(doc, ch); doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail'); refresh(); };
+    bindBonesBox(ch);
+    $('#chPreset').onchange = (e) => { applyPreset(ch, e.target.value); refresh(); };
+    $('#chPhys').onchange = (e) => { ch.physics = e.target.checked; refresh(); };
+    $('#injOn').onchange = (e) => { ch.injury.enabled = e.target.checked; if (!ch.injury.name) ch.injury.name = ch.name; refresh(); };
+    const inn = $('#injName'); if (inn) inn.oninput = (e) => { ch.injury.name = e.target.value; };
+    const it = $('#injTear'); if (it) it.onchange = (e) => { ch.injury.tearOff = e.target.checked; startTestIfOpen(); };
+    const ish = $('#injShade'); if (ish) ish.onchange = (e) => { ch.injury.gameShading = e.target.checked; };
+    const iv = $('#injVital'); if (iv) iv.onchange = (e) => { ch.injury.vital = e.target.checked; };
+    box.querySelectorAll('[data-anim]').forEach(b => b.onclick = () => { selLayer = b.dataset.anim; selChain = null; animFocus = true; refresh(); });
+    box.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { const i = +b.dataset.up; if (i > 0) { [ch.segs[i - 1], ch.segs[i]] = [ch.segs[i], ch.segs[i - 1]]; RIG.autoBones(doc, ch); refresh(); } });
+    box.querySelectorAll('[data-down]').forEach(b => b.onclick = () => { const i = +b.dataset.down; if (i < ch.segs.length - 1) { [ch.segs[i + 1], ch.segs[i]] = [ch.segs[i], ch.segs[i + 1]]; RIG.autoBones(doc, ch); refresh(); } });
+    box.querySelectorAll('input[data-k]').forEach(r => r.oninput = () => {
+      ch.motion[r.dataset.k] = +r.value; ch.preset = 'Custom';
+      $('#v_' + r.dataset.k).textContent = (+r.value).toFixed(+r.step < 1 ? 2 : 0); liveMotion();
+    });
+    const fw = $('#chFlapWhen'); if (fw) fw.onchange = (e) => { ch.motion.flapWhen = e.target.value; liveMotion(); };
+  }
+  const bc = $('#backChain'); if (bc && l) bc.onclick = () => { selChain = l.role.chain; selLayer = null; refresh(); };
+  if (l && (l.role.type === 'part' || l.role.type === 'chain')) bindAnimInspector(l);
+  if (l && (l.role.type === 'part' || l.role.type === 'ignore')) bindMoveBox(l);
+  const is = $('#injState'); if (is && l) is.onchange = (e) => { l.role.state = e.target.value; updateHeadStates(); };
+  box.querySelectorAll('[data-hide]').forEach(c => c.onchange = () => {
+    const o = c.dataset.hide; doc.hideObjects = doc.hideObjects.filter(x => x !== o); if (c.checked) doc.hideObjects.push(o);
+  });
+  $('#hideTail').onchange = (e) => { doc.hideVanillaTail = e.target.checked; };
+  bindSounds();
+  const cs = $('#clearSwaps'); if (cs) cs.onclick = () => { doc.spriteSwaps = {}; refresh(); };
+}
+
+// ---- bones
+function bonesBox(ch) {
+  const n = ch.segs.length, src = ch.source && RIG.layer(doc, ch.source);
+  const note = src ? 'Your image is cut into this many pieces along its shape. Your drawing itself isn\'t changed.'
+    : n > 1 ? 'Each piece is its own layer now. Changing the number merges them into one image and cuts it into that many pieces.'
+    : 'More bones = smoother bending. The image is cut into that many pieces along its shape (your drawing isn\'t changed).';
+  return `<div style="border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:8px">
+    <div class="row" style="margin-top:0"><label><b>Bones</b></label><button id="bnMinus">−</button><input id="chBones" type="number" min="1" max="40" value="${n}" style="width:54px;text-align:center"><button id="bnPlus">+</button><button id="chBonesSet" class="primary">Apply</button></div>
+    <div class="muted" style="margin-bottom:6px">${note}</div>
+    <div class="row"><button id="chAuto" title="Put the bones back where the editor thinks they go">Reset bones</button>${src ? '<button id="chRecut" title="Cut the pieces again so they follow the bones as you placed them">Re-cut to bones</button><button id="chUncut">One piece</button>' : ''}</div>
+    <div class="muted">Drag the yellow <b>●</b> joints (where it bends) and the <b>◆</b> tip on the canvas.${src ? ' After moving joints, click <i>Re-cut to bones</i> so the pieces follow.' : ''}</div>
+  </div>`;
+}
+function bindBonesBox(ch) {
+  const inp = $('#chBones');
+  $('#bnMinus').onclick = () => { inp.value = Math.max(1, +inp.value - 1); };
+  $('#bnPlus').onclick = () => { inp.value = Math.min(40, +inp.value + 1); };
+  $('#chBonesSet').onclick = () => {
+    const n = Math.max(1, Math.min(40, Math.round(+inp.value || 1)));
+    const extra = RIG.pieceExtras(doc, ch);
+    if (extra && !confirm('The pieces of this part have animation frames or injury art. Cutting it again unlinks them (the layers stay). Go on?')) return;
+    RIG.setBoneCount(doc, ch, n); imgCache.clear(); refresh(); startTestIfOpen();
+    toast(ch.segs.length + ' bone' + (ch.segs.length === 1 ? '' : 's') + (ch.segs.length < n ? ' (that\'s as many as this image is long enough for)' : '') + '. Drag the ● joints to adjust.', 4500);
+  };
+  $('#chAuto').onclick = () => {
+    const src = ch.source && RIG.layer(doc, ch.source);
+    if (src) RIG.cutInto(doc, ch, src, ch.segs.length); else RIG.autoBones(doc, ch);
+    imgCache.clear(); refresh(); toast('Bones reset');
+  };
+  const rc = $('#chRecut'); if (rc) rc.onclick = () => { RIG.recut(doc, ch); imgCache.clear(); refresh(); startTestIfOpen(); toast('Pieces re-cut to follow your bones'); };
+  const uc = $('#chUncut'); if (uc) uc.onclick = () => { RIG.uncut(doc, ch); imgCache.clear(); refresh(); startTestIfOpen(); toast('Back to one piece with one bone'); };
+}
+function moveBox(l) {
+  const kind = RIG.kindOf(l.name), K = RIG.KINDS[kind];
+  const attachOpts = (sel) => ['tail', ...RIG.PARTS].map(p => `<option value="${p}" ${p === sel ? 'selected' : ''}>${RIG.PART_LABEL[p]}</option>`).join('');
+  return `<h2>Make it move</h2><div class="sec">
+    <div class="muted" style="margin-bottom:4px">Tail, wings, hair, ears, a scarf… anything that should swing and bend gets bones.${l.role.type === 'part' ? ' <span style="color:var(--warn)">This layer is a body part now; this turns it into a moving part instead.</span>' : ''}</div>
+    <div class="row"><label>It's a</label><select id="mmKind" style="flex:1">${Object.entries(RIG.KINDS).map(([k, v]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${v.label}</option>`).join('')}</select></div>
+    <div class="row"><label>Hangs from</label><select id="mmAttach" style="flex:1">${attachOpts(K.attachTo)}</select></div>
+    <div class="row"><label>Bones</label><input id="mmBones" type="number" min="1" max="40" value="${K.bones}" style="width:60px"><span class="muted">more = bendier</span></div>
+    <div class="row"><button id="mmGo" class="primary" style="flex:1">Add bones</button></div>
+  </div>`;
+}
+function bindMoveBox(l) {
+  const go = $('#mmGo'); if (!go) return;
+  $('#mmKind').onchange = (e) => { const K = RIG.KINDS[e.target.value]; $('#mmAttach').value = K.attachTo; $('#mmBones').value = K.bones; };
+  go.onclick = () => {
+    const ch = RIG.makeMoving(doc, l, $('#mmKind').value, Math.max(1, Math.min(40, +$('#mmBones').value || 1)), $('#mmAttach').value);
+    selChain = ch.id; selLayer = null; imgCache.clear(); refresh(); startTestIfOpen();
+    hint('Bones added. Drag the yellow <b>●</b> joints and <b>◆</b> tip to fit your drawing, then try it in the <b>Test</b> tab.');
+    toast(ch.segs.length + ' bones added to ' + ch.name, 3500);
+  };
+}
+
+function refresh() { renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test') startTest(); draw(); }
+
+// ---------------------------------------------------------------- canvas: rig view
+function resize() { const r = stage.getBoundingClientRect(); const d = window.devicePixelRatio || 1; cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); draw(); }
+window.addEventListener('resize', resize);
+function fitView() {
+  if (!doc) return; const d = window.devicePixelRatio || 1;
+  const W = cv.width / d, H = cv.height / d;
+  view.zoom = Math.max(2, Math.floor(Math.min(W / (doc.width + 8), H / (doc.height + 8))));
+  view.panX = (W - doc.width * view.zoom) / 2; view.panY = (H - doc.height * view.zoom) / 2;
+}
+const toScreen = (p) => ({ x: p.x * view.zoom + view.panX, y: p.y * view.zoom + view.panY });
+const toCanvas = (sx, sy) => ({ x: (sx - view.panX) / view.zoom, y: (sy - view.panY) / view.zoom });
+
+function drawChecker(W, H) {
+  ctx.fillStyle = '#101115'; ctx.fillRect(0, 0, W, H);
+  if (!doc) return;
+  const a = toScreen({ x: 0, y: 0 }); ctx.fillStyle = '#17181d'; ctx.fillRect(a.x, a.y, doc.width * view.zoom, doc.height * view.zoom);
+  ctx.strokeStyle = '#2a2c34'; ctx.lineWidth = 1; ctx.strokeRect(a.x + .5, a.y + .5, doc.width * view.zoom, doc.height * view.zoom);
+}
+
+function draw() {
+  const d = window.devicePixelRatio || 1; ctx.setTransform(d, 0, 0, d, 0, 0);
+  const W = cv.width / d, H = cv.height / d;
+  if (tab === 'test') return; // test loop draws itself
+  if (tab === 'health') { drawHealth(W, H); return; }
+  drawChecker(W, H);
+  if (!doc) return;
+  ctx.imageSmoothingEnabled = false;
+  // skin sprites (sprite swaps) on parts that have no replacement layer
+  const replacedParts = new Set(doc.layers.filter(l => l.role.type === 'part').map(l => l.role.part));
+  const skinItems = [];
+  for (const part of [...RIG.PARTS, 'tail']) {
+    if (replacedParts.has(part) || (part === 'tail' && doc.hideVanillaTail)) continue;
+    const im = doc.spriteSwaps[RIG.PART_SPRITE[part]]; if (im) skinItems.push({ part, im, order: RIG.ORDER[part] });
+    if (part === 'Head' && doc.spriteSwaps.experimentEyeOpen && !doc.hideObjects.includes('Eyes')) skinItems.push({ part, im: doc.spriteSwaps.experimentEyeOpen, order: 53 });
+  }
+  skinItems.sort((a, b) => a.order - b.order);
+  for (const it of skinItems) {
+    const J = RIG.J(doc, it.part), sc = toScreen(J);
+    ctx.save(); ctx.translate(sc.x, sc.y); ctx.rotate(-RIG.REST[it.part][2] * Math.PI / 180);
+    ctx.globalAlpha = 0.9; ctx.drawImage(layerCanvas(it.im), -it.im.w * view.zoom / 2, -it.im.h * view.zoom / 2, it.im.w * view.zoom, it.im.h * view.zoom);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  // layers
+  for (const l of doc.layers) {
+    if (l.cutSource) continue;
+    const p = toScreen(l);
+    const isArt = l.role.type === 'state' || l.role.type === 'injury' || l.role.type === 'frame';
+    ctx.globalAlpha = l.role.type === 'ignore' ? 0.25 : (isArt ? 0.0 : 1);
+    if (isArt && l.id === selLayer) ctx.globalAlpha = 1;
+    if (ctx.globalAlpha > 0) ctx.drawImage(layerCanvas(l), p.x, p.y, l.w * view.zoom, l.h * view.zoom);
+  }
+  ctx.globalAlpha = 1;
+  // game skeleton ghost
+  if (showSkel) {
+    ctx.lineWidth = 1;
+    for (const part of RIG.PARTS) {
+      const J = RIG.J(doc, part), sz = RIG.VANILLA_SIZE[part], s = toScreen(J);
+      ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(-RIG.REST[part][2] * Math.PI / 180);
+      ctx.strokeStyle = part.endsWith('B') ? 'rgba(120,200,255,.35)' : 'rgba(120,200,255,.75)';
+      ctx.setLineDash(part.endsWith('B') ? [3, 3] : []);
+      ctx.strokeRect(-sz[0] * view.zoom / 2, -sz[1] * view.zoom / 2, sz[0] * view.zoom, sz[1] * view.zoom);
+      ctx.restore();
+    }
+    ctx.setLineDash([]);
+    const o = toScreen(doc.align); ctx.fillStyle = 'rgba(120,200,255,.9)'; ctx.beginPath(); ctx.arc(o.x, o.y, 3, 0, 7); ctx.fill();
+  }
+  // selected layer outline
+  const sl = selLayer && RIG.layer(doc, selLayer);
+  if (sl) { const p = toScreen(sl); ctx.strokeStyle = '#8f5bff'; ctx.lineWidth = 1.5; ctx.strokeRect(p.x - .5, p.y - .5, sl.w * view.zoom + 1, sl.h * view.zoom + 1); }
+  const sc = selChain && RIG.chain(doc, selChain);
+  if (sc && !sl) { ctx.strokeStyle = 'rgba(143,91,255,.55)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); for (const s of sc.segs) { const l = RIG.layer(doc, s.layer); if (!l) continue; const p = toScreen(l); ctx.strokeRect(p.x - .5, p.y - .5, l.w * view.zoom + 1, l.h * view.zoom + 1); } ctx.setLineDash([]); }
+  // bones
+  for (const ch of doc.chains) drawBones(ch, ch.id === selChain);
+}
+
+function drawBones(ch, active) {
+  const anchor = toScreen(RIG.J(doc, ch.attachTo));
+  ctx.globalAlpha = active ? 1 : 0.35;
+  ctx.strokeStyle = active ? '#ffcf4a' : '#c9a84a'; ctx.lineWidth = active ? 2 : 1;
+  // anchor cross
+  ctx.beginPath(); ctx.moveTo(anchor.x - 5, anchor.y); ctx.lineTo(anchor.x + 5, anchor.y); ctx.moveTo(anchor.x, anchor.y - 5); ctx.lineTo(anchor.x, anchor.y + 5); ctx.stroke();
+  const pts = ch.segs.map(s => toScreen(s.joint));
+  ctx.beginPath(); ctx.moveTo(anchor.x, anchor.y); ctx.setLineDash([2, 3]); ctx.lineTo(pts[0].x, pts[0].y); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+  const last = ch.segs[ch.segs.length - 1];
+  if (last.tip) { const t = toScreen(last.tip); ctx.lineTo(t.x, t.y); }
+  ctx.stroke();
+  ch.segs.forEach((s, i) => {
+    if (s.tip && i < ch.segs.length - 1) { const t = toScreen(s.tip); ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(t.x, t.y); ctx.stroke(); }
+  });
+  ctx.fillStyle = active ? '#ffcf4a' : '#c9a84a';
+  pts.forEach((p, i) => {
+    ctx.beginPath(); ctx.arc(p.x, p.y, active ? 6 : 3, 0, 7); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+    if (active && ch.segs.length > 1) { ctx.fillStyle = '#000'; ctx.font = 'bold 9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), p.x, p.y + 0.5); ctx.fillStyle = '#ffcf4a'; ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic'; }
+  });
+  ch.segs.forEach(s => { if (s.tip) { const t = toScreen(s.tip); ctx.beginPath(); ctx.moveTo(t.x, t.y - 6); ctx.lineTo(t.x + 6, t.y); ctx.lineTo(t.x, t.y + 6); ctx.lineTo(t.x - 6, t.y); ctx.closePath(); ctx.fill(); ctx.stroke(); } });
+  ctx.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------- canvas interaction (rig view)
+let drag = null;
+function handleAt(sx, sy) {
+  const chs = doc.chains.filter(c => c.id === selChain).concat(doc.chains.filter(c => c.id !== selChain));
+  for (const ch of chs) for (const s of ch.segs) {
+    for (const key of ['tip', 'joint']) { const p = s[key]; if (!p) continue; const q = toScreen(p); if (Math.hypot(q.x - sx, q.y - sy) < (ch.id === selChain ? 9 : 6)) return { ch, s, key }; }
+  }
+  return null;
+}
+function layerAt(sx, sy) {
+  const p = toCanvas(sx, sy);
+  for (let i = doc.layers.length - 1; i >= 0; i--) {
+    const l = doc.layers[i]; if (l.cutSource || l.role.type === 'state' || l.role.type === 'injury' || l.role.type === 'frame') continue;
+    if (RIG.alpha(l, Math.floor(p.x - l.x), Math.floor(p.y - l.y)) > 0) return l;
+  }
+  return null;
+}
+cv.addEventListener('contextmenu', (e) => e.preventDefault());
+cv.addEventListener('pointerdown', (e) => {
+  if (!doc) return; const r = cv.getBoundingClientRect(); const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  cv.setPointerCapture(e.pointerId);
+  if (tab === 'test') { grab = { sx, sy }; return; }
+  if (tab === 'health') {
+    const hit = hsAt(sx, sy);
+    selHs = hit ? hit.it.key : null;
+    if (hit) hsDrag = { key: hit.it.key, sx, sy, x0: hit.it.x, y0: hit.it.y, z: hit.v.z, mirror: hit.it.mirror };
+    renderInspector(); draw(); return;
+  }
+  if (e.button === 1 || e.button === 2 || e.shiftKey) { drag = { type: 'pan', sx, sy, px: view.panX, py: view.panY }; return; }
+  if (moveSkel || e.altKey) { drag = { type: 'skel', start: toCanvas(sx, sy), a: { ...doc.align } }; return; }
+  const hnd = handleAt(sx, sy);
+  if (hnd) { selChain = hnd.ch.id; drag = { type: 'handle', ...hnd }; renderInspector(); draw(); return; }
+  const l = layerAt(sx, sy);
+  if (l) { if (selLayer !== l.id) selectLayer(l.id); drag = { type: 'layer', l, sx, sy, start: toCanvas(sx, sy), done: { x: 0, y: 0 }, moved: false }; return; }
+  selLayer = null; refresh();
+  drag = { type: 'pan', sx, sy, px: view.panX, py: view.panY, soft: true };
+});
+cv.addEventListener('pointermove', (e) => {
+  const r = cv.getBoundingClientRect(); const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (tab === 'test') { if (grab) { grab.sx = sx; grab.sy = sy; } return; }
+  if (tab === 'health') {
+    if (hsDrag) { const e2 = hsEntry(hsDrag.key); e2.x = Math.round(hsDrag.x0 + (sx - hsDrag.sx) / hsDrag.z); e2.y = Math.round(hsDrag.y0 - (sy - hsDrag.sy) / hsDrag.z); if (e2.mirror === undefined) e2.mirror = hsDrag.mirror; draw(); }
+    else cv.style.cursor = hsAt(sx, sy) ? 'move' : 'default';
+    return;
+  }
+  if (!drag) { if (doc) cv.style.cursor = handleAt(sx, sy) ? 'grab' : (moveSkel ? 'move' : 'crosshair'); return; }
+  if (drag.type === 'pan') { view.panX = drag.px + sx - drag.sx; view.panY = drag.py + sy - drag.sy; draw(); }
+  else if (drag.type === 'skel') { const p = toCanvas(sx, sy); doc.align = { x: Math.round((drag.a.x + p.x - drag.start.x) * 2) / 2, y: Math.round((drag.a.y + p.y - drag.start.y) * 2) / 2 }; draw(); }
+  else if (drag.type === 'layer') {
+    if (!drag.moved && Math.hypot(sx - drag.sx, sy - drag.sy) < 4) return;
+    drag.moved = true; const p = toCanvas(sx, sy);
+    const tx = Math.round(p.x - drag.start.x), ty = Math.round(p.y - drag.start.y);
+    if (tx !== drag.done.x || ty !== drag.done.y) { moveLayerBy(drag.l, tx - drag.done.x, ty - drag.done.y); drag.done = { x: tx, y: ty }; draw(); }
+  }
+  else if (drag.type === 'handle') { const p = toCanvas(sx, sy); drag.s[drag.key] = { x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2 }; draw(); }
+});
+// move a layer (and whatever belongs to it: frames, injury art, its bones; a cut image moves as a whole)
+function moveLayerBy(l, dx, dy) {
+  let group = [l]; const bones = [];
+  if (l.role.type === 'chain') {
+    const ch = RIG.chain(doc, l.role.chain);
+    if (ch && ch.source) { group = ch.segs.map(s => RIG.layer(doc, s.layer)).filter(Boolean); const src = RIG.layer(doc, ch.source); if (src) group.push(src); bones.push(...ch.segs); }
+    else if (ch) bones.push(...ch.segs.filter(s => s.layer === l.id));
+  }
+  const ids = new Set(group.map(g => g.id));
+  for (const o of doc.layers) if (o.role.of && ids.has(o.role.of) && !group.includes(o)) group.push(o);
+  for (const g of group) { g.x += dx; g.y += dy; }
+  for (const s of bones) { s.joint = { x: s.joint.x + dx, y: s.joint.y + dy }; if (s.tip) s.tip = { x: s.tip.x + dx, y: s.tip.y + dy }; }
+}
+document.addEventListener('keydown', (e) => {
+  if (!doc || tab !== 'rig' || /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key]; if (!d) return;
+  let l = selLayer && RIG.layer(doc, selLayer);
+  if (!l && selChain) { const ch = RIG.chain(doc, selChain); l = ch && RIG.layer(doc, ch.segs[0].layer); }
+  if (!l) return;
+  e.preventDefault(); const k = e.shiftKey ? 5 : 1; moveLayerBy(l, d[0] * k, d[1] * k); draw();
+});
+cv.addEventListener('pointerup', () => { if (hsDrag) { hsDrag = null; renderInspector(); } if (drag && drag.type === 'skel') hint('Skeleton moved. Body parts follow it automatically.'); drag = null; grab = null; });
+cv.addEventListener('wheel', (e) => {
+  e.preventDefault(); const r = cv.getBoundingClientRect(); const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (tab === 'test') { test.zoom = Math.max(6, Math.min(80, test.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); return; }
+  const before = toCanvas(sx, sy); view.zoom = Math.max(1, Math.min(48, view.zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2)));
+  view.panX = sx - before.x * view.zoom; view.panY = sy - before.y * view.zoom; draw();
+}, { passive: false });
+$('#zoomIn').onclick = () => { if (tab === 'test') test.zoom = Math.min(80, test.zoom * 1.25); else { view.zoom = Math.min(48, view.zoom * 1.25); draw(); } };
+$('#zoomOut').onclick = () => { if (tab === 'test') test.zoom = Math.max(6, test.zoom / 1.25); else { view.zoom = Math.max(1, view.zoom / 1.25); draw(); } };
+$('#btnSkel').onclick = (e) => { showSkel = !showSkel; e.target.classList.toggle('on', showSkel); draw(); };
+$('#btnMoveSkel').onclick = (e) => { moveSkel = !moveSkel; e.target.classList.toggle('on', moveSkel); hint(moveSkel ? 'Drag anywhere to move the game skeleton under your drawing. Click the button again when done.' : rigHint()); };
+$('#btnAlign').onclick = () => { if (!doc) return; RIG.autoAlign(doc); draw(); toast('Skeleton lined up with your body parts'); };
+const rigHint = () => 'Click a part to select it · <b>drag it</b> (or arrow keys) to move it · drag yellow <b>●</b> joints / <b>◆</b> tips to bend · drag empty space or right-drag to pan · wheel to zoom';
+
+// ---------------------------------------------------------------- test mode
+let test = null, grab = null, raf = 0;
+function tabTo(t) {
+  tab = t; $('#tabRig').classList.toggle('on', t === 'rig'); $('#tabTest').classList.toggle('on', t === 'test'); $('#tabHealth').classList.toggle('on', t === 'health');
+  $('#rigTools').style.display = t === 'rig' ? '' : 'none'; $('#testTools').style.display = t === 'test' ? '' : 'none';
+  $('#healthTools').style.display = t === 'health' ? '' : 'none';
+  if (t === 'test') { startTest(); hint('Same physics as the mod. Grab the character with the mouse and shake it! Wheel = zoom.'); }
+  else { cancelAnimationFrame(raf); raf = 0; hint(t === 'health' ? 'The in-game health screen. Drag any part to move it; click it to give it your own outline/middle art. Injurable pieces appear here too.' : rigHint()); renderInspector(); draw(); }
+}
+const startTestIfOpen = () => { if (tab === 'test') startTest(); };
+$('#tabRig').onclick = () => tabTo('rig'); $('#tabTest').onclick = () => tabTo('test'); $('#tabHealth').onclick = () => tabTo('health');
+$('#actPrev').onchange = () => {
+  if (!test) return; const A = $('#actPrev').value || 'idle';
+  test.mode = A; test.timer = 0; test.dir = test.body.facing; test.vy = 0;
+  test.body.y = A === 'fall' ? 5000 : 0; test.camY = test.body.y; // falling starts high up and never lands
+};
+$('#btnTurn').onclick = () => { if (test) { test.body.facing *= -1; test.dir = test.body.facing; test.timer = 0; } };
+function updateInjuryPreview() {
+  const ip = $('#injPrev'), tp = $('#tornPrev'); const ci = ip.value, ct = tp.value;
+  const inj = doc ? doc.chains.filter(c => c.injury && c.injury.enabled) : [];
+  const states = new Set(doc ? doc.layers.filter(l => l.role.type === 'injury').map(l => l.role.state) : []);
+  if (doc) for (const id in doc.anims) for (const k in doc.anims[id]) if (RIG.isInjuryKey(k)) states.add(k);
+  ip.innerHTML = '<option value="">Parts: healthy</option>' + RIG.INJURY_STATES.filter(([k]) => states.has(k) && k !== 'stump').map(([k, lab]) => `<option value="${k}">Parts: ${lab}</option>`).join('');
+  const maxN = Math.max(0, ...inj.map(c => c.segs.length));
+  let o = '<option value="">Nothing torn off</option>'; for (let i = 1; i <= maxN; i++) o += `<option value="${i}">Torn off after piece ${i}</option>`;
+  tp.innerHTML = o; ip.value = [...ip.options].some(x => x.value === ci) ? ci : ''; tp.value = [...tp.options].some(x => x.value === ct) ? ct : '';
+  ip.style.display = states.size ? '' : 'none'; tp.style.display = inj.length ? '' : 'none';
+}
+function updateHeadStates() {
+  updateInjuryPreview();
+  const sel = $('#headState'); const cur = sel.value;
+  const states = doc ? [...new Set(doc.layers.filter(l => l.role.type === 'state').map(l => l.role.state))] : [];
+  sel.innerHTML = '<option value="">Head: normal</option>' + states.map(s => `<option value="${s}">Head: ${RIG.HEAD_STATE_LABEL[s] || s}</option>`).join('');
+  sel.value = states.includes(cur) ? cur : '';
+}
+
+function startTest() {
+  if (!doc) { cancelAnimationFrame(raf); return; }
+  const built = RIG.buildRig(doc);
+  const images = {}; for (const f in built.files) images[f] = built.files[f];
+  const prev = test;
+  test = {
+    rig: built.rig, images, canv: {}, rt: new RIG.Runtime(built.rig, images),
+    body: prev ? prev.body : { x: 0, y: 0, facing: 1, walk: 0, stride: 0, run: 0, crouch: 0, lie: 0, climb: 0, swim: 0, attack: 0, t: 0, tailAngle: 23.6 }, vx: prev ? prev.vx : 0, vy: prev ? prev.vy : 0,
+    mode: $('#actPrev').value || 'idle', timer: 0, zoom: prev ? prev.zoom : 44, camX: prev ? prev.camX : 0, camY: prev ? prev.camY : 0, last: performance.now(), dir: prev ? prev.dir : 1
+  };
+  for (const f in images) { const im = images[f]; test.canv[f] = layerCanvas(im); }
+  if (!raf) raf = requestAnimationFrame(loop);
+}
+// slider changes: update motion without rebuilding (keeps the motion going)
+function liveMotion() {
+  if (!test || !doc) return;
+  const built = RIG.buildRig(doc);
+  test.rt.chains.forEach((c) => { const def = built.rig.chains.find(x => x.name === c.def.name && x.attachTo === c.def.attachTo); if (def) Object.assign(c.motion, def.motion); });
+}
+
+function loop(now) {
+  raf = requestAnimationFrame(loop);
+  if (!test) return;
+  const dt = Math.min(0.05, (now - test.last) / 1000); test.last = now; test.timer += dt;
+  const b = test.body; const G = 22; const A = test.mode;
+  const d = window.devicePixelRatio || 1; const W = cv.width / d, H = cv.height / d;
+  const ease = (cur, to, k) => cur + (to - cur) * Math.min(1, dt * k);
+  b.t += dt;
+  const lying = A === 'sleep' || A === 'down' || A === 'dead';
+  const alive = A !== 'dead';
+  const speed = { walk: 3, run: 7, crouch: 1.6, swim: 2 }[A] || 0;
+  if (grab) {
+    // drag the character with the mouse
+    const tx = test.camX + (grab.sx - W / 2) / test.zoom, ty = (H * 0.72 - grab.sy) / test.zoom + test.camY;
+    const nx = b.x + (tx - b.x) * Math.min(1, dt * 18), ny = Math.max(0, b.y + (ty - b.y) * Math.min(1, dt * 18));
+    test.vx = (nx - b.x) / Math.max(dt, 1e-3); test.vy = (ny - b.y) / Math.max(dt, 1e-3); b.x = nx; b.y = ny;
+    b.stride = Math.max(0, b.stride - dt * 4);
+  } else {
+    if (speed) { if (test.timer > 2.8) { test.timer = 0; test.dir *= -1; } b.facing = test.dir; }
+    test.vx = ease(test.vx, speed * test.dir, 6);
+    b.x += test.vx * dt;
+    if (A === 'fall') { test.vy = ease(test.vy, -14, 3); b.y += test.vy * dt; if (b.y < 20) { b.y = 5000; test.camY = b.y; } } // falls forever, the camera follows
+    else if (A === 'climb') { test.vy = 1.6; b.y += test.vy * dt; }                             // climbs forever
+    else {
+      if (b.y > 30) { b.y = 0; test.vy = 0; }
+      if (A === 'jump' && b.y <= 0 && test.timer > 0.6) { test.timer = 0; test.vy = 9.5; }
+      if (b.y > 0 || test.vy > 0) { test.vy -= G * dt; b.y = Math.max(0, b.y + test.vy * dt); if (b.y <= 0) test.vy = 0; }
+      if (b.y < 0) b.y = 0;
+    }
+    if (A !== 'fall' && A !== 'climb' && b.y < 0) b.y = 0;
+  }
+  const onGround = b.y <= 0.01 && A !== 'fall' && A !== 'climb';
+  const moving = Math.abs(test.vx) > 1.2;
+  b.stride = ease(b.stride, onGround && moving && !lying ? Math.min(1, Math.abs(test.vx) / 5) + 0.25 : (A === 'swim' ? 0.4 : 0), 8);
+  b.run = ease(b.run, Math.max(0, Math.min(1, (Math.abs(test.vx) - 3) / 4)), 6);
+  b.crouch = ease(b.crouch, A === 'crouch' ? 1 : 0, 8);
+  b.lie = ease(b.lie, lying ? 1 : 0, 5);
+  b.climb = ease(b.climb, A === 'climb' ? 1 : 0, 8);
+  b.swim = ease(b.swim, A === 'swim' ? 1 : 0, 6);
+  if (A === 'attack') { const p = (b.t % 0.9) / 0.9; b.attack = p < 0.22 ? p / 0.22 : Math.max(0, 1 - (p - 0.22) / 0.4); } else b.attack = ease(b.attack, 0, 10);
+  if (A === 'climb' || A === 'swim') b.walk += dt * (A === 'climb' ? 5 : 4);
+  else b.walk += dt * Math.abs(test.vx) * 2.2;
+  b.tailAngle = ease(b.tailAngle, Math.abs(test.vx) > 1.4 ? -6 : 23.6, 3);
+  const frames = RIG.bodyFrames(b);
+  const airborne = A === 'fall' || (A === 'jump' && b.y > 0.01);
+  test.rt.update(dt, { frames, alive, moving, airborne });
+  // camera
+  test.camX += (b.x - test.camX) * Math.min(1, dt * 4);
+  test.camY += ((A === 'fall' || A === 'climb' ? b.y : 0) - test.camY) * Math.min(1, dt * (A === 'fall' || A === 'climb' ? 10 : 4));
+  const z = test.zoom;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.fillStyle = '#101115'; ctx.fillRect(0, 0, W, H);
+  const groundY = H * 0.72 + test.camY * z; // screen y of the ground (y = 0)
+  const x0 = W / 2 - test.camX * z;
+  // grid (so falling / climbing shows movement)
+  ctx.strokeStyle = '#1d1f25'; ctx.lineWidth = 1;
+  for (let gx = Math.floor((test.camX - W / 2 / z) / 2) * 2; gx < test.camX + W / 2 / z; gx += 2) { const sx = x0 + gx * z; ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, Math.min(H, groundY)); ctx.stroke(); }
+  for (let gy = Math.floor(test.camY / 2) * 2 - 12; gy < test.camY + 14; gy += 2) { const sy = groundY - gy * z; if (gy < 0 || sy < 0 || sy > H) continue; ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke(); }
+  if (A === 'climb') { ctx.fillStyle = '#1a1c22'; ctx.fillRect(x0 + (b.x + 0.9 * b.facing) * z - (b.facing > 0 ? 0 : 0.6 * z), 0, 0.6 * z, Math.min(H, groundY)); }
+  const footBottom = 2.415 + 0.7;
+  if (groundY < H + 2) {
+    ctx.fillStyle = '#1b1d23'; ctx.fillRect(0, groundY, W, H - groundY);
+    ctx.strokeStyle = '#3a3d47'; ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke();
+  }
+  // world -> screen: body origin sits footBottom above the ground
+  const S = [z, 0, 0, -z, x0, groundY - footBottom * z];
+  ctx.imageSmoothingEnabled = false;
+  const ppu = RIG.PPU, pix = [1 / ppu, 0, 0, -1 / ppu, 0, 0];
+  // game parts the rig doesn't replace: grey placeholders
+  const replaced = new Set(test.rig.chains.filter(c => c.hideTarget).map(c => c.attachTo));
+  const action = A;
+  const items = test.rt.drawList({ frames, action, headState: $('#headState').value, injury: $('#injPrev').value || null, tornAt: $('#tornPrev').value ? +$('#tornPrev').value : null });
+  for (const part of RIG.PARTS) if (!replaced.has(part)) items.push({ ghost: part, order: RIG.ORDER[part], m: frames[part] });
+  if (!replaced.has('Head') && !test.rig.hideObjects.includes('Eyes')) items.push({ ghost: 'Head', eyes: true, order: 53, m: frames.Head });
+  if (!test.rig.hideVanillaTail) items.push({ ghost: 'tail', order: 0, m: frames.tail });
+  items.sort((a, b2) => a.order - b2.order);
+  for (const it of items) {
+    if (it.ghost) {
+      const m = RIG.M.mul(S, it.m); ctx.setTransform(d * m[0], d * m[1], d * m[2], d * m[3], d * m[4], d * m[5]);
+      const skinIm = it.eyes ? doc.spriteSwaps.experimentEyeOpen : doc.spriteSwaps[RIG.PART_SPRITE[it.ghost]];
+      if (skinIm) { const c = layerCanvas(skinIm); const m2 = RIG.M.mul(m, pix); ctx.setTransform(d * m2[0], d * m2[1], d * m2[2], d * m2[3], d * m2[4], d * m2[5]); ctx.drawImage(c, -skinIm.w / 2, -skinIm.h / 2); continue; }
+      if (it.eyes) continue;
+      ctx.fillStyle = 'rgba(150,150,160,.35)';
+      if (it.ghost === 'tail') ctx.fillRect(-3, -0.5, 3, 1); else { const sz = RIG.VANILLA_SIZE[it.ghost]; ctx.fillRect(-sz[0] / 16, -sz[1] / 16, sz[0] / 8, sz[1] / 8); }
+      continue;
+    }
+    const c = test.canv[it.file]; if (!c) continue;
+    const m = RIG.M.mul(RIG.M.mul(S, it.m), pix);
+    ctx.setTransform(d * m[0], d * m[1], d * m[2], d * m[3], d * m[4], d * m[5]);
+    ctx.drawImage(c, it.x - it.joint.x, it.y - it.joint.y);
+  }
+  if (A === 'swim') { ctx.setTransform(d, 0, 0, d, 0, 0); ctx.fillStyle = 'rgba(70,130,220,.16)'; ctx.fillRect(0, groundY - 7.5 * z, W, 7.5 * z); }
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.fillStyle = alive ? '#9a9caa' : '#e0475b'; ctx.font = '12px system-ui';
+  const lab = (RIG.ACTIONS.find(x => x[0] === A) || [A, A])[1];
+  const sets = Object.keys(doc.anims || {}).length;
+  ctx.fillText(lab + (alive ? '' : ' — physics go limp') + (sets ? '' : '  ·  (no animation frames yet: the body moves, your parts ride on it)'), 12, 20);
+}
+
+// ---------------------------------------------------------------- custom sounds
+function soundsInspector() {
+  doc.sounds = doc.sounds || {};
+  const keys = Object.keys(doc.sounds);
+  let h = '<div style="margin:4px 0 8px">';
+  for (const k of keys) {
+    const lab = (RIG.SOUNDS.find(x => x[0] === k) || [k, k])[1];
+    h += `<div style="border:1px solid var(--line);border-radius:6px;padding:5px;margin:4px 0"><div class="row" style="margin:0"><b style="flex:1">${esc(lab)}</b><button data-sadd="${k}" title="Add sound files">+ files</button><button data-sdel="${k}">✕</button></div>
+      ${doc.sounds[k].map((f, i) => `<div class="seg"><span>${esc(f.file)}</span><button data-splay="${k}:${i}" title="Play">▶</button><button data-sx="${k}:${i}">✕</button></div>`).join('') || '<span class="muted">no files yet</span>'}</div>`;
+  }
+  const free = RIG.SOUNDS.filter(([k]) => !doc.sounds[k]);
+  h += `<div class="row"><select id="sndNew" style="flex:1"><option value="">+ replace a sound…</option>${free.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}<option value="__custom">Other (exact game sound name)…</option></select></div>
+    <input id="sndFile" type="file" accept=".wav,.ogg,.mp3" multiple hidden>
+    <div class="muted">.wav, .ogg or .mp3. Several files = one is picked at random each time. Only your character's own sounds change, and other players hear them too.</div></div>`;
+  return h;
+}
+function bindSounds() {
+  const sel = $('#sndNew'); if (!sel) return;
+  let target = null;
+  const pick = (k) => { target = k; $('#sndFile').click(); };
+  sel.onchange = () => {
+    let k = sel.value; if (!k) return;
+    if (k === '__custom') { showCustomSound(); return; }
+    pick(k);
+  };
+  $('#sndFile').onchange = async (e) => {
+    const fs = [...e.target.files]; e.target.value = ''; if (!fs.length || !target) { renderInspector(); return; }
+    const list = doc.sounds[target] = doc.sounds[target] || [];
+    for (const f of fs) list.push({ file: f.name, data: new Uint8Array(await f.arrayBuffer()) });
+    renderInspector();
+  };
+  const box = $('#insp');
+  box.querySelectorAll('[data-sadd]').forEach(b => b.onclick = () => pick(b.dataset.sadd));
+  box.querySelectorAll('[data-sdel]').forEach(b => b.onclick = () => { delete doc.sounds[b.dataset.sdel]; renderInspector(); });
+  box.querySelectorAll('[data-sx]').forEach(b => b.onclick = () => { const [k, i] = b.dataset.sx.split(':'); doc.sounds[k].splice(+i, 1); if (!doc.sounds[k].length) delete doc.sounds[k]; renderInspector(); });
+  box.querySelectorAll('[data-splay]').forEach(b => b.onclick = () => {
+    const [k, i] = b.dataset.splay.split(':'); const f = doc.sounds[k][+i];
+    try { const a = new Audio(URL.createObjectURL(new Blob([f.data]))); a.play().catch(() => toast('Your browser blocked playback')); } catch (err) { toast('Can\'t play this file here'); }
+  });
+}
+function showCustomSound() {
+  const row = document.createElement('div'); row.className = 'row';
+  row.innerHTML = `<input id="sndCustom" type="text" placeholder="e.g. growl3 or vomit" style="flex:1"><button id="sndCustomOk">Add</button>`;
+  $('#sndNew').parentElement.after(row);
+  $('#sndCustomOk').onclick = () => { const v = $('#sndCustom').value.trim(); if (!v) return; doc.sounds[v] = doc.sounds[v] || []; renderInspector(); };
+}
+
+// ---------------------------------------------------------------- animated sprites
+let animFocus = false;
+function frameCandidates(l) { // layers that can become frames: unused ones or frames of this layer
+  return doc.layers.filter(o => o.id !== l.id && (o.role.type === 'ignore' || (o.role.type === 'frame' && o.role.of === l.id)));
+}
+function animInspector(l) {
+  const sets = doc.anims[l.id] || {};
+  const keys = Object.keys(sets);
+  const used = new Set(keys);
+  let h = `<h2>Animated sprite</h2><div class="sec">
+    <div class="row"><label>Animated</label><input id="animOn" type="checkbox" ${keys.length ? 'checked' : ''}><span class="muted">frames per action or injury</span></div>`;
+  if (keys.length) {
+    h += `<div class="muted" style="margin-bottom:6px">Draw each frame as its own layer on the same canvas spot. If the character does something this part has no set for, it uses a close one (falling → jumping → idle → always).</div>`;
+    for (const k of keys) {
+      const st = sets[k];
+      h += `<div style="border:1px solid var(--line);border-radius:6px;padding:6px;margin:6px 0">
+        <div class="row"><select data-akey="${k}" style="flex:1">${RIG.ANIM_KEYS.map(([kk, lab]) => `<option value="${kk}" ${kk === k ? 'selected' : ''} ${kk !== k && used.has(kk) ? 'disabled' : ''}>${lab}</option>`).join('')}</select><button data-adel="${k}" title="Remove this set">✕</button></div>
+        <div class="row"><label>Frames / sec</label><input data-afps="${k}" type="number" min="0.5" max="60" step="0.5" value="${st.fps}" style="width:64px"><label style="flex:0 0 auto;margin-left:8px">Loop</label><input data-aloop="${k}" type="checkbox" ${st.loop !== false ? 'checked' : ''}></div>
+        ${st.frames.map((id, i) => { const fl = RIG.layer(doc, id); return `<div class="seg"><span>${i + 1}. ${esc(fl ? fl.name : '?')}${id === l.id ? ' <span class="muted">(the part itself)</span>' : ''}</span><button data-afu="${k}:${i}">↑</button><button data-afd="${k}:${i}">↓</button><button data-afx="${k}:${i}">✕</button></div>`; }).join('')}
+        <div class="row"><select data-aadd="${k}" style="flex:1"><option value="">+ add a frame…</option><option value="${l.id}">${esc(l.name)} (the part itself)</option>${frameCandidates(l).filter(o => !st.frames.includes(o.id)).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></div>
+        <div class="muted">${st.frames.length} frame${st.frames.length === 1 ? '' : 's'}${st.loop === false ? ', plays once then holds the last frame' : ''}</div>
+      </div>`;
+    }
+    h += `<div class="row"><button id="animAdd">+ Add a set for another action</button></div>`;
+  }
+  h += `<div class="muted">Tip: name layers like <code>${esc(l.name)}_fall_1</code>, <code>${esc(l.name)}_fall_2</code>, <code>${esc(l.name)}_idle_1</code> or <code>${esc(l.name)}_frame_1</code> and <b>Auto setup</b> builds the sets for you.</div></div>`;
+  return h;
+}
+function bindAnimInspector(l) {
+  const sets = () => (doc.anims[l.id] = doc.anims[l.id] || {});
+  const on = $('#animOn'); if (!on) return;
+  const markFrame = (id) => { const fl = RIG.layer(doc, id); if (fl && fl.id !== l.id && fl.role.type === 'ignore') fl.role = { type: 'frame', of: l.id }; };
+  const unmark = (id) => { const still = Object.values(sets()).some(st => st.frames.includes(id)); const fl = RIG.layer(doc, id); if (!still && fl && fl.id !== l.id && fl.role.type === 'frame') fl.role = { type: 'ignore' }; };
+  on.onchange = () => {
+    if (on.checked) { sets().always = { fps: 8, loop: true, frames: [l.id] }; }
+    else { const ids = Object.values(sets()).flatMap(st => st.frames); delete doc.anims[l.id]; ids.forEach(unmark); }
+    refresh(); startTestIfOpen();
+  };
+  const box = $('#insp');
+  box.querySelectorAll('[data-akey]').forEach(sel => sel.onchange = () => { const s0 = sets(); const old = sel.dataset.akey; s0[sel.value] = s0[old]; delete s0[old]; refresh(); startTestIfOpen(); });
+  box.querySelectorAll('[data-adel]').forEach(b => b.onclick = () => { const s0 = sets(); const ids = s0[b.dataset.adel].frames; delete s0[b.dataset.adel]; ids.forEach(unmark); if (!Object.keys(s0).length) delete doc.anims[l.id]; refresh(); startTestIfOpen(); });
+  box.querySelectorAll('[data-afps]').forEach(i => i.oninput = () => { sets()[i.dataset.afps].fps = +i.value || 8; startTestIfOpen(); });
+  box.querySelectorAll('[data-aloop]').forEach(i => i.onchange = () => { sets()[i.dataset.aloop].loop = i.checked; refresh(); startTestIfOpen(); });
+  const mv = (attr, d) => box.querySelectorAll('[' + attr + ']').forEach(b => b.onclick = () => {
+    const [k, i] = b.getAttribute(attr).split(':'); const fr = sets()[k].frames; const j = +i + d;
+    if (d === 0) { const id = fr.splice(+i, 1)[0]; unmark(id); } else if (j >= 0 && j < fr.length) [fr[i], fr[j]] = [fr[j], fr[i]];
+    refresh(); startTestIfOpen();
+  });
+  mv('data-afu', -1); mv('data-afd', 1); mv('data-afx', 0);
+  box.querySelectorAll('[data-aadd]').forEach(sel => sel.onchange = () => { if (!sel.value) return; sets()[sel.dataset.aadd].frames.push(sel.value); markFrame(sel.value); refresh(); startTestIfOpen(); });
+  const add = $('#animAdd'); if (add) add.onclick = () => {
+    const s0 = sets(); const free = RIG.ANIM_KEYS.map(k => k[0]).find(k => !s0[k]); if (!free) return;
+    s0[free] = { fps: 8, loop: true, frames: [l.id] }; refresh(); startTestIfOpen();
+  };
+}
+
+// ---------------------------------------------------------------- health screen
+let selHs = null, hsDrag = null;
+const hsImg = {};
+for (const k in RIG.HS_IMAGES) { const im = new Image(); im.onload = () => { if (tab === 'health') draw(); }; im.src = RIG.HS_IMAGES[k]; hsImg[k] = im; }
+// every item on the health screen: the game's 15 parts + one per injurable piece (same default spots as the mod)
+function hsItems() {
+  if (!doc) return [];
+  const items = RIG.HS_LAYOUT.map(L => {
+    const c = doc.healthScreen[L.part];
+    const hasArt = c && c.outline;
+    return { key: L.part, label: RIG.PART_LABEL[L.part], x: c && c.x !== undefined ? c.x : L.x, y: c && c.y !== undefined ? c.y : L.y,
+      w: hasArt ? c.outline.w * (c.scale || 3) : L.w, h: hasArt ? c.outline.h * (c.scale || 3) : L.h,
+      mirror: c ? !!c.mirror && (hasArt || true) : L.mirror, rot: c ? (c.rotation || 0) : 0,
+      outline: hasArt ? c.outline : null, middle: c && c.middle ? c.middle : null, vOutline: L.outline, vMiddle: L.middle, custom: !!c, vanillaMirror: L.mirror };
+  });
+  let ci = 0;
+  for (const ch of doc.chains) {
+    if (!ch.injury || !ch.injury.enabled) continue;
+    ch.segs.forEach((sg, k) => {
+      const key = 'seg:' + sg.layer, c = doc.healthScreen[key], hasArt = c && c.outline;
+      items.push({ key, label: (ch.injury.name || ch.name) + (ch.segs.length > 1 ? ' ' + (k + 1) : ''), extra: true,
+        x: c && c.x !== undefined ? c.x : -150 - k * 58, y: c && c.y !== undefined ? c.y : 20 - ci * 70,
+        w: hasArt ? c.outline.w * (c.scale || 3) : (c ? 72 : 54), h: hasArt ? c.outline.h * (c.scale || 3) : (c ? 75 : 56),
+        mirror: c ? !!c.mirror : false, rot: c ? (c.rotation || 0) : 0, outline: hasArt ? c.outline : null, middle: c && c.middle ? c.middle : null,
+        vOutline: 'crusOutline', vMiddle: 'crusMiddle', custom: !!c });
+    });
+    ci++;
+  }
+  return items;
+}
+function hsView(W, H) { const z = Math.min(W, H) / 780; return { z, cx: W / 2, cy: H / 2 }; }
+function drawHealth(W, H) {
+  ctx.fillStyle = '#101115'; ctx.fillRect(0, 0, W, H);
+  if (!doc) return;
+  const v = hsView(W, H);
+  ctx.strokeStyle = '#2a2c34'; ctx.strokeRect(v.cx - 342 * v.z, v.cy - 342 * v.z, 684 * v.z, 684 * v.z);
+  ctx.imageSmoothingEnabled = false;
+  for (const it of hsItems()) {
+    ctx.save(); ctx.translate(v.cx + it.x * v.z, v.cy - it.y * v.z); ctx.rotate(-it.rot * Math.PI / 180); ctx.scale(it.mirror ? -1 : 1, 1);
+    const w = it.w * v.z, h = it.h * v.z;
+    const mid = it.middle ? layerCanvas(it.middle) : (it.outline ? layerCanvas(it.outline) : hsImg[it.vMiddle]);
+    const out = it.outline ? layerCanvas(it.outline) : hsImg[it.vOutline];
+    ctx.globalAlpha = 0.55; if (mid && (mid.width || mid.naturalWidth)) ctx.drawImage(mid, -w / 2, -h / 2, w, h);
+    ctx.globalAlpha = 1; if (out && (out.width || out.naturalWidth)) ctx.drawImage(out, -w / 2, -h / 2, w, h);
+    ctx.restore();
+    if (it.extra || it.key === selHs) {
+      ctx.strokeStyle = it.key === selHs ? '#8f5bff' : 'rgba(255,207,74,.6)'; ctx.lineWidth = it.key === selHs ? 2 : 1;
+      ctx.strokeRect(v.cx + it.x * v.z - w / 2 - 2, v.cy - it.y * v.z - h / 2 - 2, w + 4, h + 4);
+      ctx.fillStyle = '#ffcf4a'; ctx.font = '11px system-ui'; if (it.extra) ctx.fillText(it.label, v.cx + it.x * v.z - w / 2, v.cy - it.y * v.z - h / 2 - 5);
+    }
+  }
+}
+function hsAt(sx, sy) {
+  const d = window.devicePixelRatio || 1, v = hsView(cv.width / d, cv.height / d);
+  const items = hsItems();
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i]; const x = v.cx + it.x * v.z, y = v.cy - it.y * v.z;
+    if (Math.abs(sx - x) <= it.w * v.z / 2 && Math.abs(sy - y) <= it.h * v.z / 2) return { it, v };
+  }
+  return null;
+}
+function hsEntry(key) { return doc.healthScreen[key] = doc.healthScreen[key] || { scale: 3 }; }
+function hsInspector() {
+  const it = hsItems().find(i => i.key === selHs);
+  if (!it) return `<h2>Health screen</h2><div class="sec muted">Click a part to give it your own art or move it. Injurable pieces (tail, wings…) show up here once you tick <i>Can be injured</i> on them.<br><br>Tip: press <b>F9</b> in game to save the game's own health screen art, repaint it, and load it with <b>Add sprites…</b> (files named <code>health_Head_outline.png</code> etc. are placed automatically).</div>`;
+  const c = doc.healthScreen[it.key] || {};
+  return `<h2>Health screen: ${esc(it.label)}</h2><div class="sec">
+    <div class="row"><label>Outline image</label><button id="hsOut">${c.outline ? 'Replace…' : 'Load…'}</button>${c.outline ? `<span class="pill">${c.outline.w}×${c.outline.h}</span>` : '<span class="muted">game art</span>'}</div>
+    <div class="row"><label>Middle image</label><button id="hsMid">${c.middle ? 'Replace…' : 'Load…'}</button>${c.middle ? `<span class="pill">${c.middle.w}×${c.middle.h}</span>` : '<span class="muted">same as outline</span>'}</div>
+    <div class="muted">The outline is tinted by skin health, the middle by muscle health and infection, just like the game's parts. Draw both the same size.</div>
+    <div class="row"><label>Pixel scale</label><input id="hsScale" type="number" min="1" max="8" step="0.5" value="${c.scale || 3}" style="width:70px"><span class="muted">the game uses 3</span></div>
+    <div class="row"><label>Rotation°</label><input id="hsRot" type="number" step="5" value="${c.rotation || 0}" style="width:70px"></div>
+    <div class="row"><label>Mirror</label><input id="hsMir" type="checkbox" ${it.mirror ? 'checked' : ''}></div>
+    <div class="row"><label>Position</label><span class="muted">${Math.round(it.x)}, ${Math.round(it.y)} — drag it on the canvas</span></div>
+    <div class="row"><button id="hsReset">Reset to default</button></div>
+    <input id="hsFile" type="file" accept=".png" hidden>
+  </div>`;
+}
+function bindHsInspector() {
+  const it = hsItems().find(i => i.key === selHs); if (!it) return;
+  let slot = null;
+  $('#hsOut').onclick = () => { slot = 'outline'; $('#hsFile').click(); };
+  $('#hsMid').onclick = () => { slot = 'middle'; $('#hsFile').click(); };
+  $('#hsFile').onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return; const e2 = hsEntry(it.key);
+    if (e2.x === undefined) { e2.x = it.x; e2.y = it.y; e2.mirror = it.mirror; }
+    e2[slot] = await decodePng(f); renderInspector(); draw();
+  };
+  $('#hsScale').oninput = (e) => { hsEntry(it.key).scale = +e.target.value || 3; draw(); };
+  $('#hsRot').oninput = (e) => { hsEntry(it.key).rotation = +e.target.value || 0; draw(); };
+  $('#hsMir').onchange = (e) => { const e2 = hsEntry(it.key); e2.mirror = e.target.checked; if (e2.x === undefined) { e2.x = it.x; e2.y = it.y; } draw(); };
+  $('#hsReset').onclick = () => { delete doc.healthScreen[it.key]; renderInspector(); draw(); };
+}
+
+// ---------------------------------------------------------------- export
+async function pngBytes(img) {
+  const c = layerCanvas(img);
+  const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+  return new Uint8Array(await blob.arrayBuffer());
+}
+$('#btnExport').onclick = async () => {
+  if (!doc) { toast('Open a character first'); return; }
+  const { rig, files } = RIG.buildRig(doc);
+  if (!rig.chains.length && !rig.spriteSwaps) { toast('Nothing to export yet: give some layers a role first.'); return; }
+  const folder = (doc.name || 'MyCharacter').replace(/[^A-Za-z0-9_\-]+/g, '_');
+  const entries = [{ name: folder + '/rig.json', data: new TextEncoder().encode(JSON.stringify(rig, null, 2)) }];
+  for (const f in files) entries.push({ name: folder + '/' + f, data: files[f].raw ? files[f].raw : await pngBytes(files[f]) });
+  const zip = RIG.zip(entries);
+  const fname = folder + '.zip';
+  let saved = false;
+  try {
+    if (window.claude && window.claude.use) {
+      const dl = await window.claude.use('downloads');
+      if (dl) { await dl.save({ filename: fname, data: new Blob([zip]) }); saved = true; toast('Saved ' + fname + ' — unzip it into BepInEx\\plugins\\AdvancedRigs\\Rigs\\', 6000); }
+    }
+  } catch (e) { if (e && e.code === 'declined') { toast('Export cancelled'); return; } }
+  if (!saved) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([zip], { type: 'application/zip' })); a.download = fname;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    toast('Exported ' + fname + ' — unzip it into BepInEx\\plugins\\AdvancedRigs\\Rigs\\', 6000);
+  }
+};
+
+$('#actPrev').innerHTML = RIG.ACTIONS.filter(([k]) => k !== 'always').map(([k, lab]) => `<option value="${k}">Action: ${lab}</option>`).join('');
+
+// ---------------------------------------------------------------- start
+resize(); renderInspector(); hint('Open your character to begin. New here? Click <b>How to</b>.');
+window.__rigEditor = { openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); } };
+})();
+
+</script>
+</body>
+</html>
