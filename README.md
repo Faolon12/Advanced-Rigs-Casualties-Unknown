@@ -11,7 +11,7 @@ Turn a layered drawing into a fully custom character, with moving tails, ears, h
 - **Automatic setup:** body parts are matched from layer names (Head, Chest, Abdomen, Shoulder/Arm/Hand Front/Back, Thigh, Calf, Foot/Hoof, Tail1..N, Ear, Fringe, Hair, Wing, Antler...), lined up on the game's skeleton, and given bones.
 - **Bones:** drag joints (●) and tips (◆) on the canvas, or click *Auto bones*. Chains can have any number of pieces.
 - **Spring-bone physics** with presets (fluffy tail, whip tail, hair/ears, wings, rigid) and sliders for damping, springiness, stiffness, gravity, drag, wag and wing flap.
-- **Live test:** idle, walk, run, jump, turn, play dead, or grab the character with the mouse and shake it. The simulation is the same as the mod's.
+- **Live test:** idle, walk, run, jump, turn, play dead, or grab the character with the mouse and shake it. The simulation is the same as the mod's mostly, some issues and bugs.
 - **Injurable parts** (optional, off by default): tick *Can be injured* on any tail, wing or hair part. Each piece then works like a real limb in game: it can be hit, bleed, get infected, have shards pulled out, and be bandaged, splinted, amputated or torn off.
 - **Injury art:** art for every state of injurable pieces (scratched, wounded, mangled, bleeding, bandaged, tourniquet, infected, shrapnel, broken, dislocated, splinted, stump), plus the head's states (jaw ripped off, healed scars...). Preview any state, or a part torn off, in the Test tab.
 - **Health screen editor:** the game's health screen with every part. Drag parts to place them, and give any part (the game's own 15 or your injurable pieces) its own outline/middle art.
