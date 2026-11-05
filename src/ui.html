@@ -166,8 +166,10 @@ aside.right{overflow-x:hidden}
   <button id="btnBrowse" title="See every asset from your game's template and pick which ones to use">Browse template</button>
   <button id="btnTemplate" title="Start from the game's own character (every body part, mouth and jaw state and eye, put together exactly like the game). Comes from YOUR game: the mod saves it to BepInEx\plugins\AdvancedRigs\GameTemplate the first time you play (or press F10).">Game template</button>
   <span id="gameBadge" class="pill" style="cursor:pointer" title="The game template (sprites, wearables, animations) from your game. Click to load / reload it."></span>
-  <button id="btnSprites" title="Add PNGs to this character: body parts, tail pieces, wings, frames (placed by name) — or skins / gear / health screen art named like the game's sprites (F9 in game saves them)">Add images…</button>
+  <button id="btnSprites" title="Add PNGs to this character: body parts, tail pieces, wings, frames (placed by name) — or skins / gear / health screen art named like the game's sprites (F9 in game saves them)">Add PNG…</button>
   <input id="fileSprites" type="file" multiple accept=".png,.json" hidden>
+  <button id="btnAddPsd" title="Add a PSD / PSB to this character: layers with the same names are updated, new ones are added (with no character open, it starts a new one)">Add PSD / PSB…</button>
+  <select id="dlMenu" title="Download every layer of this character, to repaint in Photoshop, Krita, GIMP, Photopea…" style="width:150px;flex:none"><option value="">⬇ Download all…</option><option value="psd">as one PSD</option><option value="psb">as one PSB (large)</option><option value="png">as PNGs (one per layer)</option></select>
   <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
   <span class="muted">Name</span><input id="name" type="text" value="MyCharacter" style="width:150px">
   <div class="grow"></div>

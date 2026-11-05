@@ -168,6 +168,13 @@ async function addSprites(list) {
   toast((swaps ? swaps + ' skin/gear sprites' : '') + (swaps && hs ? ' and ' : '') + (hs ? hs + ' health screen images' : '') + ' added', 4000);
 }
 $('#btnSprites').onclick = () => $('#fileSprites').click();
+$('#btnAddPsd').onclick = () => {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.psd,.psb';
+  inp.onchange = async () => { const f = inp.files[0]; if (!f) return; if (doc && doc.layers.length) await updateFromPsdFile(f); else await openFiles([f]); };
+  inp.click();
+};
+$('#dlMenu').onchange = (e) => { const v = e.target.value; e.target.value = ''; if (!doc || !doc.layers.length) { toast('Nothing to download yet.'); return; }
+  if (v === 'psd') exportPsd(false); else if (v === 'psb') exportPsd(true); else if (v === 'png') downloadAllLayers(); };
 // ---- the game template: comes from the player's own game (the mod writes BepInEx/plugins/AdvancedRigs/GameTemplate).
 // Nothing of the game is bundled with the editor. It's kept in this browser after the first load.
 RIG.GAME = null;
@@ -407,10 +414,20 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 let dragRow = null;
 // ---- layer list: folders (only for keeping things tidy; nothing changes in game), several layers selected at once
-let selSet = new Set();
+let selSet = new Set(), dragFolder = null;
+// while dragging in the layer list, scroll it when the pointer is near its top / bottom edge
+function layerScroller() { let el = $('#layers'); while (el && el !== document.body) { const cs = getComputedStyle(el); if (/(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight) return el; el = el.parentElement; } return null; }
+document.addEventListener('dragover', (e) => {
+  if (!dragRow && !dragFolder) return; const sc = layerScroller(); if (!sc) return;
+  const r = sc.getBoundingClientRect(), edge = 60;
+  if (e.clientX < r.left || e.clientX > r.right) return;
+  if (e.clientY < r.top + edge) sc.scrollTop -= Math.ceil((r.top + edge - e.clientY) / 3) + 4;
+  else if (e.clientY > r.bottom - edge) sc.scrollTop += Math.ceil((e.clientY - (r.bottom - edge)) / 3) + 4;
+});
 const folderOf = (l) => l.folder && doc.folders ? doc.folders.find(f => f.id === l.folder) : null;
 function shownRows() { // the layer rows in list order (top of the stack first), folders' layers right under their folder
   const rows = [...doc.layers].filter(l => !l.cutSource).reverse(); const out = [], done = new Set();
+  for (const f of (doc.folders || [])) if (!doc.layers.some(o => o.folder === f.id && !o.cutSource)) out.push({ f, members: [] }); // empty folders: at the top until something goes in
   for (const l of rows) {
     const f = folderOf(l);
     if (!f) { out.push({ l }); continue; }
@@ -445,10 +462,18 @@ function folderRow(f, members) {
   row.ondblclick = (e) => { e.stopPropagation(); const nm = prompt('Folder name', f.name); if (nm && nm.trim()) { f.name = nm.trim(); renderLayers(); } };
   row.querySelector('[data-k=ung]').onclick = () => { pushUndo(); for (const l of members) delete l.folder; doc.folders = doc.folders.filter(x => x !== f); renderLayers(); toast('Ungrouped ' + f.name + '. Ctrl+Z to undo.'); };
   row.querySelector('[data-k=del]').onclick = () => { if (!confirm('Delete the folder "' + f.name + '" and its ' + members.length + ' layer(s)?')) return; deleteLayers(members); doc.folders = doc.folders.filter(x => x !== f); renderLayers(); };
-  // drop layers on a folder to put them in it (their drawing order doesn't change)
-  row.ondragover = (e) => { if (!dragRow) return; e.preventDefault(); row.classList.add('drop'); };
+  // drag a folder to move all its layers up / down the list (in front / behind) together
+  row.draggable = true;
+  row.ondragstart = (e) => { dragFolder = f.id; dragRow = null; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', f.id); } catch (er) { } };
+  row.ondragend = () => { dragFolder = null; dragRow = null; };
+  // drop layers on a folder to put them in it (their drawing order doesn't change); drop a folder on a folder to move it there
+  row.ondragover = (e) => { if (!dragRow && !dragFolder) return; e.preventDefault(); row.classList.add('drop'); };
   row.ondragleave = () => row.classList.remove('drop');
-  row.ondrop = (e) => { e.preventDefault(); row.classList.remove('drop'); const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src) return;
+  row.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); row.classList.remove('drop');
+    if (dragFolder) { const df = doc.folders.find(x => x.id === dragFolder); dragFolder = null; if (!df || df === f || !members.length) return;
+      const mine = doc.layers.filter(o => o.folder === df.id); if (!mine.length) { doc.folders.splice(doc.folders.indexOf(df), 1); doc.folders.splice(doc.folders.indexOf(f), 0, df); renderLayers(); return; }
+      pushUndo(); const top = members.reduce((a, b) => doc.layers.indexOf(a) > doc.layers.indexOf(b) ? a : b); moveLayersTo(mine, top, true); refresh(); startTestIfOpen(); return; }
+    const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src) return;
     pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src]; for (const l of list) l.folder = f.id; f.open = true; renderLayers(); };
   return row;
 }
@@ -470,13 +495,19 @@ function layerRow(l, inF, flat) {
   };
   // drag rows to change what's drawn in front (top of the list = in front); several selected rows move together
   row.draggable = true;
-  row.ondragstart = (e) => { dragRow = l.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', l.id); } catch (er) { } };
-  row.ondragover = (e) => { if (!dragRow) return; e.preventDefault(); const r = row.getBoundingClientRect(); row.style.boxShadow = (e.clientY < r.top + r.height / 2) ? 'inset 0 2px 0 var(--acc2)' : 'inset 0 -2px 0 var(--acc2)'; };
+  row.ondragend = () => { dragRow = null; dragFolder = null; };
+  row.ondragstart = (e) => { dragRow = l.id; dragFolder = null; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', l.id); } catch (er) { } };
+  row.ondragover = (e) => { if (!dragRow && !dragFolder) return; e.preventDefault(); const r = row.getBoundingClientRect(); row.style.boxShadow = (e.clientY < r.top + r.height / 2) ? 'inset 0 2px 0 var(--acc2)' : 'inset 0 -2px 0 var(--acc2)'; };
   row.ondragleave = () => { row.style.boxShadow = ''; };
   row.ondrop = (e) => {
     e.preventDefault(); e.stopPropagation(); row.style.boxShadow = '';
-    const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src || src === l) return;
     const r = row.getBoundingClientRect(); const above = e.clientY < r.top + r.height / 2; // above in the list = in front
+    if (dragFolder) { // a whole folder dropped here: its layers move next to this one, still in their folder
+      const df = doc.folders.find(x => x.id === dragFolder); dragFolder = null; if (!df) return;
+      const mine = doc.layers.filter(o => o.folder === df.id && o !== l); if (!mine.length) return;
+      pushUndo(); moveLayersTo(mine, l, above); refresh(); startTestIfOpen(); return;
+    }
+    const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src || src === l) return;
     pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src];
     moveLayersTo(list, l, above);
     // dropped among a folder's layers = into that folder; dropped outside = out of it
@@ -491,9 +522,10 @@ function newFolderFrom(list, name) {
   doc.folders.push(f); for (const l of list) l.folder = f.id; return f;
 }
 $('#lyFolder').onclick = () => {
-  if (!doc) return; const list = selectedLayers(); if (!list.length) { toast('Select layers first (Ctrl/Shift-click to pick several).'); return; }
+  if (!doc) return; const list = selectedLayers();
   const nm = prompt('Folder name', 'Folder ' + ((doc.folders || []).length + 1)); if (nm === null) return;
   pushUndo(); newFolderFrom(list, nm.trim() || undefined); renderLayers();
+  if (!list.length) toast('Empty folder made. Drag layers onto it to fill it.');
 };
 $('#lyDelSel').onclick = () => { if (!doc) return; const list = selectedLayers(); if (!list.length) { toast('Select layers first.'); return; } if (list.length > 1 && !confirm('Delete ' + list.length + ' layers?')) return; deleteLayers(list); };
 
@@ -750,7 +782,6 @@ function applyPsdFolders(parsed) {
     let f = doc.folders.find(x => x.name === pl.folder); if (!f) { f = { id: RIG.newId(), name: pl.folder, open: false }; doc.folders.push(f); }
     l.folder = f.id;
   }
-  doc.folders = doc.folders.filter(f => doc.layers.some(o => o.folder === f.id));
 }
 // bring an edited PSD back: same names update in place (bones, roles, animations kept), anything new is added
 function updateFromPsd(parsed) {
@@ -881,7 +912,6 @@ function deleteLayers(list) {
   if (doc.chains.some(c => c.attachTo === 'tail')) doc.hideVanillaTail = true;
   const tailNote = hadTail && !doc.chains.some(c => c.attachTo === 'tail') ? ' The game\u2019s own tail stays hidden (untick Hide game tail on the Rig tab to bring it back).' : '';
   selLayer = null; if (selChain && !RIG.chain(doc, selChain)) selChain = null; selSet.clear();
-  if (doc.folders) doc.folders = doc.folders.filter(f => doc.layers.some(o => o.folder === f.id));
   imgCache.clear(); refresh(); startTestIfOpen();
   toast('Deleted ' + (list.length > 1 ? list.length + ' layers' : l.name) + (set.size > list.length ? ' (+' + (set.size - list.length) + ' that belonged to them)' : '') + '. Ctrl+Z to undo.' + tailNote, tailNote ? 7000 : 4000);
 }
@@ -2152,7 +2182,7 @@ function addLoopFrames(l, frames, fps, tag) { // frames: [{w,h,rgba}] the size o
   });
   doc.layers.forEach((o, i) => o.order = i);
   // the frames go in their own folder (closed), so the layer list stays short
-  doc.folders = (doc.folders || []).filter(f => doc.layers.some(o => o.folder === f.id));
+  doc.folders = (doc.folders || []).filter(f => !(f.name === l.name + ' animation' && !doc.layers.some(o => o.folder === f.id))); // the old frames' folder
   if (ids.length) { const f = newFolderFrom(ids.map(id => RIG.layer(doc, id)), l.name + ' animation'); f.open = false; }
   doc.anims[l.id] = doc.anims[l.id] || {}; doc.anims[l.id].always = { fps, loop: true, frames: ids };
   imgCache.clear(); refresh(); startTestIfOpen();
