@@ -1726,19 +1726,17 @@ function animPointerMove(sx, sy) {
   setKey(AS.drag.bone, { r: +(AS.drag.r0 + d).toFixed(1) }); drawDope();
 }
 
-// ---- the test level (units, y up, ground at 0): walls to wall-jump between, a ladder, a ledge, a pool
+// ---- the test level (units, y up, ground at 0): walls to wall-jump between, a ladder, a crate (no water: it froze the character)
 const LEVEL_SMALL = {
-  boxes: [{ x0: -60, x1: 8, y0: -6, y1: 0 }, { x0: 14, x1: 60, y0: -6, y1: 0 }, { x0: 8, x1: 14, y0: -8, y1: -3.6 },
+  boxes: [{ x0: -60, x1: 60, y0: -6, y1: 0 },
     { x0: -13, x1: -12, y0: 0, y1: 18 }, { x0: 18, x1: 19, y0: 0, y1: 18 }, { x0: 3, x1: 6, y0: 0, y1: 1.6 }],
-  ladder: { x0: -8, x1: -7, y0: 0, y1: 9 },
-  water: { x0: 8, x1: 14, y0: -3.6, y1: -0.5 }
+  ladder: { x0: -8, x1: -7, y0: 0, y1: 9 }
 };
 // the same level at the game's scale (its character runs at 25 units/s and jumps ~6 units)
 const LEVEL_GAME = {
-  boxes: [{ x0: -120, x1: 20, y0: -8, y1: 0 }, { x0: 32, x1: 120, y0: -8, y1: 0 }, { x0: 20, x1: 32, y0: -12, y1: -6.5 },
+  boxes: [{ x0: -120, x1: 120, y0: -8, y1: 0 },
     { x0: -31, x1: -30, y0: 0, y1: 40 }, { x0: 46, x1: 47, y0: 0, y1: 40 }, { x0: 8, x1: 13, y0: 0, y1: 3 }],
-  ladder: { x0: -19, x1: -18, y0: 0, y1: 16 },
-  water: { x0: 20, x1: 32, y0: -6.5, y1: -0.5 }
+  ladder: { x0: -19, x1: -18, y0: 0, y1: 16 }
 };
 let LEVEL = LEVEL_SMALL;
 const gameMode = () => !!(RIG.GAME && RIG.GAME.clips && RIG.GAME.clips.ExperimentIdle);
@@ -1779,7 +1777,7 @@ function playStep(T, dt) {
   const up = keys.has('w') || keys.has('arrowup'), dn = keys.has('s') || keys.has('arrowdown');
   const lying = T.down || T.sleep || T.deadT;
   const onLadder = b.x > LEVEL.ladder.x0 - 0.3 && b.x < LEVEL.ladder.x1 + 0.3 && b.y < LEVEL.ladder.y1 && b.y + 2 > LEVEL.ladder.y0;
-  const W = LEVEL.water; T.inWater = b.x > W.x0 && b.x < W.x1 && b.y < W.y1 - 1.5;
+  T.inWater = false;
   T.jumpCd = Math.max(0, T.jumpCd - dt); T.jumpQueued = Math.max(0, (T.jumpQueued || 0) - dt);
   T.sinceGround += dt; T.sinceSlidL += dt; T.sinceSlidR += dt;
   if (lying) { T.climbing = false; T.vx *= 0.9; }
@@ -1972,7 +1970,7 @@ function loop(now) {
   for (let gx = Math.floor((T.camX - W / 2 / z) / 2) * 2; gx < T.camX + W / 2 / z; gx += 2) { ctx.beginPath(); ctx.moveTo(sx(gx), 0); ctx.lineTo(sx(gx), H); ctx.stroke(); }
   for (let gy = Math.floor(T.camY / 2) * 2 - 14; gy < T.camY + 16; gy += 2) { const y = sy(gy); if (y < 0 || y > H) continue; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
   if (A === 'play' && !gearMode && !animMode) { // the level
-    ctx.fillStyle = 'rgba(70,130,220,.22)'; const Wt = LEVEL.water; ctx.fillRect(sx(Wt.x0), sy(Wt.y1), (Wt.x1 - Wt.x0) * z, (Wt.y1 - Wt.y0) * z);
+    
     const L = LEVEL.ladder; ctx.strokeStyle = '#6b5a3a'; ctx.lineWidth = Math.max(1, z * 0.08);
     ctx.beginPath(); ctx.moveTo(sx(L.x0), sy(L.y0)); ctx.lineTo(sx(L.x0), sy(L.y1)); ctx.moveTo(sx(L.x1), sy(L.y0)); ctx.lineTo(sx(L.x1), sy(L.y1));
     for (let y = L.y0 + 0.6; y < L.y1; y += 0.9) { ctx.moveTo(sx(L.x0), sy(y)); ctx.lineTo(sx(L.x1), sy(y)); } ctx.stroke();

@@ -31,7 +31,7 @@ Turn a layered drawing into a fully custom character, with moving tails, ears, h
 - **Undo / redo:** Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z).
 - **Layer order:** drag layers in the list (top = in front) or use *▲ Forward / ▼ Back*. The export keeps your stacking in game.
 - **Injury groups:** pick which pieces of a moving part can be hurt and which pieces form one limb.
-- **Test it like the game:** with the game template loaded, the test uses the game's own animations, blend trees and movement numbers; play with the keyboard (A/D, Shift to walk, Space to jump and wall-jump, S crouch, W/S ladders, swim in the pool, F attack, T talk, R ragdoll, Z sleep, X dead). The state picked, the eyes and the mouth follow the same rules as the game and the mod. Demos for every state too.
+- **Test it like the game:** with the game template loaded, the test uses the game's own animations, blend trees and movement numbers; play with the keyboard (A/D, Shift to walk, Space to jump and wall-jump, S crouch, W/S ladders, F attack, T talk, R ragdoll, Z sleep, X dead). The state picked, the eyes and the mouth follow the same rules as the game and the mod. Demos for every state too.
 - **Mouth & eyes:** give the head *Mouth half open* / *Mouth open* art and it moves when the character talks, whimpers, barks, yawns or pants in game.
 - **Sounds:** keep the game's character sounds, or pick your own `.wav`/`.ogg`/`.mp3` files for pain, bark, pant, growl, yawn and more (or any game sound by name). Preview them in the character panel.
 - **Export** a ready-to-use rig folder as a `.zip`.
