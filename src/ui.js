@@ -82,9 +82,11 @@ async function openFiles(list) {
         if (hits >= Math.max(1, parsed.layers.length / 3) && confirm('This file has ' + hits + ' of your character\'s layers.\n\nOK = update your character from it (keeps bones, roles, animations; new layers are added)\nCancel = open it as a new character')) { updateFromPsd(parsed); return; }
       }
       doc = RIG.newDoc(psd.name.replace(/\.ps[db]$/i, ''), parsed.width, parsed.height, parsed.layers);
-      RIG.autoAssign(doc);
+      if (!manualMode) RIG.autoAssign(doc);
+      if ((doc.ppu || 8) > 8) setTimeout(() => toast('This art looks drawn at ' + (doc.ppu / 8) + '× the game\'s size: kept sharp (HD). Change it or shrink it under Character → Art scale.', 8000), 4200);
+      if (doc.layers.some(l => l.suggest)) setTimeout(() => toast('Some layer names meant nothing to the editor: it guessed from where they sit. Check the ✓ / ✗ in the layer list.', 7000), doc.ppu > 8 ? 12500 : 4200);
       applyPsdFolders(parsed);
-      toast('Opened ' + psd.name + ' — ' + doc.layers.length + ' layers, parts matched automatically');
+      toast('Opened ' + psd.name + ' — ' + doc.layers.length + ' layers' + (manualMode ? '. Manual setup: nothing assigned or moved. Set roles on the left (Ctrl/Shift-click several → Set role), then Move skeleton to line it up.' : ', parts matched automatically'), manualMode ? 9000 : 4000);
     } else if (json) {
       const rig = JSON.parse(await json.text());
       const images = {}; for (const f of pngs) {
@@ -146,7 +148,10 @@ async function addImages(list) {
     if (replaced) { imgCache.clear(); refresh(); startTestIfOpen(); toast(replaced + ' layer' + (replaced === 1 ? '' : 's') + ' updated from your edited PNGs', 4000); }
     if (!imgs.length) { if (game.length) await addSprites(game); return; }
     pushUndo();
-    const added = RIG.addImages(doc, imgs);
+    const added = manualMode ? imgs.map(im => { // manual: where the file says, or the middle of the canvas; no role
+      const c = RIG.crop(im.rgba, im.w, im.h); if (!c) return null; const full = im.w === doc.width && im.h === doc.height;
+      const l = { id: RIG.newId(), name: im.name, x: full ? c.x : Math.round(doc.width / 2 - c.w / 2), y: full ? c.y : Math.round(doc.height / 2 - c.h / 2), w: c.w, h: c.h, rgba: c.rgba, order: doc.layers.length, hidden: false, role: { type: 'ignore' } };
+      doc.layers.push(l); return l; }).filter(Boolean) : RIG.addImages(doc, imgs);
     imgCache.clear(); $('#drop').style.display = 'none';
     const lost = added.filter(l => l.role.type === 'ignore');
     selLayer = added.length === 1 ? added[0].id : selLayer; selChain = null;
@@ -228,8 +233,10 @@ $('#gameBadge').onclick = () => $('#fileTpl').click();
 function gameLayer(d, spriteName, name, role, part) {
   const G = RIG.GAME, im = G.images[spriteName], sp = G.sprites[spriteName]; if (!im || !sp) return null;
   const c = RIG.crop(im.rgba, im.w, im.h); if (!c) return null;
-  const J = RIG.J(d, part), px = sp.pivot ? sp.pivot[0] : im.w / 2, py = sp.pivot ? sp.pivot[1] : im.h / 2;
-  const l = { id: RIG.newId(), name, x: Math.round(J.x - px + c.x), y: Math.round(J.y - (im.h - py) + c.y), w: c.w, h: c.h, rgba: c.rgba, hidden: false, order: d.layers.length, role };
+  const k = Math.max(1, Math.round((d.ppu || 8) / 8)); // an HD character: the game's sprite blown up to match
+  const J = RIG.J(d, part), px = (sp.pivot ? sp.pivot[0] : im.w / 2) * k, py = (sp.pivot ? sp.pivot[1] : im.h / 2) * k;
+  const l = { id: RIG.newId(), name, x: Math.round(J.x - px + c.x * k), y: Math.round(J.y - (im.h * k - py) + c.y * k), w: c.w, h: c.h, rgba: c.rgba, hidden: false, order: d.layers.length, role };
+  if (k > 1) { const t = { x: 0, y: 0, w: c.w, h: c.h, rgba: c.rgba }; const tmp = { layers: [t], chains: [], align: { x: 0, y: 0 }, width: 8, height: 8 }; RIG.resizeArt(tmp, k); l.w = t.w; l.h = t.h; l.rgba = t.rgba; RIG.PPU = d.ppu || 8; }
   const rot = part !== 'tail' && RIG.REST[part] ? RIG.REST[part][2] : 0;
   if (rot && role.type === 'part') l.spriteRot = rot; // drawn the way the game turns that sprite (the feet)
   d.layers.push(l); return l;
@@ -425,7 +432,8 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 let dragRow = null;
 // ---- layer list: folders (only for keeping things tidy; nothing changes in game), several layers selected at once
-let selSet = new Set(), dragFolder = null;
+let selSet = new Set(), dragFolder = null, lyQuery = '', lyKind = '', xray = false;
+let manualMode = (() => { try { return localStorage.getItem('luna-ars-manual') === '1'; } catch (e) { return false; } })();
 // while dragging in the layer list, scroll it when the pointer is near its top / bottom edge
 function layerScroller() { let el = $('#layers'); while (el && el !== document.body) { const cs = getComputedStyle(el); if (/(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight) return el; el = el.parentElement; } return null; }
 document.addEventListener('dragover', (e) => {
@@ -463,8 +471,25 @@ function renderLayers() {
   if (!selLayer && selSet.size === 1) selSet.clear();
   for (const id of [...selSet]) if (!RIG.layer(doc, id)) selSet.delete(id);
   box.innerHTML = '';
+  // search / filter: a flat list of the matching layers
+  if (lyQuery || lyKind) {
+    const q = lyQuery.toLowerCase();
+    const kindOf = (l) => l.role.type === 'state' ? 'eye' : l.role.type;
+    const list = [...doc.layers].filter(l => !l.cutSource).reverse().filter(l => (!q || l.name.toLowerCase().includes(q) || (folderOf(l) && folderOf(l).name.toLowerCase().includes(q))) && (!lyKind || kindOf(l) === lyKind));
+    if (!list.length) { box.innerHTML = '<div class="empty">No layers match.</div>'; return; }
+    for (const l of list) box.appendChild(layerRow(l, false, list));
+    updateBulk(); const sa = $('#lySugAll'); if (sa) sa.style.display = doc.layers.some(l => l.suggest && l.role.type === 'ignore') ? '' : 'none'; return;
+  }
   const rows = shownRows(); const flat = rows.filter(r => r.l).map(r => r.l);
   for (const r of rows) box.appendChild(r.f ? folderRow(r.f, r.members) : layerRow(r.l, r.inF, flat));
+  const end = document.createElement('div'); end.className = 'lyEnd'; end.textContent = 'Drop here: back of the list, outside folders';
+  end.ondragover = (e) => { if (!dragRow) return; e.preventDefault(); end.classList.add('drop'); };
+  end.ondragleave = () => end.classList.remove('drop');
+  end.ondrop = (e) => { e.preventDefault(); end.classList.remove('drop'); const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src) return;
+    pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src]; const rest = doc.layers.filter(o => !list.includes(o) && !o.cutSource);
+    if (rest.length) moveLayersTo(list, rest[0], false); for (const l of list) delete l.folder; refresh(); startTestIfOpen(); };
+  box.appendChild(end);
+  updateBulk(); const sa = $('#lySugAll'); if (sa) sa.style.display = doc.layers.some(l => l.suggest && l.role.type === 'ignore') ? '' : 'none';
 }
 function folderRow(f, members) {
   const row = document.createElement('div'); row.className = 'folderRow';
@@ -477,15 +502,26 @@ function folderRow(f, members) {
   row.draggable = true;
   row.ondragstart = (e) => { dragFolder = f.id; dragRow = null; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', f.id); } catch (er) { } };
   row.ondragend = () => { dragFolder = null; dragRow = null; };
-  // drop layers on a folder to put them in it (their drawing order doesn't change); drop a folder on a folder to move it there
-  row.ondragover = (e) => { if (!dragRow && !dragFolder) return; e.preventDefault(); row.classList.add('drop'); };
-  row.ondragleave = () => row.classList.remove('drop');
-  row.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); row.classList.remove('drop');
-    if (dragFolder) { const df = doc.folders.find(x => x.id === dragFolder); dragFolder = null; if (!df || df === f || !members.length) return;
-      const mine = doc.layers.filter(o => o.folder === df.id); if (!mine.length) { doc.folders.splice(doc.folders.indexOf(df), 1); doc.folders.splice(doc.folders.indexOf(f), 0, df); renderLayers(); return; }
-      pushUndo(); const top = members.reduce((a, b) => doc.layers.indexOf(a) > doc.layers.indexOf(b) ? a : b); moveLayersTo(mine, top, true); refresh(); startTestIfOpen(); return; }
+  // drop on a folder: middle = into it; top edge = above the folder (outside it); bottom edge = below it (outside it)
+  const zone = (e) => { const r = row.getBoundingClientRect(), y = e.clientY - r.top; return y < r.height * 0.3 ? 'above' : y > r.height * 0.7 ? 'below' : 'in'; };
+  const mark = (z) => { row.classList.toggle('drop', z === 'in'); row.style.boxShadow = z === 'above' ? 'inset 0 2px 0 var(--acc2)' : z === 'below' ? 'inset 0 -2px 0 var(--acc2)' : ''; };
+  row.ondragover = (e) => { if (!dragRow && !dragFolder) return; e.preventDefault(); mark(dragFolder ? (zone(e) === 'below' ? 'below' : 'above') : zone(e)); };
+  row.ondragleave = () => mark(null);
+  row.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); const z = zone(e); mark(null);
+    const idx = (o) => doc.layers.indexOf(o);
+    const top = members.length ? members.reduce((a, b) => idx(a) > idx(b) ? a : b) : null; // in front-most member (top of the list)
+    const bot = members.length ? members.reduce((a, b) => idx(a) < idx(b) ? a : b) : null; // back-most member
+    if (dragFolder) { const df = doc.folders.find(x => x.id === dragFolder); dragFolder = null; if (!df || df === f) return;
+      const mine = doc.layers.filter(o => o.folder === df.id);
+      if (!mine.length || !members.length) { doc.folders.splice(doc.folders.indexOf(df), 1); doc.folders.splice(doc.folders.indexOf(f) + (z === 'below' ? 1 : 0), 0, df); renderLayers(); return; }
+      pushUndo(); if (z === 'below') moveLayersTo(mine, bot, false); else moveLayersTo(mine, top, true); refresh(); startTestIfOpen(); return; }
     const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src) return;
-    pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src]; for (const l of list) l.folder = f.id; f.open = true; renderLayers(); };
+    pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src];
+    if (z === 'in') { for (const l of list) l.folder = f.id; f.open = true; renderLayers(); return; }
+    // outside the folder, just above / below it
+    const rest = members.filter(m => !list.includes(m));
+    if (rest.length) { const t = z === 'below' ? rest.reduce((a, b) => idx(a) < idx(b) ? a : b) : rest.reduce((a, b) => idx(a) > idx(b) ? a : b); moveLayersTo(list, t, z !== 'below'); }
+    for (const l of list) delete l.folder; refresh(); startTestIfOpen(); };
   return row;
 }
 function layerRow(l, inF, flat) {
@@ -495,6 +531,13 @@ function layerRow(l, inF, flat) {
   g.drawImage(layerCanvas(l), (34 - l.w * s) / 2, (34 - l.h * s) / 2, l.w * s, l.h * s);
   const right = document.createElement('div');
   right.innerHTML = `<div class="nm">${l._new ? '<span class="pill" style="background:var(--acc);color:#fff;border-color:var(--acc)">NEW</span> ' : ''}${esc(l.name)} ${l.hidden ? '<small>(hidden)</small>' : ''}</div><select>${roleOptions(l)}</select>`;
+  if (l.suggest && l.role.type === 'ignore') {
+    const sg = document.createElement('div'); sg.className = 'sug';
+    sg.innerHTML = `<span title="Guessed from where it sits on the body">${esc(l.suggest.label)}?</span><button data-k="ok" title="Yes, use that">✓</button><button data-k="no" title="No">✗</button>`;
+    sg.querySelector('[data-k=ok]').onclick = (e) => { e.stopPropagation(); applySuggestion(l); };
+    sg.querySelector('[data-k=no]').onclick = (e) => { e.stopPropagation(); delete l.suggest; renderLayers(); };
+    right.appendChild(sg);
+  }
   const sel = right.querySelector('select'); sel.value = roleValue(l);
   sel.onclick = (e) => e.stopPropagation();
   sel.onchange = () => setRole(l, sel.value);
@@ -539,6 +582,31 @@ function newFolderFrom(list, name) {
   const f = { id: RIG.newId(), name: name || 'Folder ' + (doc.folders.length + 1), open: true };
   doc.folders.push(f); for (const l of list) l.folder = f.id; return f;
 }
+$('#lySugAll').onclick = () => { const list = doc.layers.filter(l => l.suggest && l.role.type === 'ignore'); if (!list.length) return; pushUndo(); window.__noUndo = true; try { for (const l of list) applySuggestion(l); } finally { window.__noUndo = false; } refresh(); toast(list.length + ' guesses used. Ctrl+Z to undo.'); };
+$('#lySearch').oninput = (e) => { lyQuery = e.target.value.trim(); renderLayers(); };
+$('#lyFilter').onchange = (e) => { lyKind = e.target.value; renderLayers(); };
+$('#lyXray').onclick = (e) => { xray = !xray; e.target.classList.toggle('on', xray); draw(); };
+$('#manualMode').checked = manualMode;
+$('#manualMode').onchange = (e) => { manualMode = e.target.checked; try { localStorage.setItem('luna-ars-manual', manualMode ? '1' : '0'); } catch (er) { }
+  toast(manualMode ? 'Manual setup: new files keep their layout and get no roles. Set roles on the left (select several → set role), move parts, place bones yourself.' : 'Automatic setup: new files are matched and put together by their layer names.', 7000); };
+// one role for every selected layer
+function updateBulk() {
+  const bar = $('#lyBulkBar'); if (!bar) return; const list = selectedLayers();
+  if (list.length < 2) { bar.style.display = 'none'; return; }
+  bar.style.display = ''; $('#lyBulk').innerHTML = '<option value="">Set role for the ' + list.length + ' selected…</option>' + roleOptions(list[0]).replace(/ selected/g, '');
+}
+$('#lyBulk').onchange = (e) => {
+  const v = e.target.value; e.target.value = ''; const list = selectedLayers(); if (!v || !list.length) return;
+  pushUndo(); window.__noUndo = true;
+  try {
+    if (v === 'newchain') { // all of them become one moving part, top of the list = base
+      const ordered = [...list].sort((a, b) => b.order - a.order);
+      setRole(ordered[0], 'newchain'); const ch = doc.chains.find(c => c.segs.some(sg => sg.layer === ordered[0].id));
+      for (const l of ordered.slice(1)) setRole(l, 'chain:' + ch.id);
+    } else for (const l of list) setRole(l, v);
+  } finally { window.__noUndo = false; }
+  refresh(); toast('Role set for ' + list.length + ' layers. Ctrl+Z to undo.');
+};
 $('#lyFolder').onclick = () => {
   if (!doc) return; const list = selectedLayers();
   const nm = prompt('Folder name', 'Folder ' + ((doc.folders || []).length + 1)); if (nm === null) return;
@@ -555,7 +623,7 @@ function removeFrame(l) {
 }
 function setRole(l, v) {
   if (v.startsWith('frame:') || v === 'gear') return;
-  pushUndo(); delete l._new;
+  if (!window.__noUndo) pushUndo(); delete l._new;
   removeFromChain(l); removeFrame(l);
   if (v === 'ignore') l.role = { type: 'ignore' };
   else if (v.startsWith('part:')) { l.role = { type: 'part', part: v.slice(5) }; }
@@ -569,12 +637,41 @@ function setRole(l, v) {
     RIG.autoBones(doc, ch); selChain = ch.id;
   } else if (v.startsWith('chain:')) {
     const ch = RIG.chain(doc, v.slice(6)); l.role = { type: 'chain', chain: ch.id };
+    const keep = manualMode ? ch.segs.map(sg => ({ joint: sg.joint, tip: sg.tip })) : null;
     ch.segs.push({ layer: l.id, joint: RIG.center(l), tip: null, restAngle: 0, maxBend: -1 });
     RIG.autoBones(doc, ch); selChain = ch.id;
+    if (keep) keep.forEach((k, i) => { ch.segs[i].joint = k.joint; ch.segs[i].tip = k.tip; }); // manual: your bones stay where you put them
   }
   // a new tail hides the game's; taking one away never brings the game's tail back by itself (Rig tab → Hide game tail)
   if (doc.chains.some(c => c.attachTo === 'tail')) doc.hideVanillaTail = true;
+  delete l.suggest; learnRoles();
   refresh();
+}
+// remember how your layers are named: next time the same names (or the same pattern, numbers aside) are set up for you
+function learnRoles() {
+  if (!doc) return; const L = {};
+  for (const l of doc.layers) {
+    if (l.cutSource || RIG.classifyKnown(l.name)) continue; // names the editor already knows don't need teaching
+    const key = RIG.nameKey(l.name); if (!key) continue;
+    let r = null;
+    if (l.role.type === 'part') r = { t: 'part', part: l.role.part };
+    else if (l.role.type === 'eye') r = { t: 'eye', state: l.role.state };
+    else if (l.role.type === 'chain') { const ch = RIG.chain(doc, l.role.chain); if (ch) r = { t: 'chain', chain: ch.name, attachTo: ch.attachTo, preset: ch.preset, k: ch.segs.findIndex(sg => sg.layer === l.id) }; }
+    if (!r) continue;
+    L[RIG.exactKey(l.name)] = r;
+    const pr = r.t === 'chain' ? { t: 'chain', chain: r.chain, attachTo: r.attachTo, preset: r.preset } : r; // a pattern for numbered pieces of one moving part
+    const prev = L[key]; L[key] = !prev || JSON.stringify(prev) === JSON.stringify(pr) ? pr : { conflict: true };
+  }
+  Object.assign(RIG.learned, L); doc.learned = Object.assign(doc.learned || {}, L);
+  try { localStorage.setItem('luna-ars-learned', JSON.stringify(RIG.learned)); } catch (e) { }
+}
+try { Object.assign(RIG.learned, JSON.parse(localStorage.getItem('luna-ars-learned') || '{}')); } catch (e) { }
+function applySuggestion(l) {
+  const v = l.suggest && l.suggest.value; if (!v) return;
+  if (v.startsWith('part:')) { setRole(l, v); return; }
+  const at = v.slice(6); setRole(l, 'newchain');
+  const ch = doc.chains.find(c => c.segs.some(sg => sg.layer === l.id)); if (!ch) return;
+  ch.attachTo = at; applyPreset(ch, at === 'Head' ? 'Hair / ears floof' : at === 'tail' ? 'Fluffy tail' : 'Rigid (no physics)'); learnRoles(); refresh();
 }
 function guessState(name) {
   const n = name.toLowerCase();
@@ -636,7 +733,8 @@ function renderInspector() {
       <div class="row"><label>Name</label><input id="chName" type="text" value="${esc(ch.name)}" style="flex:1"></div>
       <div class="row"><label>Attached to</label><select id="chAttach" style="flex:1">${['tail', ...RIG.PARTS].map(p => `<option value="${p}" ${p === ch.attachTo ? 'selected' : ''}>${RIG.PART_LABEL[p]}</option>`).join('')}</select></div>
       <div class="muted" style="margin:8px 0 4px">Pieces (base → tip)</div>
-      ${ch.segs.map((s, i) => { const sl = RIG.layer(doc, s.layer); const na = doc.anims[s.layer] ? Object.keys(doc.anims[s.layer]).length : 0; return `<div class="seg"><span>${i + 1}. ${esc(sl ? sl.name : '?')}</span><button data-anim="${s.layer}" title="Animated sprite / frames for this piece">🎞${na ? ' ' + na : ''}</button><button data-up="${i}" title="Move toward base">↑</button><button data-down="${i}" title="Move toward tip">↓</button></div>`; }).join('')}
+      ${ch.segs.map((s, i) => { const sl = RIG.layer(doc, s.layer); const na = doc.anims[s.layer] ? Object.keys(doc.anims[s.layer]).length : 0; return `<div class="seg"><span>${i + 1}. ${esc(sl ? sl.name : '?')}</span><button data-anim="${s.layer}" title="Animated sprite / frames for this piece">🎞${na ? ' ' + na : ''}</button><button data-pin="${i}" title="${s.maxBend === 0 ? 'Rigid: this piece never bends or swings (click to let it move)' : 'Click to make this piece rigid: no bending, no physics (the pieces after it still swing)'}" ${s.maxBend === 0 ? 'class="on"' : ''}>📌</button><button data-up="${i}" title="Move toward base">↑</button><button data-down="${i}" title="Move toward tip">↓</button></div>`; }).join('')}
+      ${doc.chains.length > 1 ? `<div class="row"><label>Join with</label><select id="chMerge" style="flex:1" title="Make the other moving part's pieces hang off the tip of this one, so they move as one (a scarf in 3 pieces, a tail in parts…)"><option value="">another moving part…</option>${doc.chains.filter(o => o !== ch).map(o => `<option value="${o.id}">${esc(o.name)} (${o.segs.length} piece${o.segs.length === 1 ? '' : 's'})</option>`).join('')}</select></div>` : ''}
       ${bonesBox(ch)}
       <div class="row"><label>Preset</label><select id="chPreset" style="flex:1">${Object.keys(RIG.PRESETS).map(p => `<option ${p === ch.preset ? 'selected' : ''}>${p}</option>`).join('')}${RIG.PRESETS[ch.preset] === undefined ? '<option selected>Custom</option>' : ''}</select></div>
       <div class="row"><label>Physics</label><input id="chPhys" type="checkbox" ${ch.physics ? 'checked' : ''}><span class="muted">off = moves rigidly with the body</span></div>
@@ -685,6 +783,7 @@ function renderInspector() {
   h += `<h2>Character</h2><div class="sec">
     ${RIG.HIDEABLE.map(o => `<div class="row"><label>Hide game ${o.toLowerCase()}</label><input type="checkbox" data-hide="${o}" ${doc.hideObjects.includes(o) ? 'checked' : ''}></div>`).join('')}
     <div class="row"><label>Hide game tail</label><input type="checkbox" id="hideTail" ${doc.hideVanillaTail ? 'checked' : ''}></div>
+    <div class="row"><label>Art scale</label><select id="artScale" title="How many times bigger than the game's own sprites your art is drawn. Bigger art stays sharp in game (exported with more pixels per unit).">${[1, 2, 3, 4, 5, 6, 8].map(k => `<option value="${k}" ${Math.round((doc.ppu || 8) / 8) === k ? 'selected' : ''}>${k}× ${k === 1 ? '(game size)' : 'HD'}</option>`).join('')}</select>${(doc.ppu || 8) > 8 ? '<button id="artShrink" title="Shrink every layer pixel-perfectly to the game\'s own size">Shrink to 1×</button>' : ''}</div>
     ${gearBox()}
     <div class="row"><label>All layers</label><button id="dlAll" title="Every layer as a full-size PNG, to edit in Photoshop, Krita, Paint…; drop them back to update">⬇ PNGs</button><button id="dlPsd" title="Every layer in one Photoshop file (PSD), to repaint everything at once in Photoshop, Krita, GIMP, Photopea…">⬇ PSD</button><button id="dlPsb" title="Same as a PSB (Photoshop large document)">⬇ PSB</button><button id="upPsd" title="Bring your edited PSD / PSB back: same-named layers are updated, new ones are added">⬆ Update from PSD…</button></div>
     <div class="row"><label>Skin swaps</label><span class="pill">${Object.keys(doc.spriteSwaps).length} sprites</span>${Object.keys(doc.spriteSwaps).length ? '<button id="clearSwaps">Remove all</button>' : ''}</div>
@@ -697,6 +796,18 @@ function renderInspector() {
 
   if (ch) {
     $('#chName').oninput = (e) => { ch.name = e.target.value || 'Part'; renderLayers(); };
+    box.querySelectorAll('[data-pin]').forEach(b => b.onclick = () => { const sg = ch.segs[+b.dataset.pin]; if (!sg) return; pushUndo(); sg.maxBend = sg.maxBend === 0 ? -1 : 0; if (sg.maxBend === 0 && !ch.physics) toast('Tip: turn Physics on for this moving part so the other pieces swing.'); refresh(); startTestIfOpen(); });
+    const mg = $('#chMerge'); if (mg) mg.onchange = () => {
+      const o = RIG.chain(doc, mg.value); if (!o) return; pushUndo();
+      // the other part's pieces continue from this one's tip, in their own order; its frames and art stay with each piece
+      // a still part joined by a swinging one (scarf knot + loose ends): the still pieces get pinned, the rest keep their physics
+      if (!ch.physics && o.physics) { ch.segs.forEach(sg => sg.maxBend = 0); ch.physics = true; ch.motion = Object.assign({}, o.motion); ch.preset = o.preset; }
+      for (const sg of o.segs) { ch.segs.push(sg); const l = RIG.layer(doc, sg.layer); if (l) l.role = { type: 'chain', chain: ch.id }; }
+      if (o.source) { const src = RIG.layer(doc, o.source); if (src) { src.role = { type: 'ignore' }; delete src.cutSource; } }
+      doc.chains = doc.chains.filter(x => x !== o);
+      RIG.autoBones(doc, ch); learnRoles(); refresh(); startTestIfOpen();
+      toast(o.name + ' now hangs off ' + ch.name + ' (' + ch.segs.length + ' pieces). Drag the yellow joints to where the pieces meet. Ctrl+Z to undo.', 7000);
+    };
     $('#chAttach').onchange = (e) => { ch.attachTo = e.target.value; RIG.autoBones(doc, ch); doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail'); refresh(); };
     bindBonesBox(ch);
     $('#chPreset').onchange = (e) => { applyPreset(ch, e.target.value); refresh(); };
@@ -729,6 +840,8 @@ function renderInspector() {
     const o = c.dataset.hide; doc.hideObjects = doc.hideObjects.filter(x => x !== o); if (c.checked) doc.hideObjects.push(o);
   });
   $('#hideTail').onchange = (e) => { doc.hideVanillaTail = e.target.checked; };
+  $('#artScale').onchange = (e) => { pushUndo(); doc.ppu = 8 * +e.target.value; syncPpu(); if (doc.layers.some(l => l.role.type === 'part')) RIG.autoAlign(doc); refresh(); startTestIfOpen(); toast('Art scale ' + e.target.value + '×: the game skeleton now matches art drawn at that size.'); };
+  const ash = $('#artShrink'); if (ash) ash.onclick = () => { if (!confirm('Shrink every layer to the game\'s own size (pixel-perfect, ' + (doc.ppu / 8) + '× smaller)? Ctrl+Z undoes it.')) return; pushUndo(); RIG.resizeArt(doc, 8 / doc.ppu); imgCache.clear(); fitView(); refresh(); startTestIfOpen(); };
   bindSounds();
   const da = $('#dlAll'); if (da) da.onclick = () => downloadAllLayers();
   const dp = $('#dlPsd'); if (dp) dp.onclick = () => exportPsd(false); const db = $('#dlPsb'); if (db) db.onclick = () => exportPsd(true);
@@ -1057,7 +1170,7 @@ function bindMoveBox(l) {
   };
 }
 
-function refresh() { renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test' || tab === 'gear') startTest(); draw(); }
+function refresh() { syncPpu(); renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test' || tab === 'gear') startTest(); draw(); }
 
 // ---------------------------------------------------------------- canvas: rig view
 function resize() {
@@ -1083,7 +1196,9 @@ function drawChecker(W, H) {
   ctx.strokeStyle = P.sheetLine; ctx.lineWidth = 1; ctx.strokeRect(a.x + .5, a.y + .5, doc.width * view.zoom, doc.height * view.zoom);
 }
 
+function syncPpu() { RIG.PPU = (doc && doc.ppu) || 8; }
 function draw() {
+  syncPpu();
   const d = window.devicePixelRatio || 1; ctx.setTransform(d, 0, 0, d, 0, 0);
   const W = cv.width / d, H = cv.height / d;
   if (tab === 'test' || tab === 'anim' || tab === 'gear') return; // test loop draws itself
@@ -1119,8 +1234,10 @@ function draw() {
     }
     const p = toScreen(l);
     const isArt = l.role.type === 'state' || l.role.type === 'injury' || l.role.type === 'frame' || (l.role.type === 'eye' && l.role.state !== shownEye()) || (l.role.type === 'gear' && !gearShown(l));
-    ctx.globalAlpha = l.role.type === 'ignore' ? 0.25 : (isArt ? 0.0 : 1);
-    if (isArt && l.id === selLayer) ctx.globalAlpha = 1;
+    ctx.globalAlpha = l.role.type === 'ignore' ? (manualMode ? 0.7 : 0.25) : (isArt ? 0.0 : 1);
+    if (isArt && (l.id === selLayer || selSet.has(l.id))) ctx.globalAlpha = 1;
+    if (xray) { ctx.globalAlpha = selSet.has(l.id) || l.id === selLayer ? 1 : (isArt ? 0 : 0.18);
+      if (!isArt || selSet.has(l.id)) { const sa = ctx.globalAlpha; ctx.globalAlpha = 0.6; ctx.strokeStyle = l.role.type === 'ignore' ? '#e0a020' : l.role.type === 'chain' ? '#3fbf7f' : '#5aa0ff'; ctx.lineWidth = 1; ctx.strokeRect(p.x + 0.5, p.y + 0.5, l.w * view.zoom - 1, l.h * view.zoom - 1); ctx.globalAlpha = sa; } }
     if (ctx.globalAlpha <= 0) continue;
     if (l.spriteRot && (l.role.type === 'part' || l.role.type === 'gear')) { // drawn the way the game's sprite is: turned with the part
       const J = toScreen(RIG.J(doc, l.role.type === 'gear' ? l.role.limb : l.role.part));
@@ -1132,7 +1249,7 @@ function draw() {
   if (showSkel) {
     ctx.lineWidth = 1;
     for (const part of RIG.PARTS) {
-      const J = RIG.J(doc, part), sz = RIG.VANILLA_SIZE[part], s = toScreen(J);
+      const J = RIG.J(doc, part), k8 = RIG.PPU / 8, sz = RIG.VANILLA_SIZE[part].map(v => v * k8), s = toScreen(J);
       ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(-RIG.REST[part][2] * Math.PI / 180);
       ctx.strokeStyle = part.endsWith('B') ? 'rgba(120,200,255,.35)' : 'rgba(120,200,255,.75)';
       ctx.setLineDash(part.endsWith('B') ? [3, 3] : []);
@@ -1216,6 +1333,11 @@ cv.addEventListener('pointerdown', (e) => {
   const hnd = handleAt(sx, sy);
   if (hnd) { selChain = hnd.ch.id; drag = { type: 'handle', ...hnd }; renderInspector(); draw(); return; }
   const l = layerAt(sx, sy);
+  { // the selection first: a selected frame / state / injury art can be grabbed anywhere inside its box
+    const pc = toCanvas(sx, sy); const sel = selSet.size ? selectedLayers() : (selLayer ? [RIG.layer(doc, selLayer)].filter(Boolean) : []);
+    const hitSel = sel.find(o => (o.role.type === 'frame' || o.role.type === 'state' || o.role.type === 'injury') && pc.x >= o.x && pc.x < o.x + o.w && pc.y >= o.y && pc.y < o.y + o.h);
+    if (hitSel && !(e.ctrlKey || e.metaKey)) { pushUndo(); drag = { type: 'layer', l: hitSel, list: sel.filter(o => o.role.type === hitSel.role.type), sx, sy, start: toCanvas(sx, sy), done: { x: 0, y: 0 }, moved: false, only: true }; return; }
+  }
   if (l && (e.ctrlKey || e.metaKey)) { if (selSet.has(l.id)) { selSet.delete(l.id); if (selLayer === l.id) selLayer = [...selSet][0] || null; } else { selSet.add(l.id); selLayer = l.id; } renderLayers(); renderInspector(); draw(); return; }
   if (l) {
     const many = selSet.size > 1 && selSet.has(l.id);
@@ -1242,7 +1364,7 @@ cv.addEventListener('pointermove', (e) => {
     if (!drag.moved && Math.hypot(sx - drag.sx, sy - drag.sy) < 4) return;
     drag.moved = true; const p = toCanvas(sx, sy);
     const tx = Math.round(p.x - drag.start.x), ty = Math.round(p.y - drag.start.y);
-    if (tx !== drag.done.x || ty !== drag.done.y) { moveLayersBy(drag.list || [drag.l], tx - drag.done.x, ty - drag.done.y); drag.done = { x: tx, y: ty }; draw(); }
+    if (tx !== drag.done.x || ty !== drag.done.y) { if (drag.only) for (const o of drag.list) { o.x += tx - drag.done.x; o.y += ty - drag.done.y; } else moveLayersBy(drag.list || [drag.l], tx - drag.done.x, ty - drag.done.y); drag.done = { x: tx, y: ty }; draw(); }
   }
   else if (drag.type === 'handle') { const p = toCanvas(sx, sy); drag.s[drag.key] = { x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2 }; draw(); }
 });
@@ -1377,6 +1499,7 @@ function updateHeadStates() {
 }
 
 function startTest() {
+  syncPpu();
   if (!doc) { cancelAnimationFrame(raf); return; }
   const built = RIG.buildRig(doc);
   const images = {}; for (const f in built.files) images[f] = built.files[f];
@@ -2177,6 +2300,7 @@ function animInspector(l) {
       const st = sets[k];
       h += `<div style="border:1px solid var(--line);border-radius:6px;padding:6px;margin:6px 0">
         <div class="row"><select data-akey="${k}" style="flex:1">${RIG.ANIM_KEYS.map(([kk, lab]) => `<option value="${kk}" ${kk === k ? 'selected' : ''} ${kk !== k && used.has(kk) ? 'disabled' : ''}>${lab}</option>`).join('')}</select><button data-adel="${k}" title="Remove this set">✕</button></div>
+        <div class="row"><button data-asnap="${k}" title="Put every frame of this set exactly on the part (keeps the movement between frames)">⤓ Snap frames onto the part</button></div>
         <div class="row"><button data-aprev="${k}" title="Play these frames here on the canvas (the frame before shows faintly)">${animPrev && animPrev.id === l.id && animPrev.key === k ? '■ Stop' : '▶ Preview'}</button></div>
         <div class="row"><label>Frames / sec</label><input data-afps="${k}" type="number" min="0.5" max="60" step="0.5" value="${st.fps}" style="width:64px"><label style="flex:0 0 auto;margin-left:8px">Loop</label><input data-aloop="${k}" type="checkbox" ${st.loop !== false ? 'checked' : ''}></div>
         ${st.frames.map((id, i) => { const fl = RIG.layer(doc, id); return `<div class="seg"><span>${i + 1}. ${esc(fl ? fl.name : '?')}${id === l.id ? ' <span class="muted">(the part itself)</span>' : ''}</span><button data-afu="${k}:${i}">↑</button><button data-afd="${k}:${i}">↓</button><button data-afx="${k}:${i}">✕</button></div>`; }).join('')}
@@ -2189,19 +2313,33 @@ function animInspector(l) {
   h += `<div class="muted">Tip: name layers like <code>${esc(l.name)}_fall_1</code>, <code>${esc(l.name)}_fall_2</code>, <code>${esc(l.name)}_idle_1</code> or <code>${esc(l.name)}_frame_1</code> and <b>Auto setup</b> builds the sets for you.</div></div>`;
   return h;
 }
+// frames that drifted away from their part: line the first one up with the part (same size: exactly on it; else centred,
+// bottoms lined up) and move the rest by the same amount, so the movement inside the animation is kept
+function snapFrames(l, frames) {
+  if (!frames.length) return; const f0 = frames[0];
+  const dx = Math.abs(f0.w - l.w) <= 1 && Math.abs(f0.h - l.h) <= 1 ? l.x - f0.x : Math.round(l.x + l.w / 2 - (f0.x + f0.w / 2));
+  const dy = Math.abs(f0.w - l.w) <= 1 && Math.abs(f0.h - l.h) <= 1 ? l.y - f0.y : (l.y + l.h) - (f0.y + f0.h);
+  for (const f of frames) { f.x += dx; f.y += dy; }
+}
 // ---- quick loops: frames made for you, played all the time ("always"), in game too (other players see them)
 function addLoopFrames(l, frames, fps, tag) { // frames: [{w,h,rgba}] the size of the part, or the canvas, or any size (centred on the part)
   pushUndo();
-  for (const o of doc.layers.filter(o => o.role.type === 'frame' && o.role.of === l.id && o.loopTag === tag)) RIG.removeLayers(doc, [o.id]);
+  for (const o of doc.layers.filter(o => o.role.type === 'frame' && o.role.of === l.id && (o.loopTag === tag || (doc.anims[l.id] && doc.anims[l.id].always && doc.anims[l.id].always.frames.includes(o.id))))) RIG.removeLayers(doc, [o.id]);
   const ids = []; const at = doc.layers.indexOf(l);
   frames.forEach((f, i) => {
     let x, y, w = f.w, h = f.h, rgba = f.rgba;
-    if (w === doc.width && h === doc.height) { const c = RIG.crop(rgba, w, h); if (!c) return; ({ x, y, w, h, rgba } = c); }
+    const src = doc.srcSize, org = doc.origin || { x: 0, y: 0 };
+    if ((src && w === src.w && h === src.h) || (w === doc.width && h === doc.height)) { // a whole-canvas frame (exported from the same PSD): keep its spot
+      const c = RIG.crop(rgba, w, h); if (!c) return; const sameAsSrc = src && w === src.w && h === src.h;
+      ({ x, y, w, h, rgba } = c); if (sameAsSrc) { x += org.x; y += org.y; } }
     else { x = Math.round(l.x + l.w / 2 - w / 2); y = Math.round(l.y + l.h / 2 - h / 2); }
-    const fl = { id: RIG.newId(), name: l.name + '_' + tag + '_' + (i + 1), x, y, w, h, rgba, hidden: false, order: 0, role: { type: 'frame', of: l.id }, loopTag: tag };
+    const fl = { id: RIG.newId(), name: l.name + '_always_' + (i + 1), x, y, w, h, rgba, hidden: false, order: 0, role: { type: 'frame', of: l.id }, loopTag: tag };
     doc.layers.splice(at + 1 + i, 0, fl); ids.push(fl.id);
   });
   doc.layers.forEach((o, i) => o.order = i);
+  // wherever the GIF was drawn, the frames go on the part as it is now (you may have moved it since)
+  const made = ids.map(id => RIG.layer(doc, id)).filter(Boolean);
+  if (made.length && !(made[0].x < l.x + l.w && made[0].x + made[0].w > l.x && made[0].y < l.y + l.h && made[0].y + made[0].h > l.y && Math.abs(made[0].x - l.x) <= 2 && Math.abs(made[0].y - l.y) <= 2)) snapFrames(l, made);
   // the frames go in their own folder (closed), so the layer list stays short
   doc.folders = (doc.folders || []).filter(f => !(f.name === l.name + ' animation' && !doc.layers.some(o => o.folder === f.id))); // the old frames' folder
   if (ids.length) { const f = newFolderFrom(ids.map(id => RIG.layer(doc, id)), l.name + ' animation'); f.open = false; }
@@ -2249,7 +2387,8 @@ async function gifLoop(l) {
 function bindAnimInspector(l) {
   const sets = () => (doc.anims[l.id] = doc.anims[l.id] || {});
   const lg = $('#loopGif'); if (lg) lg.onclick = () => gifLoop(l);
-  document.querySelectorAll('[data-aprev]').forEach(b => b.onclick = () => { const k = b.dataset.aprev; if (animPrev && animPrev.id === l.id && animPrev.key === k) stopAnimPrev(); else startAnimPrev(l.id, k); renderInspector(); });
+  document.querySelectorAll('[data-asnap]').forEach(b => b.onclick = () => { const set = doc.anims[l.id] && doc.anims[l.id][b.dataset.asnap]; if (!set) return; pushUndo(); snapFrames(l, set.frames.map(id => RIG.layer(doc, id)).filter(o => o && o !== l)); draw(); toast('Frames put on ' + l.name + '. Ctrl+Z to undo.'); });
+    document.querySelectorAll('[data-aprev]').forEach(b => b.onclick = () => { const k = b.dataset.aprev; if (animPrev && animPrev.id === l.id && animPrev.key === k) stopAnimPrev(); else startAnimPrev(l.id, k); renderInspector(); });
   const on = $('#animOn'); if (!on) return;
   const markFrame = (id) => { const fl = RIG.layer(doc, id); if (fl && fl.id !== l.id && fl.role.type === 'ignore') fl.role = { type: 'frame', of: l.id }; };
   const unmark = (id) => { const still = Object.values(sets()).some(st => st.frames.includes(id)); const fl = RIG.layer(doc, id); if (!still && fl && fl.id !== l.id && fl.role.type === 'frame') fl.role = { type: 'ignore' }; };
@@ -2457,7 +2596,6 @@ $('#eyePrev').innerHTML = '<option value="">Eyes: automatic</option>' + RIG.EYE_
 
 // ---------------------------------------------------------------- start
 resize(); renderInspector(); hint('Open your character to begin. New here? Click <b>How to</b>. <span style="opacity:.7">Fan-made, not affiliated with Casualties: Unknown. The Test tab is a simulation based on Orson\'s game code.</span>');
-
 // ---- bridge API used by the sprite paint editor (it lives outside this closure)
 function bridgeLayers() { return doc ? doc.layers.filter(l => l.rgba && !l.hidden) : []; }
 function bridgeLayer(id) { return doc ? RIG.layer(doc, id) : null; }
@@ -2524,7 +2662,7 @@ function bridgeAnimCrop() {
   const w = 4.8 * z, h = 5.0 * z;
   return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
 }
-window.__rigEditor = { addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
+window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
   layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, snapshot: bridgeSnapshot,
   animClips: bridgeAnimClips, startAnim: bridgeStartAnim, stopAnim: bridgeStopAnim, setAnimClip: bridgeSetAnimClip, animCrop: bridgeAnimCrop,
   setAnimPlaying: bridgeSetAnimPlaying, isAnimPlaying: bridgeIsAnimPlaying, copyCanvas: bridgeCopyCanvas,

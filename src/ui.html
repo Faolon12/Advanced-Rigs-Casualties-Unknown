@@ -3,10 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.2 Alpha)</title>
-
-<style>aside.left{border-right:1px solid var(--line)}
-aside
+<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.3 Alpha)</title>
+<style>
+:root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+button,select,input{font:inherit;color:var(--text)}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:#555a66}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+select,input[type=text],input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+header{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
+header h1 span{color:var(--acc)}
+header .grow{flex:1}
+main{display:grid;grid-template-columns:260px 1fr 340px;min-height:0}
+aside{background:var(--panel);overflow:auto;min-height:0}
+aside.left{border-right:1px solid var(--line)}
+aside.right{border-left:1px solid var(--line)}
 h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 12px 6px}
 .layer{display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center;padding:5px 10px;border-bottom:1px solid #22242b;cursor:pointer}
 .layer:hover{background:#22252c}
@@ -206,12 +222,16 @@ canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);dis
 canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block}
 #paintCoord{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none}
 
+.sug{display:flex;align-items:center;gap:4px;margin-top:3px;font-size:11px;color:#ffcf4a}
+.sug span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sug button{padding:0 6px;font-size:11px}
+.lyEnd{margin:4px 2px;padding:6px;border:1px dashed var(--line,#444);border-radius:6px;font-size:11px;opacity:.55;text-align:center}.lyEnd.drop{opacity:1;border-color:var(--acc2)}
 </style>
 </head>
 <body data-mode="rig">
 <div id="app" role="application">
 <header>
-  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.2 Alpha</small></h1>
+  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.3 Alpha</small></h1>
   <div id="modeSwitcher">
     <button id="modeRig" class="modeBtn active" onclick="switchMode('rig')">Rig Editor</button>
     <button id="modePaint" class="modeBtn" onclick="switchMode('paint')">Sprite Paint</button>
@@ -241,7 +261,9 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 <main>
   <aside class="left">
     <h2>Layers</h2>
-    <div class="layerBar"><button id="lyFolder" title="Put the selected layers in a new folder (Ctrl/Shift-click to select several)">📁 New folder</button><button id="lyDelSel" title="Delete the selected layers (Delete key)">🗑 Delete</button><span id="lySelN" class="muted"></span></div>
+    <div class="layerBar"><input id="lySearch" type="text" placeholder="Search layers…" style="flex:1;min-width:0"><select id="lyFilter" title="Show only some kinds of layers" style="width:105px;flex:none"><option value="">All</option><option value="part">Body parts</option><option value="chain">Moving parts</option><option value="eye">Eyes / mouth / jaw</option><option value="injury">Injury art</option><option value="frame">Animation frames</option><option value="gear">Gear</option><option value="ignore">Not assigned</option></select></div>
+    <div class="layerBar"><button id="lyFolder" title="Put the selected layers in a new folder (Ctrl/Shift-click to select several)">📁 New folder</button><button id="lyDelSel" title="Delete the selected layers (Delete key)">🗑 Delete</button><button id="lySugAll" style="display:none" title="Use every guess (✓) in the list">✓ Use all guesses</button><button id="lyXray" title="X-ray: everything except the selected layers fades, and every layer gets an outline">X-ray</button><span id="lySelN" class="muted"></span></div>
+    <div class="layerBar" id="lyBulkBar" style="display:none"><select id="lyBulk" title="Give every selected layer the same role" style="flex:1"></select></div>
     <div id="layers"><div class="empty">Open a PSD/PSB (or PNG layers) to start.</div></div>
   </aside>
   <section id="center">

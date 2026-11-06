@@ -5,7 +5,12 @@
 const RIG = {};
 
 // ---------- game skeleton (from the game's scene: rest pose of Experiment/Body) ----------
-RIG.PPU = 8;
+RIG.PPU = 8; // the open character's pixels per unit (8 = the game's own scale; 16, 24... = art drawn 2x, 3x bigger)
+RIG.learned = {}; // layer name pattern -> role, taught by setting roles by hand
+RIG.nameKey = (n) => String(n || '').toLowerCase().replace(/[\s_\-.()]+/g, '').replace(/\d+/g, '#');
+RIG.exactKey = (n) => '=' + String(n || '').toLowerCase().replace(/[\s_\-.()]+/g, '');
+// the exact name first; a pattern ("Leg 1", "Leg 2" -> "leg#") only when everything taught under it agreed
+RIG.learnedRule = (n) => { const e = RIG.learned[RIG.exactKey(n)]; if (e) return e; const p = RIG.learned[RIG.nameKey(n)]; return p && !p.conflict ? p : null; };
 RIG.PARTS = ['Head', 'UpTorso', 'DownTorso', 'UpArmF', 'DownArmF', 'HandF', 'UpArmB', 'DownArmB', 'HandB',
   'ThighF', 'CrusF', 'FootF', 'ThighB', 'CrusB', 'FootB'];
 RIG.PART_LABEL = {
@@ -119,7 +124,7 @@ RIG.resolveAction = function (sets, action) {
   for (const f of (RIG.ACTION_FALLBACK[action] || [])) if (sets[f]) return f;
   return sets.always ? 'always' : null;
 };
-RIG.FRAME_RE = /^(.*?)[\s_\-]*(always|idle|walk|walking|run|running|crouch|jump|jumping|fall|falling|wallslide|climb|swim|attack|sit|exercise|sleep|down|dead|stump|broken|dislocated|splinted|shrapnel|bandaged|tourniquet|frostbite|infected|disinfected|bleeding|mangled|wounded|scratched|frame|f|anim)[\s_\-]*(\d+)$/i;
+RIG.FRAME_RE = /^(.*?)[\s_\-]*(always|gif|loop|idle|walk|walking|run|running|crouch|jump|jumping|fall|falling|wallslide|climb|swim|attack|sit|exercise|sleep|down|dead|stump|broken|dislocated|splinted|shrapnel|bandaged|tourniquet|frostbite|infected|disinfected|bleeding|mangled|wounded|scratched|frame|f|anim)[\s_\-]*(\d+)$/i;
 RIG.defaultInjury = (name) => ({ enabled: false, name: name || 'Part', tearOff: true, gameShading: true, vital: false });
 // which game sprite each part shows (for drawing skins / sprite swaps)
 RIG.PART_SPRITE = { Head: 'experimentHead', UpTorso: 'experimentUpTorso', DownTorso: 'experimentDownTorso', UpArmF: 'experimentUpArm', UpArmB: 'experimentUpArm',
@@ -245,20 +250,37 @@ RIG.crop = function (rgba, w, h) {
 RIG.alpha = (l, x, y) => (x >= 0 && y >= 0 && x < l.w && y < l.h) ? l.rgba[(y * l.w + x) * 4 + 3] : 0;
 
 // ===================== auto-assign layers by name =====================
+// "FaolonHeadBack", "MyCharEyeHappy": a character's own prefix in place of the game's "experiment"
+RIG.stockName = function (name) {
+  const n = String(name).trim(); if (RIG.STOCK[n]) return n;
+  const m = n.match(/^[A-Z][a-z0-9]*(?=[A-Z])/); if (!m) return null;
+  const alt = 'experiment' + n.slice(m[0].length); return RIG.STOCK[alt] ? alt : null;
+};
+RIG.classifyKnown = (name) => RIG.classify(name).kind !== 'ignore';
 RIG.classify = function (name) {
-  const st = RIG.STOCK[String(name).trim()];
+  const st = RIG.STOCK[RIG.stockName(name) || String(name).trim()];
   if (st) {
-    if (st.eye) return { kind: 'eye', state: String(name).trim() };
+    if (st.eye) return { kind: 'eye', state: RIG.stockName(name) };
     if (st.state) return { kind: 'headState', state: st.state };
     if (st.tail) return { kind: 'tail', num: 0 };
     if (st.both) return { kind: 'limb', base: st.part, side: null, stock: true };
     if (st.part.length > 4 && /[FB]$/.test(st.part) && st.part !== 'Head') return { kind: 'limb', base: st.part.slice(0, -1), side: st.part.slice(-1) };
     return { kind: 'part', base: st.part };
   }
-  const n = name.toLowerCase().replace(/[\s_\-.]+/g, '');
+  if (/^(layer|ebene|calque|capa|group|copy)\s*\d*$/i.test(String(name).trim())) return { kind: 'ignore' }; // Photoshop's own default names
+  let n = name.toLowerCase().replace(/[\s_\-.]+/g, '');
+  // short forms and a few other languages, turned into the words below
+  const SYN = [[/(upr|upper|top)(leg|lg)|(leg|lg)(upr|upper|top|1)/, 'thigh'], [/(lwr|lower|bot|bottom)(leg|lg)|(leg|lg)(lwr|lower|bot|bottom|2)/, 'shin'],
+    [/(upr|upper|top)arm|arm(upr|upper|top|1)/, 'upperarm'], [/(lwr|lower|bot)arm|arm(lwr|lower|bot|2)|forearm/, 'forearm'],
+    [/cabeza|kopf|tete|tête|testa/, 'head'], [/cola|schwanz|queue|coda/, 'tail'], [/ala$|flugel|flügel|aile/, 'wing'], [/oreja|ohr|oreille|orecchio/, 'ear'],
+    [/pelo|cabello|haare|cheveux|capelli/, 'hair'], [/brazo|bras|braccio/, 'arm'], [/pierna|bein|jambe|gamba/, 'leg'], [/mano|hand|main/, 'hand'],
+    [/pie$|pied|fuss|fuß|piede/, 'foot'], [/pecho|brust|poitrine|petto/, 'chest'], [/barriga|bauch|ventre|pancia/, 'belly'], [/cuerno|horn|corne|corno/, 'horn'],
+    [/muslo|oberschenkel|cuisse|coscia/, 'thigh'], [/espinilla|schienbein|tibia|stinco/, 'shin'], [/antebrazo|unterarm|avantbras|avambraccio/, 'forearm']];
+  for (const [re, w] of SYN) if (re.test(n)) n = n + w;
+  if (/leg/.test(n) && !/(thigh|shin|calf|crus|foot)/.test(n)) n += 'thigh';
   let side = null;
-  if (/(back|far|behind|rear)/.test(n)) side = 'B';
-  else if (/(front|near)/.test(n)) side = 'F';
+  if (/(back|far|behind|rear|hinten)/.test(n)) side = 'B';
+  else if (/(front|near|vorne)/.test(n)) side = 'F';
   const has = (re) => re.test(n);
   if (has(/wing/)) return { kind: 'wing', side };
   if (has(/tail/)) return { kind: 'tail', num: parseFloat((name.match(/(\d+(?:\.\d+)?)/) || [0, 0])[1]) || 0 };
@@ -282,12 +304,12 @@ RIG.newId = () => 'i' + (_id++);
 
 RIG.newDoc = function (name, width, height, layers) {
   const doc = { name: name || 'MyCharacter', width, height, layers: [], chains: [], align: { x: width / 2, y: height * 0.56 },
-    hideObjects: [], hideVanillaTail: true, spriteSwaps: {}, healthScreen: {}, anims: {}, sounds: {}, animations: {} };
+    hideObjects: [], hideVanillaTail: true, spriteSwaps: {}, healthScreen: {}, anims: {}, sounds: {}, animations: {}, srcSize: { w: width, h: height }, origin: { x: 0, y: 0 }, ppu: 8 };
   for (const l of layers) {
     const c = RIG.crop(l.rgba, l.w, l.h);
     if (!c) continue;
     doc.layers.push({ id: RIG.newId(), name: l.name, x: l.x + c.x, y: l.y + c.y, w: c.w, h: c.h, rgba: c.rgba, order: l.order, hidden: !!l.hidden,
-      role: { type: 'ignore' } });
+      role: { type: 'ignore' }, psdFolder: l.folder || undefined });
   }
   doc.layers.sort((a, b) => a.order - b.order);
   doc.layers.forEach((l, i) => l.order = i);
@@ -308,13 +330,22 @@ RIG.autoAssign = function (doc) {
   const tails = [], wings = [];
   const frames = [];
   doc.anims = {};
+  const learnedChains = {};
   for (const l of doc.layers) {
     if (l.role && l.role.type === 'gear') continue; // redrawn gear keeps its item
-    l.role = { type: 'ignore' };
+    l.role = { type: 'ignore' }; delete l.suggest;
+    // names you taught it (set a role by hand once, the same name or pattern is done for you after)
+    const rule = RIG.learnedRule(l.name);
+    if (rule && !RIG.FRAME_RE.test(l.name)) {
+      if (rule.t === 'part') { l.role = { type: 'part', part: rule.part }; continue; }
+      if (rule.t === 'eye') { l.role = { type: 'eye', state: rule.state }; continue; }
+      if (rule.t === 'chain') { (learnedChains[rule.chain] = learnedChains[rule.chain] || { rule, ls: [] }).ls.push({ l, k: rule.k || 0 }); continue; }
+    }
     const fm = l.name.match(RIG.FRAME_RE);
     if (fm) { frames.push({ l, base: fm[1], key: fm[2].toLowerCase(), n: +fm[3] }); l.role = { type: 'frame', of: null }; continue; }
-    if (l.hidden) continue;
-    const c = RIG.classify(l.name);
+    let c = RIG.classify(l.name);
+    if (c.kind === 'ignore' && l.psdFolder) c = RIG.classify(l.psdFolder + ' ' + l.name); // "upper" in a folder called "Left leg"
+    if (l.hidden && c.kind !== 'eye' && c.kind !== 'headState') continue;
     if (c.kind === 'part') l.role = { type: 'part', part: c.base };
     else if (c.kind === 'limb') (groups[c.base] = groups[c.base] || []).push({ l, side: c.side });
     else if (c.kind === 'tail') tails.push({ l, num: c.num });
@@ -341,6 +372,22 @@ RIG.autoAssign = function (doc) {
   // two heads named like the game's (experimentHead + experimentHeadBack): the game shows experimentHeadBack
   if (doc.layers.some(o => o.name === 'experimentHeadBack')) for (const o of doc.layers) if (o.name === 'experimentHead' && o.role.type === 'part') o.role = { type: 'ignore' };
   for (const l of doc.layers) if (l.role.type === 'state' && !l.role.of) { const h = headL(); if (h) l.role.of = h.id; else l.role = { type: 'ignore' }; }
+  for (const l of doc.layers) {
+    if (l.role.type !== 'ignore') continue;
+    const m = l.name.match(/^(.+?)(MouthMini|Mouth|Disfigured[123](?:Healed)?)$/); if (!m) continue;
+    const base = doc.layers.find(o => o !== l && o.name === m[1] && o.role.type !== 'ignore'); if (!base) continue;
+    const st = 'experimentHead' + (/^Mouth/.test(m[2]) ? 'Back' : '') + m[2];
+    if (RIG.HEAD_STATES.includes(st)) l.role = { type: 'state', of: base.id, state: st };
+  }
+  // state / eye art drawn off to the side of what it belongs to (a common way to lay out a PSD): put it on top of it
+  for (const l of doc.layers) {
+    if (l.role.type !== 'state' && l.role.type !== 'eye') continue;
+    const o = l.role.type === 'state' ? RIG.layer(doc, l.role.of) : headL(); if (!o) continue;
+    const overlap = l.x < o.x + o.w && l.x + l.w > o.x && l.y < o.y + o.h && l.y + l.h > o.y;
+    if (overlap) continue;
+    if (l.role.type === 'state') { l.x = o.x + Math.round((o.w - l.w) / 2); l.y = o.y + (o.h - l.h); } // same size: exactly on it; else centred, bottoms lined up
+    else { l.x = Math.round(o.x + o.w / 2 - l.w / 2); l.y = Math.round(o.y + o.h / 2 - l.h / 2); }
+  }
   if (tails.length) {
     tails.sort((a, b) => a.num - b.num || b.l.order - a.l.order);
     const ch = RIG.addChain(doc, 'Tail', 'tail', tails.map(t => t.l.id), 'Fluffy tail');
@@ -352,13 +399,21 @@ RIG.autoAssign = function (doc) {
     const ch = RIG.addChain(doc, 'Wing ' + (side === 'B' ? 'far' : 'near'), 'UpTorso', [w.l.id], 'Wings');
     w.l.role = { type: 'chain', chain: ch.id };
   });
+  for (const key in learnedChains) {
+    const { rule, ls } = learnedChains[key]; ls.sort((a, b) => a.k - b.k);
+    const ch = RIG.addChain(doc, rule.chain, rule.attachTo || 'Head', ls.map(x => x.l.id), rule.preset || 'Hair / ears floof');
+    ls.forEach(x => x.l.role = { type: 'chain', chain: ch.id });
+  }
   // limbs drawn once for both sides (the game reuses experimentUpArm etc. for the far side): add the far copy
   RIG.addFarCopies(doc);
-  if (RIG.isStockDoc(doc)) RIG.assembleStock(doc); else RIG.autoAlign(doc);
+  // art drawn bigger than the game's (2x, 3x...): keep the detail, the rig is exported with more pixels per unit
+  const sc = RIG.detectScale(doc); doc.ppu = 8 * sc; RIG.PPU = doc.ppu;
+  if (RIG.isStockDoc(doc) && !RIG.looksAssembled(doc)) RIG.assembleStock(doc); else RIG.autoAlign(doc);
+  RIG.guessByPosition(doc);
   for (const ch of doc.chains) RIG.autoBones(doc, ch);
   // link animation frames ("Wing_fall_2", "Head frame 3"...) to the layer they animate
   const norm = (x) => x.toLowerCase().replace(/[\s_\-.]+/g, '');
-  const alias = { walking: 'walk', running: 'run', jumping: 'jump', falling: 'fall', frame: 'always', f: 'always', anim: 'always' };
+  const alias = { walking: 'walk', running: 'run', jumping: 'jump', falling: 'fall', frame: 'always', f: 'always', anim: 'always', gif: 'always', loop: 'always' };
   frames.sort((a, b) => a.n - b.n);
   for (const fr of frames) {
     const target = doc.layers.find(o => o.role.type !== 'frame' && norm(o.name) === norm(fr.base));
@@ -374,6 +429,80 @@ RIG.autoAssign = function (doc) {
 };
 
 // ---- characters drawn with the game's own sprite names
+// a drawing that's already put together (body parts where a body's parts go) keeps its layout; loose sprites get assembled
+RIG.looksAssembled = function (doc) {
+  RIG.autoAlign(doc);
+  const errs = [];
+  for (const l of doc.layers) if (l.role.type === 'part' && /F$|Head|Torso/.test(l.role.part)) { const c = RIG.center(l), r = RIG.restPx(l.role.part); errs.push(Math.hypot(c.x - r.x - doc.align.x, c.y - r.y - doc.align.y)); }
+  if (errs.length < 4) return false;
+  errs.sort((a, b) => a - b); const med = errs[errs.length >> 1];
+  return med < 12;
+};
+// how many times bigger than the game's own sprites the art is drawn (1, 2, 3...)
+RIG.detectScale = function (doc) {
+  const P = 8, rest = (p) => { const r = RIG.REST[p]; return { x: r[0] * P, y: -r[1] * P }; };
+  const parts = doc.layers.filter(l => l.role.type === 'part' && /F$|Head|Torso/.test(l.role.part));
+  const ratios = [];
+  for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+    const a = RIG.center(parts[i]), b = RIG.center(parts[j]), ra = rest(parts[i].role.part), rb = rest(parts[j].role.part);
+    const dr = Math.hypot(ra.x - rb.x, ra.y - rb.y); if (dr < 12) continue; ratios.push(Math.hypot(a.x - b.x, a.y - b.y) / dr);
+  }
+  let r;
+  if (ratios.length >= 3) { ratios.sort((x, y) => x - y); r = ratios[ratios.length >> 1]; }
+  else { // names told us little: compare the whole drawing's height with the game character's
+    let y0 = 1e9, y1 = -1e9; for (const l of doc.layers) { if (l.hidden || l.cutSource || l.role.type === 'frame') continue; y0 = Math.min(y0, l.y); y1 = Math.max(y1, l.y + l.h); }
+    const gh = (rest('FootF').y + RIG.VANILLA_SIZE.FootF[1] / 2) - (rest('Head').y - RIG.VANILLA_SIZE.Head[1] / 2);
+    r = y1 > y0 ? (y1 - y0) / gh : 1;
+  }
+  const k = Math.max(1, Math.round(r));
+  return Math.abs(r - k) / k < 0.25 && k <= 8 ? k : 1;
+};
+// layers whose names meant nothing: guess from where they sit on the body (shown as a suggestion to confirm)
+RIG.guessByPosition = function (doc) {
+  const k = RIG.PPU / 8;
+  const free = () => doc.layers.filter(l => l.role.type === 'ignore' && !l.hidden && !l.cutSource);
+  const match = () => { // best overall pairing of unknown layers with free body parts: by spot, size and shape
+    const taken = new Set(doc.layers.filter(l => l.role.type === 'part').map(l => l.role.part));
+    const pairs = [];
+    for (const l of free()) { const c = RIG.center(l);
+      for (const p of RIG.PARTS) { if (taken.has(p)) continue; const J = RIG.J(doc, p), sz = RIG.VANILLA_SIZE[p];
+        const sc = Math.hypot(c.x - J.x, c.y - J.y) / (Math.max(sz[0], sz[1]) * k) + 0.4 * Math.abs(Math.log(Math.max(l.w, l.h) / (Math.max(sz[0], sz[1]) * k))) + 0.3 * Math.abs(Math.log((l.w / l.h) / (sz[0] / sz[1])));
+        if (sc < 1.3) pairs.push({ l, p, sc }); } }
+    pairs.sort((x, y) => x.sc - y.sc); const usedL = new Set(), out = [];
+    for (const q of pairs) { if (usedL.has(q.l) || taken.has(q.p)) continue; usedL.add(q.l); taken.add(q.p); out.push(q); }
+    // near / far: of two layers on the same limb, the one higher in the stack is the near side (like the game draws it)
+    for (const q of out) { if (!q.p.endsWith('F')) continue; const o = out.find(x => x.p === q.p.slice(0, -1) + 'B'); if (o && o.l.order > q.l.order) { const t = q.p; q.p = o.p; o.p = t; } }
+    return out;
+  };
+  // twice: the first guesses line the skeleton up better for the second
+  let out = match();
+  if (out.length >= 3) { const keep = out.map(q => [q.l, q.l.role]); out.forEach(q => q.l.role = { type: 'part', part: q.p }); RIG.autoAlign(doc); keep.forEach(([l, r]) => l.role = r); out = match(); }
+  for (const q of out) q.l.suggest = { value: 'part:' + q.p, label: RIG.PART_LABEL[q.p] };
+  const H = RIG.J(doc, 'Head'), T = RIG.J(doc, 'DownTorso'), th = RIG.J(doc, 'ThighF'), U = RIG.J(doc, 'UpTorso');
+  for (const l of free()) {
+    if (l.suggest) continue; const c = RIG.center(l);
+    if (Math.hypot(c.x - H.x, c.y - H.y) < 14 * k) l.suggest = { value: 'chain:Head', label: 'piece on the head (hair, ears…)' };
+    else if (c.x < T.x - 3 * k && c.y > T.y - 6 * k && c.y < th.y + 6 * k) l.suggest = { value: 'chain:tail', label: 'tail' };
+    else if (Math.hypot(c.x - U.x, c.y - U.y) < 12 * k) l.suggest = { value: 'chain:UpTorso', label: 'piece on the chest (wing, scarf…)' };
+  }
+};
+// pixel-perfect resize of the whole character (shrink 3x art to the game's own size, or blow it up)
+RIG.resizeArt = function (doc, f) { // f < 1 shrinks
+  const rs = (l) => {
+    const w = Math.max(1, Math.round(l.w * f)), h = Math.max(1, Math.round(l.h * f)), out = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const sx = Math.min(l.w - 1, Math.floor((x + 0.5) / f)), sy = Math.min(l.h - 1, Math.floor((y + 0.5) / f)), si = (sy * l.w + sx) * 4, di = (y * w + x) * 4;
+      out[di] = l.rgba[si]; out[di + 1] = l.rgba[si + 1]; out[di + 2] = l.rgba[si + 2]; out[di + 3] = l.rgba[si + 3];
+    }
+    l.x = Math.round(l.x * f); l.y = Math.round(l.y * f); l.w = w; l.h = h; l.rgba = out;
+  };
+  for (const l of doc.layers) rs(l);
+  const sp = (p) => p && { x: p.x * f, y: p.y * f };
+  for (const ch of doc.chains) { for (const s of ch.segs) { s.joint = sp(s.joint); if (s.tip) s.tip = sp(s.tip); } if (ch.offset) ch.offset = sp(ch.offset); }
+  doc.align = sp(doc.align); doc.width = Math.max(8, Math.round(doc.width * f)); doc.height = Math.max(8, Math.round(doc.height * f));
+  if (doc.origin) doc.origin = sp(doc.origin);
+  doc.ppu = Math.max(8, Math.round((doc.ppu || 8) * f)); RIG.PPU = doc.ppu;
+};
 RIG.isStockDoc = (doc) => doc.layers.filter(l => RIG.STOCK[l.name] || RIG.STOCK[(l.name || '').replace(/ \(far\)$/, '')]).length >= 3;
 RIG.addFarCopies = function (doc) {
   for (const l of [...doc.layers]) {
@@ -431,7 +560,15 @@ RIG.autoAlign = function (doc) {
     const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++;
   }
   if (!n) for (const l of doc.layers) if (l.role.type === 'part') { const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++; }
-  if (n) doc.align = { x: Math.round(sx / n * 2) / 2, y: Math.round(sy / n * 2) / 2 };
+  if (n) { doc.align = { x: Math.round(sx / n * 2) / 2, y: Math.round(sy / n * 2) / 2 }; return; }
+  // no layer is a known body part yet: line the skeleton up with the drawing's outline (head at the top, feet under the legs)
+  const vis = doc.layers.filter(l => !l.hidden && !l.cutSource && l.role.type !== 'frame' && l.role.type !== 'eye' && l.role.type !== 'state');
+  if (!vis.length) return;
+  let y0 = 1e9, y1 = -1e9; for (const l of vis) { y0 = Math.min(y0, l.y); y1 = Math.max(y1, l.y + l.h); }
+  const k = RIG.PPU / 8, head = RIG.restPx('Head'), foot = RIG.restPx('FootF');
+  const low = vis.filter(l => l.y + l.h > y1 - (y1 - y0) * 0.3).map(l => RIG.center(l).x).sort((a, b) => a - b);
+  const legX = low.length ? low[low.length >> 1] : vis.map(l => RIG.center(l).x).reduce((a, b) => a + b, 0) / vis.length;
+  doc.align = { x: Math.round(legX - foot.x), y: Math.round(y0 - (head.y - RIG.VANILLA_SIZE.Head[1] / 2 * k)) };
 };
 
 // centre of the opaque pixels of layer l lying across the axis at "t" (projection along unit dir d from origin o)
@@ -554,6 +691,7 @@ RIG.fitCanvas = function (doc, margin) {
   if (x0 < 0 || y0 < 0 || dx || dy) { doc.width = Math.ceil(x1 - x0 + margin * 2); doc.height = Math.ceil(y1 - y0 + margin * 2); }
 };
 RIG.shiftAll = function (doc, dx, dy) {
+  doc.origin = { x: ((doc.origin && doc.origin.x) || 0) + dx, y: ((doc.origin && doc.origin.y) || 0) + dy };
   for (const l of doc.layers) { l.x += dx; l.y += dy; }
   for (const ch of doc.chains) for (const s of ch.segs) { s.joint = { x: s.joint.x + dx, y: s.joint.y + dy }; if (s.tip) s.tip = { x: s.tip.x + dx, y: s.tip.y + dy }; }
   doc.align = { x: doc.align.x + dx, y: doc.align.y + dy };
@@ -564,7 +702,7 @@ RIG.assignOne = function (doc, l) {
   if (fm) {
     const target = doc.layers.find(o => o !== l && o.role.type !== 'frame' && !o.cutSource && normName(o.name) === normName(fm[1]));
     if (target) {
-      const alias = { walking: 'walk', running: 'run', jumping: 'jump', falling: 'fall', frame: 'always', f: 'always', anim: 'always' };
+      const alias = { walking: 'walk', running: 'run', jumping: 'jump', falling: 'fall', frame: 'always', f: 'always', anim: 'always', gif: 'always', loop: 'always' };
       const key = alias[fm[2].toLowerCase()] || fm[2].toLowerCase();
       const sets = doc.anims[target.id] = doc.anims[target.id] || {};
       const set = sets[key] = sets[key] || { fps: 8, loop: !['dead', 'down'].includes(key), frames: key === 'always' ? [target.id] : [] };
@@ -915,7 +1053,7 @@ RIG.buildRig = function (doc) {
     }
     chains.push(out);
   }
-  const rig = { name: doc.name, pixelsPerUnit: RIG.PPU, hideVanillaTail: !!doc.hideVanillaTail, hideObjects: doc.hideObjects.slice(), chains,
+  const rig = { name: doc.name, pixelsPerUnit: doc.ppu || 8, hideVanillaTail: !!doc.hideVanillaTail, hideObjects: doc.hideObjects.slice(), chains,
     editor: { width: doc.width, height: doc.height, align: doc.align } };
   const hsParts = {};
   for (const p of RIG.PARTS) { const h = hsOut(p, doc.healthScreen[p]); if (h) hsParts[p] = h; }
@@ -965,7 +1103,8 @@ RIG.buildRig = function (doc) {
 RIG.docFromRig = function (rig, images) {
   const ed = rig.editor || {};
   const doc = { name: rig.name || 'Rig', width: ed.width || 64, height: ed.height || 64, layers: [], chains: [], align: ed.align || { x: 32, y: 36 },
-    hideObjects: rig.hideObjects || [], hideVanillaTail: rig.hideVanillaTail !== false, spriteSwaps: {}, healthScreen: {}, anims: {}, sounds: {} };
+    hideObjects: rig.hideObjects || [], hideVanillaTail: rig.hideVanillaTail !== false, spriteSwaps: {}, healthScreen: {}, anims: {}, sounds: {}, ppu: rig.pixelsPerUnit || 8 };
+  RIG.PPU = doc.ppu;
   if (rig.sounds) for (const k in rig.sounds) doc.sounds[k] = [].concat(rig.sounds[k]).filter(f => images[f] && images[f].raw).map(f => ({ file: f.replace(/^snd_[^_]+_/, ''), data: images[f].raw }));
   const importAnims = (s, l) => {
     if (!s.animations) return;
@@ -1146,6 +1285,8 @@ RIG.deserialize = function (text) {
   if (_id <= max) _id = max + 1;
   for (const k of ['spriteSwaps', 'healthScreen', 'anims', 'sounds']) doc[k] = doc[k] || {};
   doc.hideObjects = doc.hideObjects || [];
+  doc.ppu = doc.ppu || 8; RIG.PPU = doc.ppu;
+  if (doc.learned) Object.assign(RIG.learned, doc.learned);
   return doc;
 };
 
@@ -1283,9 +1424,10 @@ RIG.Runtime = class {
       const u = n > 1 ? i / (n - 1) : 0;
       const elast = m.elasticity * (1 + (m.elasticityFalloff - 1) * u);
       const stiff = m.stiffness * (1 + (m.stiffnessFalloff - 1) * u);
-      const rest = (s.def.restAngle || 0)
-        + Math.sin(t * m.wagSpeed * Math.PI * 2 - i * m.wagPhase) * m.wagAmplitude * c.wagBlend
-        + Math.sin(t * m.flapSpeed * Math.PI * 2 - i * m.flapPhase) * m.flapAmplitude * c.flapBlend;
+      const pinned = s.def.maxBend === 0; // 📌: never bends, wags or flaps
+      const rest = (s.def.restAngle || 0) + (pinned ? 0 :
+        Math.sin(t * m.wagSpeed * Math.PI * 2 - i * m.wagPhase) * m.wagAmplitude * c.wagBlend
+        + Math.sin(t * m.flapSpeed * Math.PI * 2 - i * m.flapPhase) * m.flapAmplitude * c.flapBlend);
       restAbs += rest;
       const joint = M.pt(parent, s.local);
       const toTarget = M.vec(frame, V.mul(V.rot(s.dirLocal, restAbs), s.len));
