@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.2 Alpha)</title>
+<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.3 Alpha)</title>
 <style>
 :root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
 *{box-sizing:border-box}
@@ -153,12 +153,15 @@ aside.right{overflow-x:hidden}
 .folderRow .fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .folderRow button{padding:1px 6px;font-size:11px}
 .folderRow.drop{outline:1px solid var(--acc2)}
+.sug{display:flex;align-items:center;gap:4px;margin-top:3px;font-size:11px;color:#ffcf4a}
+.sug span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sug button{padding:0 6px;font-size:11px}
 </style>
 </head>
 <body>
 <div id="app">
 <header>
-  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.2 Alpha</small></h1>
+  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.3 Alpha</small></h1>
   <button id="btnOpen" class="primary">Open…</button>
   <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden>
   <button id="btnSave" title="Save this character as a project file (.luna) to keep working on it later. Open… loads it back.">Save</button>
@@ -171,6 +174,7 @@ aside.right{overflow-x:hidden}
   <button id="btnAddPsd" title="Add a PSD / PSB to this character: layers with the same names are updated, new ones are added (with no character open, it starts a new one)">Add PSD / PSB…</button>
   <select id="dlMenu" title="Download every layer of this character, to repaint in Photoshop, Krita, GIMP, Photopea…" style="width:150px;flex:none"><option value="">⬇ Download all…</option><option value="psd">as one PSD</option><option value="psb">as one PSB (large)</option><option value="png">as PNGs (one per layer)</option></select>
   <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
+  <label class="muted" title="Manual setup: opening or adding files assigns nothing and moves nothing. You give every layer its role on the left (select several + set role), move parts yourself and place bones by hand." style="display:flex;align-items:center;gap:4px;cursor:pointer"><input id="manualMode" type="checkbox">Manual</label>
   <span class="muted">Name</span><input id="name" type="text" value="MyCharacter" style="width:150px">
   <div class="grow"></div>
   <button id="btnTheme" title="Switch the editor's look (Casualties lab terminal / plain)">Theme</button>
@@ -180,7 +184,9 @@ aside.right{overflow-x:hidden}
 <main>
   <aside class="left">
     <h2>Layers</h2>
-    <div class="layerBar"><button id="lyFolder" title="Put the selected layers in a new folder (Ctrl/Shift-click to select several)">📁 New folder</button><button id="lyDelSel" title="Delete the selected layers (Delete key)">🗑 Delete</button><span id="lySelN" class="muted"></span></div>
+    <div class="layerBar"><input id="lySearch" type="text" placeholder="Search layers…" style="flex:1;min-width:0"><select id="lyFilter" title="Show only some kinds of layers" style="width:105px;flex:none"><option value="">All</option><option value="part">Body parts</option><option value="chain">Moving parts</option><option value="eye">Eyes / mouth / jaw</option><option value="injury">Injury art</option><option value="frame">Animation frames</option><option value="gear">Gear</option><option value="ignore">Not assigned</option></select></div>
+    <div class="layerBar"><button id="lyFolder" title="Put the selected layers in a new folder (Ctrl/Shift-click to select several)">📁 New folder</button><button id="lyDelSel" title="Delete the selected layers (Delete key)">🗑 Delete</button><button id="lySugAll" style="display:none" title="Use every guess (✓) in the list">✓ Use all guesses</button><button id="lyXray" title="X-ray: everything except the selected layers fades, and every layer gets an outline">X-ray</button><span id="lySelN" class="muted"></span></div>
+    <div class="layerBar" id="lyBulkBar" style="display:none"><select id="lyBulk" title="Give every selected layer the same role" style="flex:1"></select></div>
     <div id="layers"><div class="empty">Open a PSD/PSB (or PNG layers) to start.</div></div>
   </aside>
   <section id="center">
