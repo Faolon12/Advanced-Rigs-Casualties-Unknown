@@ -411,12 +411,19 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 </div>
 
 <h2>Layers</h2>
+<div class="tabs">
+<button id="paintTabPaint" class="on">Paint</button>
+<button id="paintTabPreview">Preview</button>
+<button id="paintTabExport">Export</button>
+</div>
+<div id="paintLayerView">
 <div class="section" id="paintLayerList">
 <div class="empty">No layers<br>Add one to start painting</div>
 </div>
 <div class="btn-row">
 <button id="paintBtnAddLayer" class="primary">+ Layer</button>
 <button id="paintBtnDelLayer" class="danger">- Delete</button>
+</div>
 </div>
 </aside>
 
@@ -425,18 +432,32 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 <canvas id="paintCv" width="256" height="256"></canvas>
 <div class="crosshair" id="crosshair"></div>
 </div>
-<div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none" id="paintCoord">0, 0</div>
+<div class="coord" id="paintCoord">0, 0</div>
 </div>
 
 <aside class="right">
 <h2>Preview</h2>
 <div class="section">
-<div id="previewWrap" style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:200px;overflow:hidden">
-<canvas id="paintPreview" width="128" height="128" style="max-width:100%;max-height:100%"></canvas>
+<div id="previewWrap" style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
+<canvas id="paintPreview" width="256" height="256" style="max-width:100%;max-height:100%"></canvas>
 </div>
 <div class="row" style="margin-top:8px"><label>Scale</label>
 <input id="paintPreviewScale" type="range" min="1" max="8" value="2">
 <span id="paintPreviewScaleVal">2x</span></div>
+</div>
+
+<h2>Effects</h2>
+<div class="section">
+<div class="row"><label>Blend</label>
+<select id="paintBlendMode">
+<option value="normal">Normal</option>
+<option value="multiply">Multiply</option>
+<option value="screen">Screen</option>
+<option value="overlay">Overlay</option>
+</select></div>
+<div class="row"><label>Opacity</label>
+<input id="paintLayerOpacity" type="range" min="0" max="100" value="100">
+<span id="paintLayerOpacityVal">100%</span></div>
 </div>
 
 <h2>Info</h2>
@@ -4563,8 +4584,10 @@ window.__rigEditor = { addLoopFrames, exportLayersFor, undo, redo, updateFromPsd
   Sprite Paint Editor — self-contained
   Tools: pencil, eraser, fill, color picker
   Layers: add/delete/select, rename, duplicate, visibility, opacity, move
-  Preview: live downscaled composite
+  Preview: live composite of all layers with effects
   Export: PNG download
+  Tabs: Paint / Preview / Export
+  Context: state preserved across mode switches
 ============================================================*/
 
 const paint_cv = document.getElementById('paintCv');
@@ -4584,6 +4607,7 @@ let tool = 'pencil';
 let brushSize = 4;
 let color = '#e0475b';
 let dirty = false;
+let viewTab = 'paint'; // 'paint' | 'preview' | 'export'
 
 const paint_quickColors = ['#e0475b','#8f5bff','#4cc38a','#e9b44c','#ffffff','#000000','#33363f','#1d1f25'];
 const qc = document.getElementById('paintQuickColors');
@@ -4595,6 +4619,50 @@ paint_quickColors.forEach(c => {
   s.onclick = () => { setColor(c); };
   qc.appendChild(s);
 });
+
+// Context preservation across mode switches
+const paintContext = {
+  saved: false,
+  layers: null,
+  active: null,
+  zoom: null,
+  pan: null,
+  tool: null,
+  brushSize: null,
+  color: null,
+  viewTab: null
+};
+
+function savePaintContext(){
+  paintContext.layers = JSON.parse(JSON.stringify(layers));
+  paintContext.active = active;
+  paintContext.zoom = zoom;
+  paintContext.pan = {x:pan.x, y:pan.y};
+  paintContext.tool = tool;
+  paintContext.brushSize = brushSize;
+  paintContext.color = color;
+  paintContext.viewTab = viewTab;
+  paintContext.saved = true;
+}
+
+function restorePaintContext(){
+  if(!paintContext.saved) return;
+  layers = JSON.parse(JSON.stringify(paintContext.layers));
+  active = paintContext.active;
+  zoom = paintContext.zoom;
+  pan = {x:paintContext.pan.x, y:paintContext.pan.y};
+  tool = paintContext.tool;
+  brushSize = paintContext.brushSize;
+  color = paintContext.color;
+  viewTab = paintContext.viewTab;
+  document.getElementById('paintToolSel').value = tool;
+  document.getElementById('paintBrushSize').value = brushSize;
+  document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
+  document.getElementById('paintColorPick').value = color;
+  switchPaintTab(viewTab);
+  dirty = true;
+  updateUI(); composite();
+}
 
 function toast(msg, ms=2600){
   const t = document.getElementById('toast');
@@ -4631,15 +4699,20 @@ function composite(){
 function updatePreview(){
   const scale = parseInt(document.getElementById('paintPreviewScale').value);
   document.getElementById('paintPreviewScaleVal').textContent = scale+'x';
-  paint_ctx.fillStyle = '#0a0a0f';
-  paint_ctx.fillRect(0,0,paint_preview.width,paint_preview.height);
+  paint_pctx.fillStyle = '#0a0a0f';
+  paint_pctx.fillRect(0,0,paint_preview.width,paint_preview.height);
+  paint_pctx.save();
+  const pw = paint_preview.width, ph = paint_preview.height;
+  const lw = paint_cv.width, lh = paint_cv.height;
+  const fit = Math.min(pw/lw, ph/lh);
+  paint_pctx.translate((pw - lw*fit)/2, (ph - lh*fit)/2);
+  paint_pctx.scale(fit*scale, fit*scale);
   layers.forEach(l=>{
-    if(l.visible){
-      paint_ctx.globalAlpha = l.opacity;
-      paint_ctx.drawImage(l.canvas, 0, 0, paint_preview.width, paint_preview.height);
-    }
+    paint_pctx.globalAlpha = l.opacity;
+    if(l.visible) paint_pctx.drawImage(l.canvas, 0, 0);
   });
-  paint_ctx.globalAlpha = 1;
+  paint_pctx.globalAlpha = 1;
+  paint_pctx.restore();
 }
 
 function updateUI(){
@@ -4647,7 +4720,10 @@ function updateUI(){
   document.getElementById('paintInfoLayers').textContent = layers.length;
   document.getElementById('paintInfoZoom').textContent = Math.round(zoom*100)+'%';
   document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
+  document.getElementById('paintLayerOpacityVal').textContent = Math.round((active!==null?layers[active].opacity:1)*100)+'%';
+  document.getElementById('paintLayerOpacity').value = active!==null?Math.round(layers[active].opacity*100):100;
   renderLayers();
+  switchPaintTab(viewTab);
 }
 
 function renderLayers(){
@@ -4659,7 +4735,7 @@ function renderLayers(){
   list.innerHTML = '';
   layers.forEach((l,i)=>{
     const el = document.createElement('div');
-    el.className = 'layer-item'+(i===active?' active':'');
+    el.className = 'layer-item'+(i===active?' active':'' );
     el.onclick = (ev)=>{ if(!ev.target.closest('button,input,select')) setActive(i); };
 
     const vis = document.createElement('div');
@@ -4672,7 +4748,6 @@ function renderLayers(){
     name.textContent = l.name;
     el.appendChild(name);
 
-    // visibility toggle
     const visBtn = document.createElement('button');
     visBtn.className = 'secondary';
     visBtn.title = l.visible ? 'Hide layer' : 'Show layer';
@@ -4680,7 +4755,6 @@ function renderLayers(){
     visBtn.onclick = (ev)=>{ ev.stopPropagation(); toggleVisibility(i); };
     el.appendChild(visBtn);
 
-    // rename
     const renameBtn = document.createElement('button');
     renameBtn.className = 'secondary';
     renameBtn.title = 'Rename';
@@ -4688,7 +4762,6 @@ function renderLayers(){
     renameBtn.onclick = (ev)=>{ ev.stopPropagation(); renameLayer(i); };
     el.appendChild(renameBtn);
 
-    // duplicate
     const dupBtn = document.createElement('button');
     dupBtn.className = 'secondary';
     dupBtn.title = 'Duplicate';
@@ -4696,7 +4769,6 @@ function renderLayers(){
     dupBtn.onclick = (ev)=>{ ev.stopPropagation(); duplicateLayer(i); };
     el.appendChild(dupBtn);
 
-    // delete
     const delBtn = document.createElement('button');
     delBtn.className = 'danger';
     delBtn.title = 'Delete layer';
@@ -4704,7 +4776,6 @@ function renderLayers(){
     delBtn.onclick = (ev)=>{ ev.stopPropagation(); deleteLayer(i); };
     el.appendChild(delBtn);
 
-    // opacity
     const op = document.createElement('input');
     op.type = 'range'; op.min = '0'; op.max = '100'; op.value = Math.round(l.opacity*100);
     op.className = 'input-small';
@@ -4727,8 +4798,7 @@ function addLayer(name=null){
   layers.push({name:name||('Layer '+(layers.length+1)), canvas:c, visible:true, opacity:1});
   active = layers.length-1;
   dirty = true;
-  updateUI();
-  composite();
+  updateUI(); composite();
   toast('Layer added');
 }
 
@@ -4739,8 +4809,7 @@ function deleteLayer(idx=null){
   if(active>=layers.length) active = layers.length-1;
   if(active===null) active = 0;
   dirty = true;
-  updateUI();
-  composite();
+  updateUI(); composite();
   toast('Layer deleted');
 }
 
@@ -4752,23 +4821,20 @@ function duplicateLayer(idx){
   layers.splice(idx+1, 0, copy);
   active = idx+1;
   dirty = true;
-  updateUI();
-  composite();
+  updateUI(); composite();
   toast('Layer duplicated');
 }
 
 function toggleVisibility(idx){
   layers[idx].visible = !layers[idx].visible;
   dirty = true;
-  composite();
-  updateUI();
+  composite(); updateUI();
 }
 
 function setOpacity(idx, val){
   layers[idx].opacity = val;
   dirty = true;
-  composite();
-  updateUI();
+  composite(); updateUI();
 }
 
 function renameLayer(idx){
@@ -4783,8 +4849,7 @@ function renameLayer(idx){
 function setColor(c){
   color = c;
   document.getElementById('paintColorPick').value = c;
-  updateUI();
-  composite();
+  updateUI(); composite();
 }
 
 function getCanvasPos(e){
@@ -4820,7 +4885,7 @@ function paint(x,y){
     floodFill(g, x, y, color);
   } else if(tool==='picker'){
     const px = g.getImageData(x,y,1,1).data;
-    setColor(`#${px[0].toString(16).padStart(2,'0')}${px[1].toString(16).padStart(2,'0')}${px[2].toString(16).padStart(2,'0')}`);
+    setColor('#'+px[0].toString(16).padStart(2,'0')+px[1].toString(16).padStart(2,'0')+px[2].toString(16).padStart(2,'0'));
   }
   dirty = true;
   composite();
@@ -4853,6 +4918,35 @@ function hexToRgb(h){
   return {r,g,b,a:255};
 }
 function colorsEqual(a,b){ return a[0]===b.r&&a[1]===b.g&&a[2]===b.b&&a[3]===b.a; }
+
+// Tab switching within paint editor
+function switchPaintTab(tab){
+  viewTab = tab;
+  // Update tab buttons
+  ['paint','preview','export'].forEach(t=>{
+    const btn = document.getElementById('paintTab'+t.charAt(0).toUpperCase()+t.slice(1));
+    const active = t === tab;
+    if(btn) btn.classList.toggle('on', active);
+  });
+  
+  // Update visibility of main areas
+  const paintArea = document.getElementById('viewport');
+  const previewArea = document.getElementById('previewWrap').parentElement;
+  const exportArea = document.querySelector('#paintLayerView ~ .right');
+  
+  if(tab === 'paint'){
+    paintArea.style.display = 'block';
+    previewArea.style.display = 'none';
+    document.getElementById('paintCv').focus();
+  } else if(tab === 'preview'){
+    paintArea.style.display = 'none';
+    previewArea.style.display = 'block';
+    updatePreview();
+  } else if(tab === 'export'){
+    paintArea.style.display = 'block';
+    previewArea.style.display = 'none';
+  }
+}
 
 paint_cv.addEventListener('mousedown', e=>{
   if(e.button!==0||active===null) return;
@@ -4887,8 +4981,7 @@ paint_wrap.addEventListener('wheel', e=>{
   zoom = newZoom;
   pan.x = e.clientX - rect.left - mx*zoom;
   pan.y = e.clientY - rect.top - my*zoom;
-  updateUI();
-  composite();
+  updateUI(); composite();
 }, {passive:false});
 
 document.getElementById('paintToolSel').onchange = e=>{ tool = e.target.value; };
@@ -4897,6 +4990,17 @@ document.getElementById('paintBrushSize').oninput = e=>{
   document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
 };
 document.getElementById('paintColorPick').oninput = e=>setColor(e.target.value);
+document.getElementById('paintBlendMode').onchange = e=>{
+  paint_ctx.globalCompositeOperation = e.target.value;
+  paint_pctx.globalCompositeOperation = e.target.value;
+  composite();
+};
+document.getElementById('paintLayerOpacity').oninput = e=>{
+  const val = parseInt(e.target.value)/100;
+  document.getElementById('paintLayerOpacityVal').textContent = Math.round(val*100)+'%';
+  if(active!==null) setOpacity(active, val);
+};
+
 document.getElementById('paintBtnNew').onclick = ()=>{
   if(confirm('New sprite will clear all layers. Continue?')){
     layers = []; active = null; zoom = 1; pan = {x:0,y:0};
@@ -4992,9 +5096,14 @@ function loadImage(file){
   });
 }
 
+// Tab button handlers
+document.getElementById('paintTabPaint').onclick = ()=>switchPaintTab('paint');
+document.getElementById('paintTabPreview').onclick = ()=>switchPaintTab('preview');
+document.getElementById('paintTabExport').onclick = ()=>switchPaintTab('export');
+
 addLayer();
-updateUI();
-composite();
+restorePaintContext();
+updateUI(); composite();
 
 </script>
 </body>
