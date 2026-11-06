@@ -21,10 +21,10 @@ header{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1p
 header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
 header h1 span{color:var(--acc)}
 header .grow{flex:1}
-main{display:grid;grid-template-columns:260px 1fr 340px;min-height:0}
-aside{background:var(--panel);overflow:auto;min-height:0}
+
+
 aside.left{border-right:1px solid var(--line)}
-aside.right{border-left:1px solid var(--line)}
+aside
 h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 12px 6px}
 .layer{display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center;padding:5px 10px;border-bottom:1px solid #22242b;cursor:pointer}
 .layer:hover{background:#22252c}
@@ -102,7 +102,7 @@ details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 [data-theme=casualties] select,[data-theme=casualties] input[type=text],[data-theme=casualties] input[type=number]{background:#090b0d;border:1px solid #243028;border-radius:2px;color:#cfe0cf}
 [data-theme=casualties] input[type=range]{accent-color:var(--acc)}
 [data-theme=casualties] input[type=checkbox]{accent-color:var(--acc2)}
-[data-theme=casualties] aside{background:linear-gradient(180deg,#0d0f12,#0a0c0e)}
+[data-theme=casualties] 
 [data-theme=casualties] h2{color:var(--acc2);letter-spacing:.18em;font-size:10.5px;border-bottom:1px dashed #1e2a22;padding-bottom:4px}
 [data-theme=casualties] h2::before{content:"// ";color:#3d5a46}
 [data-theme=casualties] .layer{border-bottom:1px solid #141a16}
@@ -127,7 +127,7 @@ details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 [data-theme=casualties] ::-webkit-scrollbar-track{background:#08090b}
 
 /* the side panels never scroll sideways: rows wrap, inputs shrink */
-aside.right{overflow-x:hidden}
+aside
 .sec{overflow-wrap:anywhere}
 .row{flex-wrap:wrap;min-width:0}
 .row label{flex:0 0 96px;min-width:0}
