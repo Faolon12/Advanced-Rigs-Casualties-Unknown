@@ -218,8 +218,10 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 
 #paintViewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
 #paintCanvasWrap{position:relative;display:flex;align-items:center;justify-content:center;padding:12px;min-width:100%;min-height:100%}
-canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);display:block;flex:none}
-canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block}
+canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);display:block;flex:none;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px}
+canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px;touch-action:none;cursor:grab}
+canvas#paintPreview.panning{cursor:grabbing}
+canvas#paintPreview{cursor:grab;touch-action:none}
 #paintCoord{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none}
 
 .sug{display:flex;align-items:center;gap:4px;margin-top:3px;font-size:11px;color:#ffcf4a}
@@ -379,6 +381,7 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 <div class="row"><label>Tool</label>
 <select id="paintToolSel">
 <option value="pencil">Pencil</option>
+<option value="pixel" title="Draw crisp, fully opaque square pixels">Pixel brush (opaque)</option>
 <option value="eraser">Eraser</option>
 <option value="fill">Fill</option>
 <option value="picker">Picker</option>
@@ -434,12 +437,15 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 <aside class="right">
 <h2>Preview</h2>
 <div class="section">
-<div id="previewWrap" style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
+<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move." style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
 <canvas id="paintPreview" width="256" height="256" style="max-width:100%;max-height:100%"></canvas>
 </div>
 <div class="row" style="margin-top:8px"><label>Scale</label>
-<input id="paintPreviewScale" type="range" min="1" max="8" value="2">
-<span id="paintPreviewScaleVal">2x</span></div>
+<input id="paintPreviewScale" type="range" min="1" max="8" step="0.1" value="1">
+<span id="paintPreviewScaleVal">1x</span></div>
+<div class="row"><label>Show active layer on top</label><input id="paintPreviewOnTop" type="checkbox" checked></div>
+<div class="row"><label>Preview opacity</label><input id="paintPreviewOpacity" type="range" min="0" max="100" value="100"><span id="paintPreviewOpacityVal">100%</span></div>
+<div class="btn-row"><button id="paintPreviewCenter" title="Reset preview zoom and position">Center preview</button></div>
 <div class="row" style="margin-top:8px"><label>Rig anim</label>
 <select id="paintAnimClip" style="flex:1;min-width:0;max-width:160px" title="Pick the game animation to preview on the whole rig"></select></div>
 <div class="btn-row">

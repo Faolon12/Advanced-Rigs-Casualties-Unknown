@@ -218,8 +218,10 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 
 #paintViewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
 #paintCanvasWrap{position:relative;display:flex;align-items:center;justify-content:center;padding:12px;min-width:100%;min-height:100%}
-canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);display:block;flex:none}
-canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block}
+canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);display:block;flex:none;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px}
+canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px;touch-action:none;cursor:grab}
+canvas#paintPreview.panning{cursor:grabbing}
+canvas#paintPreview{cursor:grab;touch-action:none}
 #paintCoord{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none}
 
 .sug{display:flex;align-items:center;gap:4px;margin-top:3px;font-size:11px;color:#ffcf4a}
@@ -379,6 +381,7 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 <div class="row"><label>Tool</label>
 <select id="paintToolSel">
 <option value="pencil">Pencil</option>
+<option value="pixel" title="Draw crisp, fully opaque square pixels">Pixel brush (opaque)</option>
 <option value="eraser">Eraser</option>
 <option value="fill">Fill</option>
 <option value="picker">Picker</option>
@@ -434,12 +437,15 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 <aside class="right">
 <h2>Preview</h2>
 <div class="section">
-<div id="previewWrap" style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
+<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move." style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
 <canvas id="paintPreview" width="256" height="256" style="max-width:100%;max-height:100%"></canvas>
 </div>
 <div class="row" style="margin-top:8px"><label>Scale</label>
-<input id="paintPreviewScale" type="range" min="1" max="8" value="2">
-<span id="paintPreviewScaleVal">2x</span></div>
+<input id="paintPreviewScale" type="range" min="1" max="8" step="0.1" value="1">
+<span id="paintPreviewScaleVal">1x</span></div>
+<div class="row"><label>Show active layer on top</label><input id="paintPreviewOnTop" type="checkbox" checked></div>
+<div class="row"><label>Preview opacity</label><input id="paintPreviewOpacity" type="range" min="0" max="100" value="100"><span id="paintPreviewOpacityVal">100%</span></div>
+<div class="btn-row"><button id="paintPreviewCenter" title="Reset preview zoom and position">Center preview</button></div>
 <div class="row" style="margin-top:8px"><label>Rig anim</label>
 <select id="paintAnimClip" style="flex:1;min-width:0;max-width:160px" title="Pick the game animation to preview on the whole rig"></select></div>
 <div class="btn-row">
@@ -2282,6 +2288,7 @@ let tab = 'rig';
 const view = { zoom: 8, panX: 0, panY: 0 }; // rig view: screen = canvasPx*zoom + pan
 let showSkel = true, moveSkel = false;
 const imgCache = new Map(); // layer/obj -> canvas
+let bridgeExcludedLayerId = null;
 
 function toast(msg, ms) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2600); }
 function hint(msg) { $('#hint').innerHTML = msg; }
@@ -2859,9 +2866,12 @@ $('#lySugAll').onclick = () => { const list = doc.layers.filter(l => l.suggest &
 $('#lySearch').oninput = (e) => { lyQuery = e.target.value.trim(); renderLayers(); };
 $('#lyFilter').onchange = (e) => { lyKind = e.target.value; renderLayers(); };
 $('#lyXray').onclick = (e) => { xray = !xray; e.target.classList.toggle('on', xray); draw(); };
-$('#manualMode').checked = manualMode;
-$('#manualMode').onchange = (e) => { manualMode = e.target.checked; try { localStorage.setItem('luna-ars-manual', manualMode ? '1' : '0'); } catch (er) { }
-  toast(manualMode ? 'Manual setup: new files keep their layout and get no roles. Set roles on the left (select several → set role), move parts, place bones yourself.' : 'Automatic setup: new files are matched and put together by their layer names.', 7000); };
+const manualModeToggle = $('#manualMode');
+if (manualModeToggle) {
+  manualModeToggle.checked = manualMode;
+  manualModeToggle.onchange = (e) => { manualMode = e.target.checked; try { localStorage.setItem('luna-ars-manual', manualMode ? '1' : '0'); } catch (er) { }
+    toast(manualMode ? 'Manual setup: new files keep their layout and get no roles. Set roles on the left (select several → set role), move parts, place bones yourself.' : 'Automatic setup: new files are matched and put together by their layer names.', 7000); };
+}
 // one role for every selected layer
 function updateBulk() {
   const bar = $('#lyBulkBar'); if (!bar) return; const list = selectedLayers();
@@ -3498,7 +3508,7 @@ function draw() {
   // layers
   const prevFr = animPrevFrames();
   for (const l of doc.layers) {
-    if (l.cutSource) continue;
+    if (l.cutSource || l.id === bridgeExcludedLayerId) continue;
     if (prevFr && l.id === animPrev.id) { // the part plays its frames instead of its own art
       const [cur, before] = prevFr;
       if (before && before !== cur) { const q = toScreen(before); ctx.globalAlpha = 0.3; ctx.drawImage(layerCanvas(before), q.x, q.y, before.w * view.zoom, before.h * view.zoom); }
@@ -4872,27 +4882,43 @@ resize(); renderInspector(); hint('Open your character to begin. New here? Click
 // ---- bridge API used by the sprite paint editor (it lives outside this closure)
 function bridgeLayers() { return doc ? doc.layers.filter(l => l.rgba && !l.hidden) : []; }
 function bridgeLayer(id) { return doc ? RIG.layer(doc, id) : null; }
-function bridgeSetPixels(id, rgba) {
+function bridgeSetPixels(id, rgba, bounds) {
   const l = bridgeLayer(id); if (!l) return false;
-  if (!rgba || rgba.length !== l.w * l.h * 4) return false;
+  const next = bounds || { x: l.x, y: l.y, w: l.w, h: l.h };
+  if (!Number.isInteger(next.x) || !Number.isInteger(next.y) ||
+      !Number.isInteger(next.w) || !Number.isInteger(next.h) ||
+      next.w < 1 || next.h < 1 || next.x < 0 || next.y < 0 ||
+      next.x + next.w > doc.width || next.y + next.h > doc.height ||
+      !rgba || rgba.length !== next.w * next.h * 4) return false;
   l.rgba = new Uint8Array(rgba);
+  l.x = next.x; l.y = next.y; l.w = next.w; l.h = next.h;
   imgCache.delete(l);              // the cached canvas is now stale
   return true;
 }
-function bridgeSnapshot() {
+function bridgeSnapshot(excludeLayerId) {
   if (!doc) return null;
   const paintOpen = document.getElementById('panelPaint').classList.contains('active');
   const app = document.getElementById('app');
   const prev = app.style.visibility;
+  const prevExcludedLayerId = bridgeExcludedLayerId;
   if (paintOpen) { app.style.visibility = 'hidden'; switchMode('rig'); }
+  const prevView = { zoom: view.zoom, panX: view.panX, panY: view.panY };
   try {
+    bridgeExcludedLayerId = excludeLayerId || null;
+    fitView();
     resize(); draw();
     const c = document.createElement('canvas');
-    c.width = cv.width; c.height = cv.height;
-    c.getContext('2d').drawImage(cv, 0, 0);
+    c.width = doc.width; c.height = doc.height;
+    const d = window.devicePixelRatio || 1;
+    c.getContext('2d').imageSmoothingEnabled = false;
+    c.getContext('2d').drawImage(cv, d * view.panX, d * view.panY, d * doc.width * view.zoom, d * doc.height * view.zoom, 0, 0, doc.width, doc.height);
+    c.rigTransform = { scale: 1, x: 0, y: 0 };
     return c;
   } finally {
+    bridgeExcludedLayerId = prevExcludedLayerId;
+    view.zoom = prevView.zoom; view.panX = prevView.panX; view.panY = prevView.panY;
     if (paintOpen) { switchMode('paint'); app.style.visibility = prev; }
+    else { resize(); draw(); }
   }
 }
 
@@ -4918,6 +4944,8 @@ function bridgeCopyCanvas() {
   const c = document.createElement('canvas');
   c.width = cv.width; c.height = cv.height;
   c.getContext('2d').drawImage(cv, 0, 0);
+  const d = window.devicePixelRatio || 1;
+  c.rigTransform = { scale: d * view.zoom, x: d * view.panX, y: d * view.panY };
   return c;
 }
 function bridgeStopAnim() {
@@ -4939,7 +4967,7 @@ window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersF
   layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, snapshot: bridgeSnapshot,
   animClips: bridgeAnimClips, startAnim: bridgeStartAnim, stopAnim: bridgeStopAnim, setAnimClip: bridgeSetAnimClip, animCrop: bridgeAnimCrop,
   setAnimPlaying: bridgeSetAnimPlaying, isAnimPlaying: bridgeIsAnimPlaying, copyCanvas: bridgeCopyCanvas,
-  redraw: () => { resize(); draw(); renderInspector(); }, toastMsg: (m, ms) => toast(m, ms) };
+  redraw: () => { resize(); draw(); renderLayers(); renderInspector(); }, toastMsg: (m, ms) => toast(m, ms) };
 })();
 
 
@@ -4947,7 +4975,7 @@ window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersF
 
 /*============================================================
   Sprite Paint Editor — self-contained
-  Tools: pencil, eraser, fill, color picker
+  Tools: pencil, opaque pixel brush, eraser, fill, color picker
   Layers: add/delete/select, rename, duplicate, visibility, opacity, move
   Preview: live composite of all layers with effects
   Export: PNG download
@@ -4976,6 +5004,9 @@ let dirty = false;
 let viewTab = 'paint'; // 'paint' | 'preview' | 'export'
 let previewMode = 'paint'; // what the Preview tab shows: 'paint' | 'rig'
 let rigShot = null;        // last rendered rig canvas, for the rig preview
+let previewPan = { x: 0, y: 0 };
+let previewRenderTransform = null;
+let previewPointer = null;
 
 const paint_quickColors = ['#e0475b','#8f5bff','#4cc38a','#e9b44c','#ffffff','#000000','#33363f','#1d1f25'];
 const qc = document.getElementById('paintQuickColors');
@@ -5053,44 +5084,76 @@ function newLayerCanvas(w,h){
 function composite(){
   paint_ctx.setTransform(1, 0, 0, 1, 0, 0);
   paint_ctx.globalAlpha = 1;
-  paint_ctx.fillStyle = '#0a0a0f';
-  paint_ctx.fillRect(0, 0, paint_cv.width, paint_cv.height);
+  paint_ctx.globalCompositeOperation = 'source-over';
+  paint_ctx.clearRect(0, 0, paint_cv.width, paint_cv.height);
   layers.forEach(l=>{
+    paint_ctx.globalCompositeOperation = blendOperation(l.blendMode);
     paint_ctx.globalAlpha = l.opacity;
     if(l.visible) paint_ctx.drawImage(l.canvas, 0, 0);
   });
   paint_ctx.globalAlpha = 1;
+  paint_ctx.globalCompositeOperation = 'source-over';
   updatePreview();
+}
+
+function blendOperation(mode){
+  return mode === 'normal' || !mode ? 'source-over' : mode;
 }
 
 function updatePreview(){
   if (previewMode === 'rig' && (animPreviewOn || lastAnimShot)) { drawAnimPreview(lastAnimShot, lastAnimCrop); return; }
-  const scale = parseInt(document.getElementById('paintPreviewScale').value);
-  document.getElementById('paintPreviewScaleVal').textContent = scale+'x';
-  paint_pctx.fillStyle = '#0a0a0f';
-  paint_pctx.fillRect(0,0,paint_preview.width,paint_preview.height);
+  const zoomLevel = parseFloat(document.getElementById('paintPreviewScale').value) || 1;
+  document.getElementById('paintPreviewScaleVal').textContent = zoomLevel.toFixed(1)+'x';
+  paint_pctx.clearRect(0,0,paint_preview.width,paint_preview.height);
+  if (previewMode === 'rig' && rigShot) {
+    const fitScale = Math.min(paint_preview.width / rigShot.width, paint_preview.height / rigShot.height);
+    const scale = fitScale * zoomLevel;
+    const baseX = (paint_preview.width - rigShot.width * fitScale) / 2;
+    const baseY = (paint_preview.height - rigShot.height * fitScale) / 2;
+    const offsetX = baseX + previewPan.x, offsetY = baseY + previewPan.y;
+    previewRenderTransform = { kind: 'rig', scale, fitScale, baseX, baseY, offsetX, offsetY,
+      rig: rigShot.rigTransform || null };
+    paint_pctx.imageSmoothingEnabled = false;
+    paint_pctx.drawImage(rigShot, offsetX, offsetY, rigShot.width * scale, rigShot.height * scale);
+    drawPreviewEditingLayer();
+    return;
+  }
   paint_pctx.save();
   const pw = paint_preview.width, ph = paint_preview.height;
   const lw = paint_cv.width, lh = paint_cv.height;
   const fit = Math.min(pw/lw, ph/lh);
-  paint_pctx.translate((pw - lw*fit)/2, (ph - lh*fit)/2);
-  paint_pctx.scale(fit*scale, fit*scale);
+  const previewScale = fit * zoomLevel;
+  const baseX = (pw - lw*fit)/2, baseY = (ph - lh*fit)/2;
+  const offsetX = baseX + previewPan.x, offsetY = baseY + previewPan.y;
+  previewRenderTransform = { kind: 'paint', scale: previewScale, fitScale: fit, baseX, baseY, offsetX, offsetY };
+  paint_pctx.translate(offsetX, offsetY);
+  paint_pctx.scale(previewScale, previewScale);
   layers.forEach(l=>{
+    paint_pctx.globalCompositeOperation = blendOperation(l.blendMode);
     paint_pctx.globalAlpha = l.opacity;
     if(l.visible) paint_pctx.drawImage(l.canvas, 0, 0);
   });
   paint_pctx.globalAlpha = 1;
+  paint_pctx.globalCompositeOperation = 'source-over';
   paint_pctx.restore();
-  if (previewMode === 'rig') drawRigShot(paint_pctx, paint_preview);
 }
 
-function drawRigShot(g, el){
-  g.fillStyle = '#0a0a0f';
-  g.fillRect(0, 0, el.width, el.height);
-  if (!rigShot) return;
-  const fit = Math.min(el.width / rigShot.width, el.height / rigShot.height);
-  g.imageSmoothingEnabled = false;
-  g.drawImage(rigShot, (el.width - rigShot.width * fit) / 2, (el.height - rigShot.height * fit) / 2, rigShot.width * fit, rigShot.height * fit);
+function drawPreviewEditingLayer(){
+  const onTop = document.getElementById('paintPreviewOnTop').checked;
+  const layer = active === null ? null : layers[active];
+  const t = previewRenderTransform;
+  if (!onTop || !layer || !layer.visible || !t || !t.rig) return;
+  const opacity = parseInt(document.getElementById('paintPreviewOpacity').value, 10) / 100;
+  const transform = t.rig;
+  paint_pctx.save();
+  paint_pctx.setTransform(t.scale * transform.scale, 0, 0, t.scale * transform.scale,
+    t.offsetX + t.scale * (transform.x - (t.sourceX || 0)),
+    t.offsetY + t.scale * (transform.y - (t.sourceY || 0)));
+  paint_pctx.globalAlpha = opacity;
+  paint_pctx.globalCompositeOperation = 'source-over';
+  paint_pctx.imageSmoothingEnabled = false;
+  paint_pctx.drawImage(layer.canvas, 0, 0);
+  paint_pctx.restore();
 }
 
 // ---------------------------------------------------------------- view fitting
@@ -5199,6 +5262,17 @@ function scheduleAutoPush(){
   autoPushTimer = setTimeout(autoPushNow, 250);
 }
 
+function opaqueBounds(canvas){
+  const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  let minX = canvas.width, minY = canvas.height, maxX = -1, maxY = -1;
+  for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+    if (data[(y * canvas.width + x) * 4 + 3] === 0) continue;
+    minX = Math.min(minX, x); minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+  }
+  return maxX < minX ? null : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
 function autoPushNow(){
   clearTimeout(autoPushTimer);
   const g = rigPushTargets();
@@ -5207,17 +5281,32 @@ function autoPushNow(){
   for (const p of g.targets) {
     const l = g.R.layerById(p.rigLayerId);
     if (!l || !p.canvas) { failed++; continue; }
-    const sx = Math.round(l.x), sy = Math.round(l.y);
+    let sx = Math.round(l.x), sy = Math.round(l.y), sw = l.w, sh = l.h;
+    if (p.needsExpand) {
+      try {
+        const bounds = opaqueBounds(p.canvas);
+        if (bounds) {
+          const right = Math.max(sx + sw, bounds.x + bounds.w);
+          const bottom = Math.max(sy + sh, bounds.y + bounds.h);
+          sx = Math.min(sx, bounds.x); sy = Math.min(sy, bounds.y);
+          sw = right - sx; sh = bottom - sy;
+        }
+        p.needsExpand = false;
+      } catch (e) { failed++; continue; }
+    }
     let data;
-    try { data = p.canvas.getContext('2d').getImageData(sx, sy, l.w, l.h).data; }
+    try { data = p.canvas.getContext('2d').getImageData(sx, sy, sw, sh).data; }
     catch (e) { failed++; continue; }
-    if (g.R.setLayerPixels(l.id, data)) pushed++; else failed++;
+    const bounds = sx === l.x && sy === l.y && sw === l.w && sh === l.h ? null : { x: sx, y: sy, w: sw, h: sh };
+    if (g.R.setLayerPixels(l.id, data, bounds)) {
+      p.rigX = sx; p.rigY = sy; p.rigW = sw; p.rigH = sh;
+      pushed++;
+    } else failed++;
   }
   g.R.redraw();
   rigBridgeStatus('Auto-synced ' + pushed + ' layer' + (pushed === 1 ? '' : 's') + (failed ? '  (' + failed + ' skipped)' : ''));
-  if (previewMode === 'rig' && viewTab === 'preview' && !animPreviewOn) {
-    rigShot = g.R.snapshot();
-    updatePreview();
+  if (previewMode === 'rig' && !animPreviewOn) {
+    refreshRigPreview();
   }
   return pushed;
 }
@@ -5246,11 +5335,19 @@ function drawAnimPreview(shot, crop){
   paint_pctx.fillRect(0, 0, paint_preview.width, paint_preview.height);
   if (!shot) return;
   const src = crop || { x: 0, y: 0, w: shot.width, h: shot.height };
-  const fit = Math.min(paint_preview.width / src.w, paint_preview.height / src.h);
+  const zoomLevel = parseFloat(document.getElementById('paintPreviewScale').value) || 1;
+  document.getElementById('paintPreviewScaleVal').textContent = zoomLevel.toFixed(1)+'x';
+  const fitScale = Math.min(paint_preview.width / src.w, paint_preview.height / src.h);
+  const scale = fitScale * zoomLevel;
+  const baseX = (paint_preview.width - src.w * fitScale) / 2;
+  const baseY = (paint_preview.height - src.h * fitScale) / 2;
+  const offsetX = baseX + previewPan.x, offsetY = baseY + previewPan.y;
+  previewRenderTransform = { kind: 'rig', scale, fitScale, baseX, baseY, offsetX, offsetY,
+    sourceX: src.x, sourceY: src.y, rig: shot.rigTransform || null };
   paint_pctx.imageSmoothingEnabled = false;
   paint_pctx.drawImage(shot, src.x, src.y, src.w, src.h,
-    (paint_preview.width - src.w * fit) / 2, (paint_preview.height - src.h * fit) / 2,
-    src.w * fit, src.h * fit);
+    offsetX, offsetY, src.w * scale, src.h * scale);
+  if (!animPreviewOn) drawPreviewEditingLayer();
 }
 
 function animPreviewTick(){
@@ -5283,16 +5380,20 @@ function startRigAnimPreview(){
   if (!animFrame) animFrame = requestAnimationFrame(animPreviewTick);
 }
 
-function stopRigAnimPreview(){
+function stopRigAnimPreview(refreshRig=true){
   animPreviewOn = false;
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = 0; }
   const R = window.__rigEditor;
   if (R && R.stopAnim) R.stopAnim();
   const btn = document.getElementById('paintBtnAnimPlay');
   if (btn) btn.textContent = '▶ Play';
-  if (previewMode === 'rig') updatePreview();
+  if (previewMode === 'rig') {
+    lastAnimShot = null; lastAnimCrop = null;
+    if (refreshRig) refreshRigPreview();
+    else updatePreview();
+  } else updatePreview();
 }
-window.__stopAnimPreview = stopRigAnimPreview;
+window.__stopAnimPreview = ()=>stopRigAnimPreview(false);
 
 function toggleRigAnimPreview(){
   const R = window.__rigEditor;
@@ -5332,6 +5433,7 @@ function updateUI(){
   document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
   document.getElementById('paintLayerOpacityVal').textContent = Math.round((active!==null?layers[active].opacity:1)*100)+'%';
   document.getElementById('paintLayerOpacity').value = active!==null?Math.round(layers[active].opacity*100):100;
+  document.getElementById('paintBlendMode').value = active!==null ? (layers[active].blendMode || 'normal') : 'normal';
   syncCanvasScale();
   updateUndoButtons();
   renderLayers();
@@ -5451,6 +5553,7 @@ window.addEventListener('resize', closeLayerMenu);
 
 function setActive(i){
   active = i;
+  if (previewMode === 'rig') refreshRigPreview();
   updateUI();
   composite();
 }
@@ -5458,9 +5561,10 @@ function setActive(i){
 function addLayer(name=null, silent=false){
   if(!silent) pushPaintUndo();
   const c = newLayerCanvas(paint_cv.width, paint_cv.height);
-  layers.push({name:name||('Layer '+(layers.length+1)), canvas:c, visible:true, opacity:1});
+  layers.push({name:name||('Layer '+(layers.length+1)), canvas:c, visible:true, opacity:1, blendMode:'normal'});
   active = layers.length-1;
   dirty = true;
+  if (previewMode === 'rig') refreshRigPreview();
   updateUI(); composite();
   if(!silent) toast('Layer added');
 }
@@ -5473,6 +5577,7 @@ function deleteLayer(idx=null){
   if(active>=layers.length) active = layers.length-1;
   if(active===null) active = 0;
   dirty = true;
+  if (previewMode === 'rig') refreshRigPreview();
   updateUI(); composite();
   toast('Layer deleted');
 }
@@ -5483,10 +5588,11 @@ function duplicateLayer(idx){
   pushPaintUndo();
   const c = newLayerCanvas(paint_cv.width, paint_cv.height);
   c.getContext('2d').drawImage(l.canvas, 0, 0);
-  const copy = {name:l.name+' copy', canvas:c, visible:l.visible, opacity:l.opacity};
+  const copy = {name:l.name+' copy', canvas:c, visible:l.visible, opacity:l.opacity, blendMode:l.blendMode || 'normal'};
   layers.splice(idx+1, 0, copy);
   active = idx+1;
   dirty = true;
+  if (previewMode === 'rig') refreshRigPreview();
   updateUI(); composite();
   toast('Layer duplicated');
 }
@@ -5496,6 +5602,7 @@ function toggleVisibility(idx){
   pushPaintUndo();
   layers[idx].visible = !layers[idx].visible;
   dirty = true;
+  if (previewMode === 'rig') refreshRigPreview();
   composite(); updateUI();
 }
 
@@ -5532,18 +5639,35 @@ function getCanvasPos(e){
   return {x:Math.floor(x), y:Math.floor(y)};
 }
 
+function paintPixelLine(g, from, to){
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
+  const leftOffset = Math.floor(brushSize / 2);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.fillStyle = color;
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round(from.x + dx * i / steps);
+    const y = Math.round(from.y + dy * i / steps);
+    g.fillRect(x - leftOffset, y - leftOffset, brushSize, brushSize);
+  }
+}
+
 function paint(x,y){
   if(active===null) return;
   const g = layers[active].canvas.getContext('2d');
   g.lineCap = 'round'; g.lineJoin = 'round';
   if(tool==='pencil'){
     g.strokeStyle = color;
+    g.fillStyle = color;
     g.lineWidth = brushSize;
     if(lastPos){
       g.beginPath(); g.moveTo(lastPos.x,lastPos.y); g.lineTo(x,y); g.stroke();
     } else {
       g.beginPath(); g.arc(x,y,brushSize/2,0,Math.PI*2); g.fill();
     }
+  } else if(tool==='pixel'){
+    paintPixelLine(g, lastPos || {x,y}, {x,y});
   } else if(tool==='eraser'){
     g.globalCompositeOperation = 'destination-out';
     g.strokeStyle = '#000';
@@ -5560,6 +5684,11 @@ function paint(x,y){
     const px = g.getImageData(x,y,1,1).data;
     setColor('#'+px[0].toString(16).padStart(2,'0')+px[1].toString(16).padStart(2,'0')+px[2].toString(16).padStart(2,'0'));
   }
+  if (active !== null && layers[active].rigLayerId) {
+    const p = layers[active];
+    if (tool === 'fill' || ((tool === 'pencil' || tool === 'pixel') && (x - brushSize / 2 < p.rigX || y - brushSize / 2 < p.rigY ||
+        x + brushSize / 2 > p.rigX + p.rigW || y + brushSize / 2 > p.rigY + p.rigH))) p.needsExpand = true;
+  }
   dirty = true;
   composite();
   if (tool !== 'picker') scheduleAutoPush();
@@ -5570,15 +5699,16 @@ function floodFill(g, sx, sy, newColor){
   const id = g.getImageData(0,0,w,h);
   const data = id.data;
   const get = (x,y)=>(y*w+x)*4;
-  const target = [data[get(sx,sy)], data[get(sx,sy)+1], data[get(sx,sy)+2], data[get(sx,sy)+3]];
+  const target = { r:data[get(sx,sy)], g:data[get(sx,sy)+1], b:data[get(sx,sy)+2], a:data[get(sx,sy)+3] };
   const nc = hexToRgb(newColor);
-  if(colorsEqual(target,nc)) return;
+  if(colorsEqual([target.r,target.g,target.b,target.a],nc)) return;
   const stack=[{x:sx,y:sy}];
   while(stack.length){
     const p = stack.pop();
     const idx = get(p.x,p.y);
     if(!colorsEqual([data[idx],data[idx+1],data[idx+2],data[idx+3]],target)) continue;
     data[idx]=nc.r; data[idx+1]=nc.g; data[idx+2]=nc.b;
+    data[idx+3]=nc.a;
     for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){
       const nx=p.x+d[0], ny=p.y+d[1];
       if(nx>=0&&nx<w&&ny>=0&&ny<h) stack.push({x:nx,y:ny});
@@ -5657,15 +5787,23 @@ paint_wrap.addEventListener('wheel', e=>{
   syncCanvasScale();
 }, {passive:false});
 
-document.getElementById('paintToolSel').onchange = e=>{ tool = e.target.value; };
+document.getElementById('paintToolSel').onchange = e=>{
+  tool = e.target.value;
+  if (tool === 'pixel') {
+    brushSize = 1;
+    document.getElementById('paintBrushSize').value = '1';
+    document.getElementById('paintBrushSizeVal').textContent = '1px';
+  }
+};
 document.getElementById('paintBrushSize').oninput = e=>{
   brushSize = parseInt(e.target.value);
   document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
 };
 document.getElementById('paintColorPick').oninput = e=>setColor(e.target.value);
 document.getElementById('paintBlendMode').onchange = e=>{
-  paint_ctx.globalCompositeOperation = e.target.value;
-  paint_pctx.globalCompositeOperation = e.target.value;
+  if(active===null) return;
+  pushPaintUndo();
+  layers[active].blendMode = e.target.value;
   composite();
 };
 document.getElementById('paintLayerOpacity').oninput = e=>{
@@ -5677,7 +5815,9 @@ document.getElementById('paintLayerOpacity').oninput = e=>{
 document.getElementById('paintBtnNew').onclick = ()=>{
   if(confirm('New sprite will clear all layers. Continue?')){
     pushPaintUndo();
-    layers = []; active = null; zoom = 1; pan = {x:0,y:0};
+    layers = [{name:'Layer 1', canvas:newLayerCanvas(256, 256), visible:true, opacity:1, blendMode:'normal'}];
+    active = 0; zoom = 1; pan = {x:0,y:0};
+    previewMode = 'paint'; rigShot = null; previewPan = { x: 0, y: 0 };
     paint_cv.width = 256; paint_cv.height = 256;
     autoFit = true;
     updateUI(); composite();
@@ -5692,6 +5832,7 @@ document.getElementById('paintFileOpen').onchange = async e=>{
   paint_cv.width = img.width; paint_cv.height = img.height;
   layers = [{name:f.name.replace(/\.[^/.]+$/,''), canvas:img, visible:true, opacity:1}];
   active = 0;
+  previewMode = 'paint'; rigShot = null; previewPan = { x: 0, y: 0 };
   zoom = 1; pan = {x:0,y:0};
   autoFit = true;
   dirty = true;
@@ -5705,15 +5846,76 @@ document.getElementById('paintBtnSave').onclick = ()=>{
   link.click();
   toast('Exported sprite.png');
 };
-document.getElementById('paintBtnAddLayer').onclick = addLayer;
+document.getElementById('paintBtnAddLayer').onclick = ()=>addLayer();
 document.getElementById('paintBtnDelLayer').onclick = ()=>deleteLayer(null);
 document.getElementById('paintToolZoomIn').onclick = ()=>{ autoFit=false; zoom=Math.min(zoom+0.25,32); syncCanvasScale(); };
 document.getElementById('paintToolZoomOut').onclick = ()=>{ autoFit=false; zoom=Math.max(zoom-0.25,0.1); syncCanvasScale(); };
 document.getElementById('paintToolFit').onclick = ()=>{ resetPaintView(); };
 document.getElementById('paintPreviewScale').oninput = e=>{
-  document.getElementById('paintPreviewScaleVal').textContent = e.target.value+'x';
+  document.getElementById('paintPreviewScaleVal').textContent = parseFloat(e.target.value).toFixed(1)+'x';
   updatePreview();
 };
+document.getElementById('paintPreviewOnTop').onchange = ()=>{
+  document.getElementById('paintPreviewOpacity').disabled = !document.getElementById('paintPreviewOnTop').checked;
+  if (previewMode === 'rig') refreshRigPreview();
+  else updatePreview();
+};
+document.getElementById('paintPreviewOpacity').oninput = e=>{
+  document.getElementById('paintPreviewOpacityVal').textContent = e.target.value+'%';
+  updatePreview();
+};
+document.getElementById('paintPreviewCenter').onclick = ()=>{
+  previewPan = { x: 0, y: 0 };
+  document.getElementById('paintPreviewScale').value = '1';
+  updatePreview();
+};
+
+function previewPoint(e){
+  const rect = paint_preview.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * paint_preview.width / rect.width,
+    y: (e.clientY - rect.top) * paint_preview.height / rect.height
+  };
+}
+
+paint_preview.addEventListener('pointerdown', e=>{
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const point = previewPoint(e);
+  previewPointer = { point, pan: { ...previewPan } };
+  paint_preview.classList.add('panning');
+  paint_preview.setPointerCapture(e.pointerId);
+});
+paint_preview.addEventListener('pointermove', e=>{
+  if (!previewPointer) return;
+  const point = previewPoint(e);
+  previewPan.x = previewPointer.pan.x + point.x - previewPointer.point.x;
+  previewPan.y = previewPointer.pan.y + point.y - previewPointer.point.y;
+  updatePreview();
+});
+const finishPreviewPointer = e=>{
+  if (!previewPointer) return;
+  paint_preview.classList.remove('panning');
+  previewPointer = null;
+  if (paint_preview.hasPointerCapture(e.pointerId)) paint_preview.releasePointerCapture(e.pointerId);
+};
+paint_preview.addEventListener('pointerup', finishPreviewPointer);
+paint_preview.addEventListener('pointercancel', finishPreviewPointer);
+paint_preview.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const t = previewRenderTransform;
+  if (!t) return;
+  const point = previewPoint(e);
+  const input = document.getElementById('paintPreviewScale');
+  const oldZoom = parseFloat(input.value) || 1;
+  const nextZoom = Math.max(1, Math.min(8, oldZoom * Math.exp(-e.deltaY * 0.001)));
+  if (nextZoom === oldZoom) return;
+  const nextScale = t.fitScale * nextZoom;
+  previewPan.x = point.x - ((point.x - t.offsetX) / t.scale) * nextScale - t.baseX;
+  previewPan.y = point.y - ((point.y - t.offsetY) / t.scale) * nextScale - t.baseY;
+  input.value = String(nextZoom);
+  updatePreview();
+}, { passive: false });
 
 // undo / redo
 document.getElementById('paintBtnUndo').onclick = undoPaint;
@@ -5793,8 +5995,8 @@ function loadImage(file){
 }
 
 // Tab button handlers
-document.getElementById('paintTabPaint').onclick = ()=>{ previewMode = 'paint'; switchPaintTab('paint'); };
-document.getElementById('paintTabPreview').onclick = ()=>{ previewMode = 'paint'; switchPaintTab('preview'); };
+document.getElementById('paintTabPaint').onclick = ()=>{ useWholeRigPreview(); switchPaintTab('paint'); };
+document.getElementById('paintTabPreview').onclick = ()=>{ useWholeRigPreview(); switchPaintTab('preview'); };
 document.getElementById('paintTabExport').onclick = ()=>{ previewMode = 'paint'; switchPaintTab('export'); };
 
 addLayer(null, true);
@@ -5815,6 +6017,16 @@ const rigAPI = () => window.__rigEditor || null;
 function rigBridgeStatus(msg) {
   const el = document.getElementById('rigIntegrationStatus');
   if (el) el.textContent = msg || '';
+}
+
+function refreshRigPreview() {
+  const R = rigAPI();
+  if (!R || !R.doc) return;
+  const layer = active === null ? null : layers[active];
+  const excludeId = document.getElementById('paintPreviewOnTop').checked && layer && layer.visible && layer.rigLayerId
+    ? layer.rigLayerId : null;
+  rigShot = R.snapshot(excludeId);
+  updatePreview();
 }
 
 function isBlankCanvas(c) {
@@ -5851,6 +6063,20 @@ function makePaintLayer(l) {
     rigLayerId: l.id, rigX: l.x, rigY: l.y, rigW: l.w, rigH: l.h };
 }
 
+function useWholeRigPreview() {
+  const R = rigAPI();
+  if (!R || !R.doc || !layers.some(p => p.rigLayerId)) {
+    previewMode = 'paint';
+    return;
+  }
+  previewMode = 'rig';
+  if (!animPreviewOn) {
+    lastAnimShot = null;
+    lastAnimCrop = null;
+    refreshRigPreview();
+  }
+}
+
 // Import one rig layer (double-click in the rig layer list) or all of them.
 function importRigLayer(layerId) {
   const R = rigAPI(), doc = R && R.doc;
@@ -5866,6 +6092,7 @@ function importRigLayer(layerId) {
   active = idx >= 0 ? idx : layers.length - 1;
   dirty = true;
   populateAnimClips();
+  useWholeRigPreview();
   updateUI(); composite();
   rigBridgeStatus('Imported "' + pl.name + '" (' + l.w + 'x' + l.h + ')');
   toast('Imported rig layer: ' + pl.name);
@@ -5889,6 +6116,7 @@ function importAllRigAssets() {
   active = layers.length - 1;
   dirty = true;
   populateAnimClips();
+  useWholeRigPreview();
   updateUI(); composite();
   rigBridgeStatus('Imported ' + n + ' rig layer(s) at ' + paint_cv.width + 'x' + paint_cv.height);
   toast('Imported ' + n + ' rig layer(s)');
@@ -5912,8 +6140,8 @@ function renderRigPreview() {
   if (!R || !R.doc) { toast('Open a rig first'); return; }
   if (animPreviewOn) stopRigAnimPreview();
   lastAnimShot = null; lastAnimCrop = null;
-  rigShot = R.snapshot();
   previewMode = 'rig';
+  refreshRigPreview();
   switchPaintTab('preview');
   updatePreview();
   rigBridgeStatus('Previewing the rig');

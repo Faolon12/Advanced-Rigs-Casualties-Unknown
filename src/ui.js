@@ -9,6 +9,7 @@ let tab = 'rig';
 const view = { zoom: 8, panX: 0, panY: 0 }; // rig view: screen = canvasPx*zoom + pan
 let showSkel = true, moveSkel = false;
 const imgCache = new Map(); // layer/obj -> canvas
+let bridgeExcludedLayerId = null;
 
 function toast(msg, ms) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2600); }
 function hint(msg) { $('#hint').innerHTML = msg; }
@@ -586,9 +587,12 @@ $('#lySugAll').onclick = () => { const list = doc.layers.filter(l => l.suggest &
 $('#lySearch').oninput = (e) => { lyQuery = e.target.value.trim(); renderLayers(); };
 $('#lyFilter').onchange = (e) => { lyKind = e.target.value; renderLayers(); };
 $('#lyXray').onclick = (e) => { xray = !xray; e.target.classList.toggle('on', xray); draw(); };
-$('#manualMode').checked = manualMode;
-$('#manualMode').onchange = (e) => { manualMode = e.target.checked; try { localStorage.setItem('luna-ars-manual', manualMode ? '1' : '0'); } catch (er) { }
-  toast(manualMode ? 'Manual setup: new files keep their layout and get no roles. Set roles on the left (select several → set role), move parts, place bones yourself.' : 'Automatic setup: new files are matched and put together by their layer names.', 7000); };
+const manualModeToggle = $('#manualMode');
+if (manualModeToggle) {
+  manualModeToggle.checked = manualMode;
+  manualModeToggle.onchange = (e) => { manualMode = e.target.checked; try { localStorage.setItem('luna-ars-manual', manualMode ? '1' : '0'); } catch (er) { }
+    toast(manualMode ? 'Manual setup: new files keep their layout and get no roles. Set roles on the left (select several → set role), move parts, place bones yourself.' : 'Automatic setup: new files are matched and put together by their layer names.', 7000); };
+}
 // one role for every selected layer
 function updateBulk() {
   const bar = $('#lyBulkBar'); if (!bar) return; const list = selectedLayers();
@@ -1225,7 +1229,7 @@ function draw() {
   // layers
   const prevFr = animPrevFrames();
   for (const l of doc.layers) {
-    if (l.cutSource) continue;
+    if (l.cutSource || l.id === bridgeExcludedLayerId) continue;
     if (prevFr && l.id === animPrev.id) { // the part plays its frames instead of its own art
       const [cur, before] = prevFr;
       if (before && before !== cur) { const q = toScreen(before); ctx.globalAlpha = 0.3; ctx.drawImage(layerCanvas(before), q.x, q.y, before.w * view.zoom, before.h * view.zoom); }
@@ -2599,27 +2603,43 @@ resize(); renderInspector(); hint('Open your character to begin. New here? Click
 // ---- bridge API used by the sprite paint editor (it lives outside this closure)
 function bridgeLayers() { return doc ? doc.layers.filter(l => l.rgba && !l.hidden) : []; }
 function bridgeLayer(id) { return doc ? RIG.layer(doc, id) : null; }
-function bridgeSetPixels(id, rgba) {
+function bridgeSetPixels(id, rgba, bounds) {
   const l = bridgeLayer(id); if (!l) return false;
-  if (!rgba || rgba.length !== l.w * l.h * 4) return false;
+  const next = bounds || { x: l.x, y: l.y, w: l.w, h: l.h };
+  if (!Number.isInteger(next.x) || !Number.isInteger(next.y) ||
+      !Number.isInteger(next.w) || !Number.isInteger(next.h) ||
+      next.w < 1 || next.h < 1 || next.x < 0 || next.y < 0 ||
+      next.x + next.w > doc.width || next.y + next.h > doc.height ||
+      !rgba || rgba.length !== next.w * next.h * 4) return false;
   l.rgba = new Uint8Array(rgba);
+  l.x = next.x; l.y = next.y; l.w = next.w; l.h = next.h;
   imgCache.delete(l);              // the cached canvas is now stale
   return true;
 }
-function bridgeSnapshot() {
+function bridgeSnapshot(excludeLayerId) {
   if (!doc) return null;
   const paintOpen = document.getElementById('panelPaint').classList.contains('active');
   const app = document.getElementById('app');
   const prev = app.style.visibility;
+  const prevExcludedLayerId = bridgeExcludedLayerId;
   if (paintOpen) { app.style.visibility = 'hidden'; switchMode('rig'); }
+  const prevView = { zoom: view.zoom, panX: view.panX, panY: view.panY };
   try {
+    bridgeExcludedLayerId = excludeLayerId || null;
+    fitView();
     resize(); draw();
     const c = document.createElement('canvas');
-    c.width = cv.width; c.height = cv.height;
-    c.getContext('2d').drawImage(cv, 0, 0);
+    c.width = doc.width; c.height = doc.height;
+    const d = window.devicePixelRatio || 1;
+    c.getContext('2d').imageSmoothingEnabled = false;
+    c.getContext('2d').drawImage(cv, d * view.panX, d * view.panY, d * doc.width * view.zoom, d * doc.height * view.zoom, 0, 0, doc.width, doc.height);
+    c.rigTransform = { scale: 1, x: 0, y: 0 };
     return c;
   } finally {
+    bridgeExcludedLayerId = prevExcludedLayerId;
+    view.zoom = prevView.zoom; view.panX = prevView.panX; view.panY = prevView.panY;
     if (paintOpen) { switchMode('paint'); app.style.visibility = prev; }
+    else { resize(); draw(); }
   }
 }
 
@@ -2645,6 +2665,8 @@ function bridgeCopyCanvas() {
   const c = document.createElement('canvas');
   c.width = cv.width; c.height = cv.height;
   c.getContext('2d').drawImage(cv, 0, 0);
+  const d = window.devicePixelRatio || 1;
+  c.rigTransform = { scale: d * view.zoom, x: d * view.panX, y: d * view.panY };
   return c;
 }
 function bridgeStopAnim() {
@@ -2666,5 +2688,5 @@ window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersF
   layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, snapshot: bridgeSnapshot,
   animClips: bridgeAnimClips, startAnim: bridgeStartAnim, stopAnim: bridgeStopAnim, setAnimClip: bridgeSetAnimClip, animCrop: bridgeAnimCrop,
   setAnimPlaying: bridgeSetAnimPlaying, isAnimPlaying: bridgeIsAnimPlaying, copyCanvas: bridgeCopyCanvas,
-  redraw: () => { resize(); draw(); renderInspector(); }, toastMsg: (m, ms) => toast(m, ms) };
+  redraw: () => { resize(); draw(); renderLayers(); renderInspector(); }, toastMsg: (m, ms) => toast(m, ms) };
 })();
