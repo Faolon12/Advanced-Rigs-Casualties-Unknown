@@ -57,12 +57,80 @@ function setDoc(d) {
 }
 const AUTOSAVE = 'luna-ars-autosave';
 let lastAuto = '';
-setInterval(() => {
+let autosaveRecordTime = null;
+let rigAutosaveTimer = null;
+let rigAutosaveQueue = Promise.resolve();
+let autosaveWarningShown = false;
+function saveRigAutosave(){
   if (!doc || !doc.layers.length) return;
-  try { const t = RIG.serialize(doc); if (t !== lastAuto) { localStorage.setItem(AUTOSAVE, t); localStorage.setItem(AUTOSAVE + '-time', String(Date.now())); lastAuto = t; } } catch (e) { /* storage full or blocked: the Save button still works */ }
-}, 15000);
-function autosaveInfo() { try { const t = localStorage.getItem(AUTOSAVE + '-time'); return t && localStorage.getItem(AUTOSAVE) ? new Date(+t) : null; } catch (e) { return null; } }
-function restoreAutosave() { try { setDoc(RIG.deserialize(localStorage.getItem(AUTOSAVE))); toast('Back where you left off: ' + doc.name); } catch (e) { toast('Could not restore: ' + e.message); } }
+  let text;
+  try { text = RIG.serialize(doc); }
+  catch (e) { toast('Rig autosave failed: ' + e.message, 7000); console.error(e); return; }
+  if (text === lastAuto) return;
+  const savedAt = Date.now();
+  let legacyStored = false;
+  try {
+    localStorage.setItem(AUTOSAVE, text);
+    localStorage.setItem(AUTOSAVE + '-time', String(savedAt));
+    legacyStored = true;
+  } catch (e) { /* IndexedDB below can store projects larger than localStorage allows. */ }
+  rigAutosaveQueue = rigAutosaveQueue.then(()=>RIG.recoveryStore.put('rig', { data: text, savedAt }))
+    .then(()=>{
+      lastAuto = text;
+      autosaveRecordTime = savedAt;
+    })
+    .catch(e=>{
+      console.error('Rig autosave failed', e);
+      if (legacyStored) {
+        lastAuto = text;
+        autosaveRecordTime = savedAt;
+      }
+      if (!autosaveWarningShown) {
+        autosaveWarningShown = true;
+        toast(legacyStored ? 'Rig autosave is using limited browser storage: ' + e.message : 'Rig autosave failed: ' + e.message, 7000);
+      }
+    });
+}
+function scheduleRigAutosave(){
+  clearTimeout(rigAutosaveTimer);
+  rigAutosaveTimer = setTimeout(saveRigAutosave, 900);
+}
+setInterval(saveRigAutosave, 5000);
+window.addEventListener('pagehide', saveRigAutosave);
+function legacyAutosave(){
+  try {
+    const data = localStorage.getItem(AUTOSAVE);
+    const savedAt = Number(localStorage.getItem(AUTOSAVE + '-time'));
+    return data ? { data, savedAt: Number.isFinite(savedAt) ? savedAt : 0 } : null;
+  } catch (e) { return null; }
+}
+function autosaveInfo() {
+  const legacy = legacyAutosave();
+  const savedAt = Math.max(legacy ? legacy.savedAt : 0, autosaveRecordTime || 0);
+  return savedAt ? new Date(savedAt) : null;
+}
+async function restoreAutosave() {
+  try {
+    let saved = null, storageError = null;
+    try { saved = await RIG.recoveryStore.get('rig'); }
+    catch (e) { storageError = e; }
+    const legacy = legacyAutosave();
+    const useIndexedDb = saved && saved.data && (!legacy || (saved.savedAt || 0) >= legacy.savedAt);
+    const text = useIndexedDb ? saved.data : legacy && legacy.data;
+    if (!text) throw new Error(storageError ? 'Could not read the browser recovery draft: ' + storageError.message : 'No recovery draft was found');
+    lastAuto = useIndexedDb ? text : '';
+    setDoc(RIG.deserialize(text));
+    toast('Back where you left off: ' + doc.name);
+  } catch (e) { toast('Could not restore: ' + e.message, 7000); }
+}
+RIG.recoveryStore.get('rig').then(saved=>{
+  if (!saved || !saved.data) return;
+  autosaveRecordTime = saved.savedAt || null;
+  if (!lastAuto) lastAuto = saved.data;
+  if (!doc) renderInspector();
+}).catch(e=>{
+  console.error('Could not check the Rig recovery draft', e);
+});
 
 async function openFiles(list) {
   const files = [...list]; if (!files.length) return;
@@ -1174,7 +1242,7 @@ function bindMoveBox(l) {
   };
 }
 
-function refresh() { syncPpu(); renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test' || tab === 'gear') startTest(); draw(); }
+function refresh() { syncPpu(); renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test' || tab === 'gear') startTest(); draw(); scheduleRigAutosave(); }
 
 // ---------------------------------------------------------------- canvas: rig view
 function resize() {
@@ -2622,6 +2690,20 @@ function bridgeSetPixels(id, rgba, bounds) {
   imgCache.delete(l);              // the cached canvas is now stale
   return true;
 }
+function bridgeAddPaintLayer(name, x, y, w, h, rgba) {
+  if (!doc || !Number.isInteger(x) || !Number.isInteger(y) ||
+      !Number.isInteger(w) || !Number.isInteger(h) || x < 0 || y < 0 ||
+      w < 1 || h < 1 || x + w > doc.width || y + h > doc.height ||
+      !rgba || rgba.length !== w * h * 4) return false;
+  pushUndo();
+  const layer = { id: RIG.newId(), name: name || 'Paint layer', x, y, w, h,
+    rgba: new Uint8Array(rgba), order: doc.layers.length, hidden: false, role: { type: 'ignore' } };
+  doc.layers.push(layer);
+  selLayer = layer.id;
+  selSet = new Set([layer.id]);
+  refresh();
+  return { id: layer.id, x, y, w, h };
+}
 function bridgeImageAssets() {
   if (!doc) return [];
   const assets = [];
@@ -2669,6 +2751,84 @@ function bridgeImageAssets() {
     }
   }
   return assets;
+}
+function bridgeHeadVariantsForPaint(id) {
+  if (!id || !id.startsWith('asset:')) return [];
+  const currentKey = decodeURIComponent(id.slice(6));
+  if (!/^experimentHead/i.test(currentKey)) return [];
+  const swaps = doc && doc.spriteSwaps || {};
+  const images = RIG.GAME && RIG.GAME.images || {};
+  const keys = new Set([...Object.keys(images), ...Object.keys(swaps)]);
+  return [...keys].filter(key => /^experimentHead/i.test(key) && (images[key] || swaps[key]))
+    .map(key => {
+      const image = swaps[key] || images[key];
+      return {
+        id: 'asset:' + encodeURIComponent(key),
+        name: key.replace(/^experiment/i, ''),
+        w: image.w,
+        h: image.h,
+        isCurrent: key === currentKey,
+        hasDefault: !!images[key],
+        isCustomized: !!swaps[key]
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+function bridgeApplyHeadVariants(id, targets, action, source) {
+  if (!doc || !['copy', 'scratch', 'wound', 'bruise', 'default'].includes(action) || !Array.isArray(targets)) return false;
+  const available = new Map(bridgeHeadVariantsForPaint(id).map(item => [item.id, item]));
+  const selected = [...new Set(targets)].map(target => available.get(target)).filter(item =>
+    item && !item.isCurrent && (action !== 'default' || item.hasDefault));
+  if (!selected.length) return false;
+  let sourceImage = null;
+  if (action !== 'default') {
+    if (!source || !Number.isInteger(source.w) || !Number.isInteger(source.h) ||
+        source.w < 1 || source.h < 1 || !source.rgba || source.rgba.length !== source.w * source.h * 4) return false;
+    sourceImage = { w: source.w, h: source.h, rgba: new Uint8Array(source.rgba) };
+  }
+  pushUndo();
+  doc.spriteSwaps = doc.spriteSwaps || {};
+  for (const target of selected) {
+    const key = decodeURIComponent(target.id.slice(6));
+    if (action === 'default') {
+      delete doc.spriteSwaps[key];
+      continue;
+    }
+    const base = (doc.spriteSwaps && doc.spriteSwaps[key]) || (RIG.GAME && RIG.GAME.images && RIG.GAME.images[key]);
+    if (!base) continue;
+    const output = document.createElement('canvas');
+    output.width = base.w;
+    output.height = base.h;
+    const ctx = output.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    const copy = document.createElement('canvas');
+    copy.width = sourceImage.w;
+    copy.height = sourceImage.h;
+    copy.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(sourceImage.rgba), sourceImage.w, sourceImage.h), 0, 0);
+    ctx.drawImage(copy, Math.floor((base.w - sourceImage.w) / 2), Math.floor((base.h - sourceImage.h) / 2));
+    if (action !== 'copy') {
+      ctx.globalCompositeOperation = 'source-atop';
+      const unit = Math.max(1, Math.round(Math.min(base.w / 26, base.h / 12)));
+      const marks = action === 'scratch'
+        ? [[16, 3, '#b5444b'], [17, 4, '#842f3b'], [18, 5, '#b5444b'], [19, 6, '#842f3b']]
+        : action === 'wound'
+          ? [[17, 7, '#6d1826'], [18, 7, '#a52835'], [17, 8, '#a52835'], [16, 8, '#d34742'], [18, 9, '#6d1826']]
+          : [[7, 7, '#79516f'], [8, 7, '#9a657f'], [9, 7, '#79516f'], [7, 8, '#9a657f'], [8, 8, '#79516f']];
+      ctx.fillStyle = '#000';
+      const offsetX = Math.floor((base.w - sourceImage.w) / 2);
+      const offsetY = Math.floor((base.h - sourceImage.h) / 2);
+      for (const [x, y, color] of marks) {
+        ctx.fillStyle = color;
+        ctx.fillRect(offsetX + x * unit, offsetY + y * unit, unit, unit);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    const pixels = ctx.getImageData(0, 0, base.w, base.h).data;
+    doc.spriteSwaps[key] = { w: base.w, h: base.h, rgba: new Uint8Array(pixels) };
+  }
+  if (typeof thumbCache !== 'undefined') for (const target of selected) thumbCache.delete(decodeURIComponent(target.id.slice(6)));
+  refresh();
+  return true;
 }
 function bridgeSetImageAssetPixels(id, w, h, rgba) {
   if (!doc || !Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 ||
@@ -2771,8 +2931,9 @@ function bridgeAnimCrop() {
   return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
 }
 window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
-  layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels,
-  imageAssetsForPaint: bridgeImageAssets, setImageAssetPixels: bridgeSetImageAssetPixels, snapshot: bridgeSnapshot,
+  layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, addPaintLayer: bridgeAddPaintLayer,
+  imageAssetsForPaint: bridgeImageAssets, setImageAssetPixels: bridgeSetImageAssetPixels,
+  headVariantsForPaint: bridgeHeadVariantsForPaint, applyHeadVariants: bridgeApplyHeadVariants, snapshot: bridgeSnapshot,
   animClips: bridgeAnimClips, startAnim: bridgeStartAnim, stopAnim: bridgeStopAnim, setAnimClip: bridgeSetAnimClip, animCrop: bridgeAnimCrop,
   setAnimPlaying: bridgeSetAnimPlaying, isAnimPlaying: bridgeIsAnimPlaying, copyCanvas: bridgeCopyCanvas,
   redraw: () => { resize(); draw(); renderLayers(); renderInspector(); }, toastMsg: (m, ms) => toast(m, ms) };

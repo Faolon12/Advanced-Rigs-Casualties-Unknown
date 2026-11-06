@@ -367,7 +367,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
   </ul>
   <details>
     <summary>Sprite Paint tips</summary>
-    <p class="muted">In Sprite Paint, double-click a paint layer to fade the others to 5%; use <i>Hide similar layers when isolating</i> to hide matching names (for example, Head / Head 2 or Front / Back) completely. Double-click again restores opacities. The active layer's opacity control stays with the layer list while you scroll through many layers. Pixel brush and Pixel eraser make crisp square marks (set their size with <i>Size</i>). The read-only preview can be zoomed with the wheel and moved by dragging; its layer and opacity controls only change the preview. Double-click a rig layer to edit it; use <i>Other image assets</i> to open game sprites, tools, wearables, health-screen art and swaps at native size. Paint changes sync back to the rig.</p>
+    <p class="muted">The Rig Editor autosaves your character locally; Sprite Paint also autosaves its layered session. Reopen the editor and choose <i>Restore Paint</i> if you need to recover a closed Paint session. In Sprite Paint, double-click a paint layer to fade the others to 5%; use <i>Hide similar layers when isolating</i> to hide matching names (for example, Head / Head 2 or Front / Back) completely. Double-click again restores opacities. The active layer's opacity control stays with the layer list while you scroll through many layers. Pixel brush and Pixel eraser make crisp square marks (set their size with <i>Size</i>); the optional Noisy pixel brush slightly varies mark colors without shifting their positions. When editing a head image asset, use <i>Head variants</i> to copy the current art to mouth and injury alternatives, add a quick scratch, wound or bruise, or restore selected variants to the game's defaults. The read-only preview can be zoomed with the wheel and moved by dragging; its layer and opacity controls only change the preview. Double-click a rig layer to edit it; use <i>Other image assets</i> to open game sprites, tools, wearables, health-screen art and swaps at native size. Paint changes sync back to the rig.</p>
   </details>
   <h3>Disclaimer</h3>
   <p class="muted" style="margin-top:0">Luna Advanced Rig Systems is a fan-made mod and tool, not made by or affiliated with the developer of Casualties: Unknown. The <b>Test</b> tab is a <b>simulation</b>: its movement, states, eyes, mouth and injury rules are re-created from Casualties: Unknown's code by <b>Orson</b>, so you can preview a character outside the game. It is not the game and won't match it exactly. Nothing from the game is included in the editor: the game template (sprites, wearables, animations) is made by the mod from your own copy of the game. Casualties: Unknown, its code and its art belong to Orson.</p>
@@ -392,6 +392,14 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 
 <main>
 <aside>
+<div id="paintRecoveryNotice" class="section" role="status" aria-live="polite" hidden>
+<div id="paintRecoveryMessage" class="muted" style="font-size:11px;margin-bottom:6px"></div>
+<div class="btn-row">
+<button id="paintRestoreAutosave" class="primary">Restore Paint</button>
+<button id="paintDiscardAutosave">Discard</button>
+</div>
+</div>
+<div id="paintAutosaveStatus" class="muted" style="font-size:10px;padding:4px 12px" aria-live="polite"></div>
 <h2>Tools</h2>
 <div class="section">
 <div id="paintToolButtons" class="paint-tools" role="toolbar" aria-label="Paint tools">
@@ -405,6 +413,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <div class="row"><label>Size</label>
 <input id="paintBrushSize" type="range" min="1" max="32" value="4">
 <span id="paintBrushSizeVal">4px</span></div>
+<label class="muted" style="display:flex;align-items:center;gap:6px;font-size:11px;margin:0 0 8px 96px"><input id="paintPixelNoise" type="checkbox" disabled> Noisy pixel brush <span title="Adds a subtle random color variation to pixel-brush marks without moving them">ⓘ</span></label>
 <div class="row" style="align-items:center">
 <label>Color</label>
 <div class="color-pick-wrap" title="Choose a custom color"><input id="paintColorPick" type="color" value="#e0475b" aria-label="Choose paint color"></div>
@@ -419,7 +428,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <button id="paintToolZoomOut" title="Zoom out">-</button>
 <button id="paintToolFit" title="Fit to window">Fit</button>
 </div>
-<div class="muted" style="font-size:10px;margin-top:5px">Pixel tools draw crisp squares; Size sets their width.</div>
+<div class="muted" style="font-size:10px;margin-top:5px">Right-click the canvas to pick a visible color. Pixel tools draw crisp squares; Size sets their width.</div>
 </div>
 
 <h2>Layers</h2>
@@ -453,11 +462,11 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <div class="section">
 <div class="btn-row" style="flex-direction:column;margin-top:0">
 <button id="paintBtnImportRig" class="primary" title="Import every layer of the open rig as paint layers">Import rig assets</button>
-<button id="paintBtnPushRig" class="danger" title="Write the painted pixels back into the rig layers">Push to rig</button>
+<button id="paintBtnPushRig" class="danger" title="Sync linked layers and add new Paint layers to the rig">Push to rig</button>
 <button id="paintBtnRigPreview" title="Show the rig on the Preview tab">Rig preview</button>
 </div>
 <div id="rigIntegrationStatus" style="font-size:10px;color:var(--dim);margin-top:4px;line-height:1.3"></div>
-<div style="font-size:10px;color:var(--dim);margin-top:4px">Double-click a rig layer to paint it. Edits sync back and refresh its layer thumbnail.</div>
+<div style="font-size:10px;color:var(--dim);margin-top:4px">Double-click a rig layer to paint it. Edits sync back; new Paint layers are added to the rig as unassigned layers.</div>
 </div>
 <h2>Other image assets</h2>
 <div class="section">
@@ -467,12 +476,25 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 </select>
 <button id="paintBtnImportImageAsset" style="width:100%">Open image asset</button>
 <div id="paintImageAssetHint" class="muted" style="font-size:10px;margin-top:4px">Game sprites, tools, wearables, health-screen art and rig swaps open at their original size.</div>
+<div id="paintHeadVariantTools" hidden style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
+<div class="paint-palette-label" style="margin-top:0">Head variants</div>
+<div id="paintHeadVariantList" style="display:grid;gap:3px;margin:5px 0 7px"></div>
+<select id="paintHeadVariantAction" aria-label="Head variant action" style="width:100%;margin-bottom:5px">
+<option value="copy">Replace selected with current art</option>
+<option value="scratch">Add quick scratches</option>
+<option value="wound">Add a quick wound</option>
+<option value="bruise">Add a quick bruise</option>
+<option value="default">Restore selected game defaults</option>
+</select>
+<button id="paintBtnApplyHeadVariants" style="width:100%">Apply to selected variants</button>
+<div class="muted" style="font-size:10px;margin-top:4px">Copies preserve each sprite's frame size. Default restores the game's original art.</div>
+</div>
 </div>
 </aside>
 
 <div id="viewport">
 <div id="paintCanvasWrap">
-<canvas id="paintCv" width="256" height="256"></canvas>
+<canvas id="paintCv" width="256" height="256" title="Right-click to pick the visible color"></canvas>
 <div class="crosshair" id="crosshair"></div>
 </div>
 <div class="coord" id="paintCoord">0, 0</div>

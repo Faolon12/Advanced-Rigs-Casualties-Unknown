@@ -16,6 +16,7 @@ const paint_preview = document.getElementById('paintPreview');
 const paint_pctx = paint_preview.getContext('2d', {willReadFrequently:true});
 const paint_wrap = document.getElementById('paintCanvasWrap');
 const paint_coord = document.getElementById('paintCoord');
+const rigAPI = () => window.__rigEditor || null;
 
 let layers = [];
 let active = null;
@@ -29,6 +30,7 @@ let isDown = false;
 let lastPos = null;
 let tool = 'pencil';
 let brushSize = 4;
+let pixelBrushNoise = false;
 let color = '#e0475b';
 let dirty = false;
 let viewTab = 'paint'; // 'paint' | 'preview' | 'export'
@@ -92,6 +94,11 @@ const paintContext = {
   color: null,
   viewTab: null
 };
+let paintAutosaveReady = false;
+let paintAutosaveTimer = null;
+let paintAutosaveVersion = 0;
+let paintAutosaveQueue = Promise.resolve();
+let paintAutosaveWarningShown = false;
 
 function savePaintContext(){
   // canvases can't survive JSON: keep the live objects, they are never torn down
@@ -141,10 +148,182 @@ function toast(msg, ms=2600){
 function newLayerCanvas(w,h){
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
-  const g = c.getContext('2d');
+  const g = c.getContext('2d', {willReadFrequently:true});
   g.fillStyle = '#00000000';
   g.fillRect(0,0,w,h);
   return c;
+}
+
+function paintCanvasBlob(canvas){
+  return new Promise((resolve, reject)=>{
+    try {
+      canvas.toBlob(blob=>{
+        if (blob) resolve(blob);
+        else reject(new Error('Could not encode a paint layer for autosave'));
+      }, 'image/png');
+    } catch (e) { reject(e); }
+  });
+}
+
+async function createPaintAutosave(){
+  const savedLayers = await Promise.all(layers.map(async layer=>{
+    const metadata = Object.assign({}, layer);
+    delete metadata.canvas;
+    return { metadata, image: await paintCanvasBlob(layer.canvas) };
+  }));
+  return {
+    version: 1,
+    savedAt: Date.now(),
+    width: paint_cv.width,
+    height: paint_cv.height,
+    active,
+    workspaceId: activeWorkspaceId,
+    layers: savedLayers,
+    layerIsolationOpacities: layerIsolationOpacities && [...layerIsolationOpacities],
+    isolatedLayer,
+    settings: {
+      tool, brushSize, color, pixelBrushNoise, zoom, autoFit,
+      pan: { x: pan.x, y: pan.y },
+      previewPan: { x: previewPan.x, y: previewPan.y },
+      viewTab: viewTab === 'export' ? 'paint' : viewTab,
+      previewScale: document.getElementById('paintPreviewScale').value,
+      previewOnTop: document.getElementById('paintPreviewOnTop').checked,
+      previewOpacity: document.getElementById('paintPreviewOpacity').value,
+      hideSimilarLayers: document.getElementById('paintHideSimilarLayers').checked
+    }
+  };
+}
+
+function showPaintRecovery(saved, error=null){
+  const notice = document.getElementById('paintRecoveryNotice');
+  const message = document.getElementById('paintRecoveryMessage');
+  const restore = document.getElementById('paintRestoreAutosave');
+  notice.hidden = false;
+  message.textContent = error || ('Paint recovery is available' +
+    (saved && saved.savedAt ? ' from ' + new Date(saved.savedAt).toLocaleString() : '') + '.');
+  restore.disabled = !!error;
+  document.getElementById('paintAutosaveStatus').textContent = 'A saved Paint session is waiting.';
+}
+
+function setPaintAutosaveReady(){
+  paintAutosaveReady = true;
+  document.getElementById('paintRecoveryNotice').hidden = true;
+  document.getElementById('paintAutosaveStatus').textContent = 'Paint autosave is on';
+  schedulePaintAutosave();
+}
+
+function queuePaintAutosave(version){
+  paintAutosaveQueue = paintAutosaveQueue.then(async ()=>{
+    if (!paintAutosaveReady || !dirty || !layers.length || version !== paintAutosaveVersion) return;
+    const snapshot = await createPaintAutosave();
+    if (version !== paintAutosaveVersion) return;
+    await RIG.recoveryStore.put('paint', snapshot);
+    if (version === paintAutosaveVersion) {
+      document.getElementById('paintAutosaveStatus').textContent =
+        'Paint autosaved ' + new Date(snapshot.savedAt).toLocaleTimeString();
+    }
+  }).catch(e=>{
+    console.error('Paint autosave failed', e);
+    document.getElementById('paintAutosaveStatus').textContent = 'Paint autosave failed: ' + e.message;
+    if (!paintAutosaveWarningShown) {
+      paintAutosaveWarningShown = true;
+      toast('Paint autosave failed: ' + e.message, 7000);
+    }
+  });
+}
+
+function schedulePaintAutosave(){
+  if (!paintAutosaveReady || !dirty || !layers.length) return;
+  clearTimeout(paintAutosaveTimer);
+  const version = ++paintAutosaveVersion;
+  paintAutosaveTimer = setTimeout(()=>queuePaintAutosave(version), 500);
+}
+
+function flushPaintAutosave(){
+  if (!paintAutosaveReady || !dirty || !layers.length) return;
+  clearTimeout(paintAutosaveTimer);
+  queuePaintAutosave(++paintAutosaveVersion);
+}
+
+async function restorePaintAutosave(){
+  const button = document.getElementById('paintRestoreAutosave');
+  button.disabled = true;
+  try {
+    const saved = await RIG.recoveryStore.get('paint');
+    if (!saved || saved.version !== 1 || !Array.isArray(saved.layers) || !saved.layers.length ||
+        !Number.isInteger(saved.width) || !Number.isInteger(saved.height) || saved.width < 1 || saved.height < 1) {
+      throw new Error('The saved Paint session is missing or has an unsupported format');
+    }
+    const restoredLayers = await Promise.all(saved.layers.map(async entry=>{
+      const meta = entry && entry.metadata;
+      if (!meta || !(entry.image instanceof Blob)) throw new Error('A saved paint layer is incomplete');
+      const image = await createImageBitmap(entry.image);
+      const canvas = newLayerCanvas(image.width, image.height);
+      canvas.getContext('2d').drawImage(image, 0, 0);
+      image.close();
+      return Object.assign({}, meta, { canvas });
+    }));
+    paintAutosaveVersion++;
+    paint_cv.width = saved.width;
+    paint_cv.height = saved.height;
+    layers = restoredLayers;
+    activeWorkspaceId = saved.workspaceId || null;
+    active = Number.isInteger(saved.active) ? Math.min(Math.max(0, saved.active), layers.length - 1) : 0;
+    layerIsolationOpacities = Array.isArray(saved.layerIsolationOpacities) ? [...saved.layerIsolationOpacities] : null;
+    isolatedLayer = layerIsolationOpacities && Number.isInteger(saved.isolatedLayer) ? saved.isolatedLayer : null;
+    const settings = saved.settings || {};
+    tool = ['pencil','pixel','pixel-eraser','eraser','fill','picker'].includes(settings.tool) ? settings.tool : 'pencil';
+    brushSize = Number.isInteger(settings.brushSize) ? Math.min(32, Math.max(1, settings.brushSize)) : 4;
+    color = /^#[0-9a-f]{6}$/i.test(settings.color || '') ? settings.color : '#e0475b';
+    pixelBrushNoise = !!settings.pixelBrushNoise;
+    zoom = Number.isFinite(settings.zoom) ? settings.zoom : 1;
+    autoFit = settings.autoFit !== false;
+    pan = settings.pan && Number.isFinite(settings.pan.x) && Number.isFinite(settings.pan.y)
+      ? { x: settings.pan.x, y: settings.pan.y } : { x: 0, y: 0 };
+    previewPan = settings.previewPan && Number.isFinite(settings.previewPan.x) && Number.isFinite(settings.previewPan.y)
+      ? { x: settings.previewPan.x, y: settings.previewPan.y } : { x: 0, y: 0 };
+    viewTab = settings.viewTab === 'preview' ? 'preview' : 'paint';
+    previewMode = 'paint';
+    rigShot = null;
+    document.getElementById('paintBrushSize').value = String(brushSize);
+    document.getElementById('paintBrushSizeVal').textContent = brushSize + 'px';
+    document.getElementById('paintColorPick').value = color;
+    document.getElementById('paintColorValue').textContent = color.toUpperCase();
+    document.getElementById('paintPixelNoise').checked = pixelBrushNoise;
+    document.getElementById('paintPreviewScale').value = settings.previewScale || '1';
+    document.getElementById('paintPreviewOnTop').checked = settings.previewOnTop !== false;
+    document.getElementById('paintPreviewOpacity').value = settings.previewOpacity || '100';
+    document.getElementById('paintHideSimilarLayers').checked = settings.hideSimilarLayers !== false;
+    undoStack.length = 0;
+    redoStack.length = 0;
+    dirty = true;
+    setPaintTool(tool, false);
+    renderColorPalettes();
+    updateUI();
+    composite();
+    setPaintAutosaveReady();
+    toast('Recovered Paint session');
+  } catch (e) {
+    console.error('Could not restore the Paint recovery draft', e);
+    showPaintRecovery(null, 'Could not restore Paint: ' + e.message);
+    button.disabled = true;
+    toast('Could not restore Paint: ' + e.message, 7000);
+  }
+}
+
+async function discardPaintAutosave(){
+  const button = document.getElementById('paintDiscardAutosave');
+  button.disabled = true;
+  try {
+    await RIG.recoveryStore.delete('paint');
+    document.getElementById('paintRestoreAutosave').disabled = false;
+    setPaintAutosaveReady();
+  } catch (e) {
+    button.disabled = false;
+    document.getElementById('paintAutosaveStatus').textContent = 'Could not discard recovery draft: ' + e.message;
+    console.error('Could not discard the Paint recovery draft', e);
+    toast('Could not discard Paint recovery: ' + e.message, 7000);
+  }
 }
 
 function composite(){
@@ -161,6 +340,7 @@ function composite(){
   paint_ctx.globalAlpha = 1;
   paint_ctx.globalCompositeOperation = 'source-over';
   updatePreview();
+  schedulePaintAutosave();
 }
 
 function blendOperation(mode){
@@ -322,7 +502,7 @@ let autoPushTimer = null;
 function rigPushTargets(workspaceId=activeWorkspaceId){
   const R = window.__rigEditor, doc = R && R.doc;
   if (!doc) return null;
-  const targets = workspaceId ? [] : layers.filter(p => p.rigLayerId);
+  const targets = workspaceId ? [] : layers.filter(p => p.rigLayerId || !p.assetWorkspaceId);
   const assetLayers = workspaceId ? layers.filter(p => p.assetWorkspaceId === workspaceId && p.assetBase) : [];
   return targets.length || assetLayers.length ? { R, doc, targets, assetLayers, assetWorkspaceId: workspaceId } : null;
 }
@@ -349,9 +529,29 @@ function opaqueBounds(canvas){
 function autoPushNow(workspaceId=activeWorkspaceId){
   clearTimeout(autoPushTimer);
   const g = rigPushTargets(workspaceId);
-  if (!g) return 0;
-  let pushed = 0, failed = 0;
+  if (!g) return { pushed: 0, failed: 0, added: 0 };
+  let pushed = 0, failed = 0, added = 0;
   for (const p of g.targets) {
+    if (!p.rigLayerId) {
+      let bounds;
+      try { bounds = opaqueBounds(p.canvas); }
+      catch (e) { failed++; continue; }
+      if (!bounds) continue;
+      if (bounds.x + bounds.w > g.doc.width || bounds.y + bounds.h > g.doc.height) {
+        failed++;
+        continue;
+      }
+      let data;
+      try { data = p.canvas.getContext('2d').getImageData(bounds.x, bounds.y, bounds.w, bounds.h).data; }
+      catch (e) { failed++; continue; }
+      const linked = g.R.addPaintLayer(p.name, bounds.x, bounds.y, bounds.w, bounds.h, data);
+      if (!linked) { failed++; continue; }
+      p.rigLayerId = linked.id;
+      p.rigX = linked.x; p.rigY = linked.y; p.rigW = linked.w; p.rigH = linked.h;
+      pushed++; added++;
+      rigBridgeStatus('Added "' + p.name + '" to the rig; choose its role in the Rig editor');
+      continue;
+    }
     const l = g.R.layerById(p.rigLayerId);
     if (!l || !p.canvas) { failed++; continue; }
     let sx = Math.round(l.x), sy = Math.round(l.y), sw = l.w, sh = l.h;
@@ -393,11 +593,14 @@ function autoPushNow(workspaceId=activeWorkspaceId){
     else failed++;
   }
   if (pushed) g.R.redraw();
-  rigBridgeStatus('Auto-synced ' + pushed + ' image' + (pushed === 1 ? '' : 's') + (failed ? '  (' + failed + ' skipped)' : ''));
+  if (pushed || failed) {
+    rigBridgeStatus((added ? 'Added ' + added + ' new rig layer' + (added === 1 ? '' : 's') + '; synced ' : 'Auto-synced ') +
+      pushed + ' image' + (pushed === 1 ? '' : 's') + (failed ? '  (' + failed + ' failed; check the rig canvas size)' : ''));
+  }
   if (previewMode === 'rig' && !animPreviewOn) {
     refreshRigPreview();
   }
-  return pushed;
+  return { pushed, failed, added };
 }
 
 // ---------------------------------------------------------------- animated rig preview
@@ -534,7 +737,9 @@ function updateUI(){
   syncCanvasScale();
   updateUndoButtons();
   renderLayers();
+  updateHeadVariantControls();
   switchPaintTab(viewTab);
+  schedulePaintAutosave();
 }
 
 function renderLayers(){
@@ -847,6 +1052,7 @@ function setPaintTool(nextTool, resetPixelSize=true){
     button.classList.toggle('on', selected);
     button.setAttribute('aria-pressed', String(selected));
   });
+  document.getElementById('paintPixelNoise').disabled = tool !== 'pixel';
   if (resetPixelSize && (tool === 'pixel' || tool === 'pixel-eraser')) {
     brushSize = 1;
     document.getElementById('paintBrushSize').value = '1';
@@ -863,16 +1069,31 @@ function getCanvasPos(e){
   return {x:Math.floor(x), y:Math.floor(y)};
 }
 
-function paintPixelLine(g, from, to, erase=false){
+function pickCanvasColor(x, y){
+  if (x < 0 || y < 0 || x >= paint_cv.width || y >= paint_cv.height) return;
+  const pixel = paint_ctx.getImageData(x, y, 1, 1).data;
+  if (pixel[3] === 0) return;
+  setColor('#' + [pixel[0], pixel[1], pixel[2]]
+    .map(channel=>channel.toString(16).padStart(2, '0')).join(''));
+}
+
+function varyPixelBrushColor(hex){
+  const amount = 14;
+  const channels = [1, 3, 5].map(offset=>Math.max(0, Math.min(255,
+    parseInt(hex.slice(offset, offset + 2), 16) + Math.round((Math.random() * 2 - 1) * amount))));
+  return '#' + channels.map(channel=>channel.toString(16).padStart(2, '0')).join('');
+}
+
+function paintPixelLine(g, from, to, erase=false, noisy=false){
   const dx = to.x - from.x, dy = to.y - from.y;
   const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
   const leftOffset = Math.floor(brushSize / 2);
   g.globalAlpha = 1;
   g.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
-  g.fillStyle = erase ? '#000' : color;
   for (let i = 0; i <= steps; i++) {
     const x = Math.round(from.x + dx * i / steps);
     const y = Math.round(from.y + dy * i / steps);
+    g.fillStyle = erase ? '#000' : noisy ? varyPixelBrushColor(color) : color;
     g.fillRect(x - leftOffset, y - leftOffset, brushSize, brushSize);
   }
   g.globalCompositeOperation = 'source-over';
@@ -892,7 +1113,7 @@ function paint(x,y){
       g.beginPath(); g.arc(x,y,brushSize/2,0,Math.PI*2); g.fill();
     }
   } else if(tool==='pixel'){
-    paintPixelLine(g, lastPos || {x,y}, {x,y});
+    paintPixelLine(g, lastPos || {x,y}, {x,y}, false, pixelBrushNoise);
   } else if(tool==='pixel-eraser'){
     paintPixelLine(g, lastPos || {x,y}, {x,y}, true);
   } else if(tool==='eraser'){
@@ -913,8 +1134,9 @@ function paint(x,y){
   }
   if (active !== null && layers[active].rigLayerId) {
     const p = layers[active];
-    if (tool === 'fill' || ((tool === 'pencil' || tool === 'pixel') && (x - brushSize / 2 < p.rigX || y - brushSize / 2 < p.rigY ||
-        x + brushSize / 2 > p.rigX + p.rigW || y + brushSize / 2 > p.rigY + p.rigH))) p.needsExpand = true;
+    if (tool === 'fill' || ((tool === 'pencil' || tool === 'pixel') && (x - brushSize / 2 < p.rigX ||
+        y - brushSize / 2 < p.rigY || x + brushSize / 2 > p.rigX + p.rigW ||
+        y + brushSize / 2 > p.rigY + p.rigH))) p.needsExpand = true;
   }
   dirty = true;
   composite();
@@ -983,6 +1205,12 @@ function switchPaintTab(tab){
 }
 
 paint_cv.addEventListener('mousedown', e=>{
+  if (e.button === 2) {
+    e.preventDefault();
+    const pos = getCanvasPos(e);
+    pickCanvasColor(pos.x, pos.y);
+    return;
+  }
   if(e.button!==0||active===null) return;
   pushPaintUndo();                 // one snapshot per stroke
   isDown = true;
@@ -990,6 +1218,7 @@ paint_cv.addEventListener('mousedown', e=>{
   paint(lastPos.x, lastPos.y);
   paint_wrap.classList.add('painting');
 });
+paint_cv.addEventListener('contextmenu', e=>e.preventDefault());
 window.addEventListener('mouseup', e=>{
   if(!isDown) return;
   isDown = false;
@@ -1028,6 +1257,9 @@ document.getElementById('paintBrushSize').oninput = e=>{
   brushSize = parseInt(e.target.value);
   document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
 };
+document.getElementById('paintPixelNoise').onchange = e=>{
+  pixelBrushNoise = e.target.checked;
+};
 document.getElementById('paintColorPick').oninput = e=>setColor(e.target.value, false);
 document.getElementById('paintColorPick').onchange = e=>setColor(e.target.value, true);
 document.getElementById('paintBlendMode').onchange = e=>{
@@ -1055,6 +1287,7 @@ document.getElementById('paintBtnNew').onclick = ()=>{
     previewMode = 'paint'; rigShot = null; previewPan = { x: 0, y: 0 };
     paint_cv.width = 256; paint_cv.height = 256;
     autoFit = true;
+    dirty = true;
     updateUI(); composite();
     toast('New sprite');
   }
@@ -1075,6 +1308,8 @@ document.getElementById('paintFileOpen').onchange = async e=>{
   updateUI(); composite();
   toast('Opened '+f.name);
 };
+document.getElementById('paintRestoreAutosave').onclick = restorePaintAutosave;
+document.getElementById('paintDiscardAutosave').onclick = discardPaintAutosave;
 document.getElementById('paintBtnSave').onclick = ()=>{
   const link = document.createElement('a');
   link.download = 'sprite.png';
@@ -1205,8 +1440,7 @@ document.getElementById('paintBtnRotate').onclick = ()=>{
   if(active===null) return;
   pushPaintUndo();
   const c = layers[active].canvas;
-  const tmp = document.createElement('canvas');
-  tmp.width = c.height; tmp.height = c.width;
+  const tmp = newLayerCanvas(c.height, c.width);
   const tg = tmp.getContext('2d');
   tg.translate(c.height/2, c.width/2);
   tg.rotate(Math.PI/2);
@@ -1221,8 +1455,7 @@ function loadImage(file){
   return new Promise((res,rej)=>{
     const img = new Image();
     img.onload = ()=>{
-      const c = document.createElement('canvas');
-      c.width = img.width; c.height = img.height;
+      const c = newLayerCanvas(img.width, img.height);
       c.getContext('2d').drawImage(img,0,0);
       res(c);
     };
@@ -1237,10 +1470,21 @@ document.getElementById('paintTabPreview').onclick = ()=>{ useWholeRigPreview();
 document.getElementById('paintTabExport').onclick = ()=>{ previewMode = 'paint'; switchPaintTab('export'); };
 
 addLayer(null, true);
+dirty = false;
 restorePaintContext();
 renderColorPalettes();
 populateAnimClips();
 updateUI(); composite();
+window.addEventListener('pagehide', flushPaintAutosave);
+RIG.recoveryStore.get('paint').then(saved=>{
+  if (saved) showPaintRecovery(saved);
+  else setPaintAutosaveReady();
+}).catch(e=>{
+  console.error('Could not check the Paint recovery draft', e);
+  document.getElementById('paintAutosaveStatus').textContent = 'Paint autosave unavailable: ' + e.message;
+  toast('Paint autosave unavailable: ' + e.message, 7000);
+  paintAutosaveReady = true;
+});
 
 
 
@@ -1250,8 +1494,6 @@ updateUI(); composite();
 // small API it publishes on window.__rigEditor (layerById / layersForPaint /
 // setLayerPixels / snapshot / redraw / toastMsg).
 // ============================================================================
-const rigAPI = () => window.__rigEditor || null;
-
 function rigBridgeStatus(msg) {
   const el = document.getElementById('rigIntegrationStatus');
   if (el) el.textContent = msg || '';
@@ -1373,8 +1615,10 @@ function pushPaintToRig() {
   const R = window.__rigEditor, doc = R && R.doc;
   if (!doc) { toast('Open a rig first'); return; }
   if (!rigPushTargets()) { toast('Nothing to push: import a rig layer or open an image asset first'); return; }
-  const n = autoPushNow();
-  toast(n ? 'Pushed ' + n + ' image(s) to the rig' : 'Could not push: check the linked image sizes', n ? 2500 : 7000);
+  const result = autoPushNow();
+  if (result.pushed) toast('Pushed ' + result.pushed + ' image(s) to the rig', 2500);
+  else if (result.failed) toast('Could not push: check that the painted pixels fit inside the rig canvas', 7000);
+  else toast('Nothing to push: draw visible pixels on a Paint layer first');
 }
 
 function populateImageAssets(){
@@ -1411,6 +1655,68 @@ function populateImageAssets(){
   }
   if (assets.some(asset => asset.id === previous)) select.value = previous;
   if (hint) hint.textContent = assets.length + ' image asset(s) available. Open one to edit at native size; changes sync to the rig.';
+}
+
+function updateHeadVariantControls(){
+  const tools = document.getElementById('paintHeadVariantTools');
+  const list = document.getElementById('paintHeadVariantList');
+  const action = document.getElementById('paintHeadVariantAction');
+  if (!tools || !list || !action) return;
+  const R = rigAPI();
+  const variants = R && R.headVariantsForPaint && activeWorkspaceId
+    ? R.headVariantsForPaint(activeWorkspaceId) : [];
+  const available = variants.filter(variant => !variant.isCurrent);
+  tools.hidden = !available.length;
+  if (!available.length) { list.replaceChildren(); return; }
+  const checked = new Set([...list.querySelectorAll('input:checked')].map(input=>input.value));
+  const visible = available.filter(variant => action.value !== 'default' || variant.hasDefault);
+  list.replaceChildren();
+  if (!visible.length) {
+    const note = document.createElement('span');
+    note.className = 'muted';
+    note.style.fontSize = '10px';
+    note.textContent = 'No head variants have a game default to restore.';
+    list.appendChild(note);
+    return;
+  }
+  visible.forEach(variant=>{
+    const label = document.createElement('label');
+    label.style.cssText = 'display:flex;align-items:center;gap:6px;min-width:0;font-size:10px';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = variant.id;
+    checkbox.checked = checked.has(variant.id);
+    const name = document.createElement('span');
+    name.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    name.textContent = variant.name + (variant.isCustomized ? ' · custom' : '');
+    label.title = variant.name + ' (' + variant.w + '×' + variant.h + ')';
+    label.append(checkbox, name);
+    list.appendChild(label);
+  });
+}
+
+function applyHeadVariantAction(){
+  const R = rigAPI();
+  if (!R || !R.applyHeadVariants || !activeWorkspaceId) return;
+  const targets = [...document.querySelectorAll('#paintHeadVariantList input:checked')].map(input=>input.value);
+  if (!targets.length) { toast('Select at least one head variant'); return; }
+  const variants = R.headVariantsForPaint(activeWorkspaceId);
+  const names = targets.map(id=>variants.find(variant=>variant.id===id)?.name).filter(Boolean);
+  const action = document.getElementById('paintHeadVariantAction').value;
+  if (action === 'default' && !confirm('Restore the game default art for ' + names.join(', ') + '?')) return;
+  let source = null;
+  if (action !== 'default') {
+    source = { w: paint_cv.width, h: paint_cv.height, rgba: paint_ctx.getImageData(0, 0, paint_cv.width, paint_cv.height).data };
+  }
+  if (!R.applyHeadVariants(activeWorkspaceId, targets, action, source)) {
+    toast('Could not update the selected head variants', 6000);
+    return;
+  }
+  populateImageAssets();
+  updateUI();
+  composite();
+  toast(action === 'default' ? 'Restored game defaults for ' + targets.length + ' head variant(s)' :
+    'Updated ' + targets.length + ' head variant(s)');
 }
 
 function importImageAsset(){
@@ -1462,10 +1768,13 @@ function initRigIntegration() {
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   on('paintBtnImportRig', importAllRigAssets);
   on('paintBtnImportImageAsset', importImageAsset);
+  on('paintBtnApplyHeadVariants', applyHeadVariantAction);
   on('paintBtnPushRig', pushPaintToRig);
   on('paintBtnRigPreview', renderRigPreview);
   const filter = document.getElementById('paintImageAssetFilter');
   if (filter) filter.oninput = populateImageAssets;
+  const variantAction = document.getElementById('paintHeadVariantAction');
+  if (variantAction) variantAction.onchange = updateHeadVariantControls;
   populateImageAssets();
 }
 
