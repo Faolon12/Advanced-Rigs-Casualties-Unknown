@@ -4,34 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Luna Advanced Rig Systems – Editor (Casualties Release V0.2 Alpha)</title>
-<style>
-:root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
-*{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
-button,select,input{font:inherit;color:var(--text)}
-button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
-button:hover{border-color:#555a66}
-button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
-button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
-select,input[type=text],input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
-#app{display:grid;grid-template-rows:auto 1fr;height:100%}
-header{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
-header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
-header h1 span{color:var(--acc)}
-header .grow{flex:1}
-main{display:grid;grid-template-columns:260px 1fr 340px;min-height:0}
-aside{background:var(--panel);overflow:auto;min-height:0}
-aside.left{border-right:1px solid var(--line)}
-aside.right{border-left:1px solid var(--line)}
+
+<style>aside.left{border-right:1px solid var(--line)}
+aside
 h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 12px 6px}
 .layer{display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center;padding:5px 10px;border-bottom:1px solid #22242b;cursor:pointer}
 .layer:hover{background:#22252c}
 .layer.sel{background:#2b2236;box-shadow:inset 3px 0 0 var(--acc2)}
 .layer canvas{width:34px;height:34px;image-rendering:pixelated;background:#111;border-radius:4px}
 .layer .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.layer .nm small{color:var(--dim)}
-.layer select{width:100%;margin-top:2px;font-size:12px}
-.layer.hiddenL .nm{opacity:.55}
+.layer .nm small{color:var(--dim)}.layer.hiddenL .nm{opacity:.55}
 #center{display:grid;grid-template-rows:auto 1fr auto;min-height:0;min-width:0}
 .tabs{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap}
 .tabs .sep{width:1px;height:20px;background:var(--line);margin:0 4px}
@@ -44,17 +26,9 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 #dopeCv{flex:1;width:100%;min-height:0;cursor:pointer}
 #cv{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
 #hint{padding:6px 12px;color:var(--dim);border-top:1px solid var(--line);font-size:12px;min-height:30px}
-.sec{padding:0 12px 10px}
-.row{display:flex;gap:6px;align-items:center;margin:6px 0}
-.row label{flex:0 0 110px;color:var(--dim)}
-.row .v{width:46px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
-.row input[type=range]{flex:1}
-.seg{display:flex;gap:4px;align-items:center;padding:3px 0;border-bottom:1px solid #22242b}
-.seg span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec{padding:0 12px 10px}.row .v{width:46px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}.seg span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg button{padding:1px 6px}
-.muted{color:var(--dim)}
-.empty{padding:30px 16px;text-align:center;color:var(--dim)}
-#drop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;text-align:center;color:var(--dim);pointer-events:none}
+.muted{color:var(--dim)}#drop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;text-align:center;color:var(--dim);pointer-events:none}
 #drop b{color:var(--text);font-size:16px}
 #drop.over{background:rgba(143,91,255,.12);outline:2px dashed var(--acc2);outline-offset:-10px}
 .pill{display:inline-block;padding:1px 7px;border-radius:9px;background:#2a2d36;color:var(--dim);font-size:11px}
@@ -82,9 +56,7 @@ details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 [data-theme=casualties] body{font-family:"Cascadia Mono","Consolas","DejaVu Sans Mono",ui-monospace,monospace;font-size:12.5px;
   background:radial-gradient(1200px 600px at 50% -10%,rgba(63,174,106,.07),transparent 60%),var(--bg)}
 [data-theme=casualties] body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
-  background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}
-[data-theme=casualties] header{background:linear-gradient(180deg,#101318,#0b0d10);border-bottom:1px solid #2a1416;box-shadow:0 1px 0 rgba(195,39,47,.25),0 6px 18px rgba(0,0,0,.5)}
-[data-theme=casualties] header{gap:5px}
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}[data-theme=casualties] header{gap:5px}
 [data-theme=casualties] header button{font-size:10px;padding:4px 7px;letter-spacing:.04em}
 [data-theme=casualties] header #name{width:120px!important}
 [data-theme=casualties] header h1{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#e8efe6}
@@ -100,7 +72,7 @@ details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 [data-theme=casualties] select,[data-theme=casualties] input[type=text],[data-theme=casualties] input[type=number]{background:#090b0d;border:1px solid #243028;border-radius:2px;color:#cfe0cf}
 [data-theme=casualties] input[type=range]{accent-color:var(--acc)}
 [data-theme=casualties] input[type=checkbox]{accent-color:var(--acc2)}
-[data-theme=casualties] aside{background:linear-gradient(180deg,#0d0f12,#0a0c0e)}
+[data-theme=casualties] 
 [data-theme=casualties] h2{color:var(--acc2);letter-spacing:.18em;font-size:10.5px;border-bottom:1px dashed #1e2a22;padding-bottom:4px}
 [data-theme=casualties] h2::before{content:"// ";color:#3d5a46}
 [data-theme=casualties] .layer{border-bottom:1px solid #141a16}
@@ -125,11 +97,8 @@ details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 [data-theme=casualties] ::-webkit-scrollbar-track{background:#08090b}
 
 /* the side panels never scroll sideways: rows wrap, inputs shrink */
-aside.right{overflow-x:hidden}
-.sec{overflow-wrap:anywhere}
-.row{flex-wrap:wrap;min-width:0}
-.row label{flex:0 0 96px;min-width:0}
-.row > select,.row > input[type=text],.row > input[type=range]{min-width:0;flex:1 1 100px;max-width:100%}
+aside
+.sec{overflow-wrap:anywhere}.row > select,.row > input[type=text],.row > input[type=range]{min-width:0;flex:1 1 100px;max-width:100%}
 .row > button{flex:0 0 auto}
 .row input[type=number]{min-width:0;max-width:70px}
 .seg{min-width:0}
@@ -153,30 +122,122 @@ aside.right{overflow-x:hidden}
 .folderRow .fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .folderRow button{padding:1px 6px;font-size:11px}
 .folderRow.drop{outline:1px solid var(--acc2)}
+
+
+#modeSwitcher{display:flex;gap:6px;margin:0;border-bottom:none;padding-bottom:0}
+.modeBtn{padding:4px 10px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer;font-size:12px}
+.modeBtn.active{background:var(--acc);color:#fff;border-color:var(--acc)}
+#modePanels{display:flex;flex:1;min-height:0}
+.modePanel{display:none;flex:1;min-height:0}
+.modePanel.active{display:flex;flex-direction:column}
+#panelPaint main{flex:1;min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);gap:0}
+#panelPaint header{flex:none}#panelPaint #viewport{flex:1;min-height:0;min-width:0;overflow:auto}
+#panelRig main{flex:1;min-height:0;height:auto}
+body[data-mode=paint] #rigHeaderTools{display:none}
+#panelPaint aside{flex:none}
+#panelPaint .right{flex:none}
+
+:root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+button,select,input{font:inherit;color:var(--text)}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:#555a66}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button.primary:hover{filter:brightness(1.1)}
+button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+button.secondary{background:var(--panel2);border-color:var(--line);color:var(--dim)}
+button.secondary:hover{border-color:var(--text);color:var(--text)}
+button.danger{background:rgba(224,71,91,0.2);border-color:var(--acc);color:var(--acc)}
+button.danger:hover{background:var(--acc);color:#fff}
+select,input[type=text],input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+input[type=color]{border:none;background:none;width:26px;height:26px;cursor:pointer}
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;row-gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);z-index:10}
+header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
+header h1 span{color:var(--acc)}
+header .grow{flex:1}
+main{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);min-height:0;gap:0;overflow:hidden}
+aside{background:var(--panel);overflow:auto;min-height:0;min-width:0;border-right:1px solid var(--line)}
+aside.right{border-left:1px solid var(--line);border-right:none}
+#viewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#canvas-wrap{position:relative;display:inline-block;cursor:crosshair}
+canvas#cv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5)}
+canvas#preview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3)}
+.crosshair{position:absolute;top:50%;left:50%;width:20px;height:20px;transform:translate(-50%,-50%);pointer-events:none;border:1px dashed var(--acc2);border-radius:50%;display:none}
+#canvas-wrap.painting .crosshair{display:block}
+h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 12px 6px;padding-top:10px;border-top:1px solid var(--line)}
+.section{padding:0 12px 10px}
+.row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.row label{flex:0 0 90px;font-size:12px;color:var(--dim)}
+.row input[type=range]{flex:1}
+.toolbar{display:flex;gap:4px;flex-wrap:wrap}
+.toolbar button{flex:1;min-width:56px}
+.color-swatch{width:24px;height:24px;border:1px solid var(--line);border-radius:4px;cursor:pointer}
+.color-swatch.active{border-color:var(--text);box-shadow:0 0 0 2px var(--acc2)}
+.layer-item{display:flex;align-items:center;gap:6px;padding:4px 5px 4px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:#111216;min-width:0}
+.layer-item.active{border-color:var(--acc2);background:var(--panel2)}
+.layer-item .layer-vis{width:14px;height:14px;border:1px solid var(--line);border-radius:3px;flex:0 0 14px}
+.layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;min-width:0}
+.layer-actions{display:flex;gap:3px;align-items:center}
+.layer-actions button{padding:2px 6px;font-size:11px;min-width:0}
+.layer-menu-btn{padding:0 7px;font-size:15px;line-height:1.5;min-width:0;flex:none;background:none;border:none;color:var(--dim);cursor:pointer;border-radius:4px}
+.layer-menu-btn:hover{background:#22242c;color:var(--text)}
+#layerMenu{position:fixed;z-index:80;display:none;min-width:186px;padding:5px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 26px rgba(0,0,0,.55)}
+#layerMenu.open{display:block}
+#layerMenu .mi{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:5px;background:none;color:var(--text);font-size:12px;text-align:left;cursor:pointer}
+#layerMenu .mi:hover{background:#22242c}
+#layerMenu .sep{height:1px;margin:4px 2px;background:var(--line)}
+#layerMenu .op{display:flex;align-items:center;gap:6px;padding:4px 8px 3px;font-size:11px;color:var(--dim)}
+#layerMenu .op input[type=range]{flex:1;min-width:84px}
+#layerMenu .op span:last-child{min-width:32px;text-align:right;color:var(--text)}
+.btn-row{display:flex;gap:4px;margin-top:8px}
+.btn-row button{flex:1}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);color:var(--text);padding:8px 14px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;white-space:nowrap}
+.toast.show{opacity:1}
+.empty{padding:30px;text-align:center;color:var(--dim)}
+.empty b{color:var(--text)}
+.input-small{width:70px}
+
+
+#paintViewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#paintCanvasWrap{position:relative;display:flex;align-items:center;justify-content:center;padding:12px;min-width:100%;min-height:100%}
+canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);display:block;flex:none}
+canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block}
+#paintCoord{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none}
+
 </style>
 </head>
-<body>
+<body data-mode="rig">
 <div id="app" role="application">
 <header>
   <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.2 Alpha</small></h1>
-  <label><button id="btnOpen" class="primary" type="button">Open…</button></label>
-  <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden aria-label="Open character file (PSD/PSB/PNG/JSON/luna)">
-  <button id="btnSave" title="Save this character as a project file (.luna) to keep working on it later. Open… loads it back.">Save</button>
-  <input id="fileTpl" type="file" webkitdirectory directory multiple hidden>
-  <button id="btnBrowse" title="See every asset from your game's template and pick which ones to use">Browse template</button>
-  <button id="btnTemplate" title="Start from the game's own character (every body part, mouth and jaw state and eye, put together exactly like the game). Comes from YOUR game: the mod saves it to BepInEx\plugins\AdvancedRigs\GameTemplate the first time you play (or press F10).">Game template</button>
-  <span id="gameBadge" class="pill" style="cursor:pointer" title="The game template (sprites, wearables, animations) from your game. Click to load / reload it."></span>
-  <button id="btnSprites" title="Add PNGs to this character: body parts, tail pieces, wings, frames (placed by name) — or skins / gear / health screen art named like the game's sprites (F9 in game saves them)">Add PNG…</button>
-  <input id="fileSprites" type="file" multiple accept=".png,.json" hidden>
-  <button id="btnAddPsd" title="Add a PSD / PSB to this character: layers with the same names are updated, new ones are added (with no character open, it starts a new one)">Add PSD / PSB…</button>
-  <select id="dlMenu" title="Download every layer of this character, to repaint in Photoshop, Krita, GIMP, Photopea…" style="width:150px;flex:none"><option value="">⬇ Download all…</option><option value="psd">as one PSD</option><option value="psb">as one PSB (large)</option><option value="png">as PNGs (one per layer)</option></select>
-  <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
-  <span class="muted">Name</span><label for="name" style="margin-right:4px">Character name</label><input id="name" type="text" value="MyCharacter" style="width:150px" aria-label="Character name">
+  <div id="modeSwitcher">
+    <button id="modeRig" class="modeBtn active" onclick="switchMode('rig')">Rig Editor</button>
+    <button id="modePaint" class="modeBtn" onclick="switchMode('paint')">Sprite Paint</button>
+  </div>
   <div class="grow"></div>
-  <button id="btnTheme" title="Switch the editor's look (Casualties lab terminal / plain)">Theme</button>
-  <button id="btnHelp">How to</button>
-  <button id="btnExport" class="primary">Export rig (.zip)</button>
+  <span id="rigHeaderTools">
+    <label><button id="btnOpen" class="primary" type="button">Open…</button></label>
+    <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden aria-label="Open character file (PSD/PSB/PNG/JSON/luna)">
+    <button id="btnSave" title="Save this character as a project file (.luna) to keep working on it later. Open… loads it back.">Save</button>
+    <input id="fileTpl" type="file" webkitdirectory directory multiple hidden>
+    <button id="btnBrowse" title="See every asset from your game's template and pick which ones to use">Browse template</button>
+    <button id="btnTemplate" title="Start from the game's own character (every body part, mouth and jaw state and eye, put together exactly like the game). Comes from YOUR game: the mod saves it to BepInEx\plugins\AdvancedRigs\GameTemplate the first time you play (or press F10).">Game template</button>
+    <span id="gameBadge" class="pill" style="cursor:pointer" title="The game template (sprites, wearables, animations) from your game. Click to load / reload it."></span>
+    <button id="btnSprites" title="Add PNGs to this character: body parts, tail pieces, wings, frames (placed by name) — or skins / gear / health screen art named like the game's sprites (F9 in game saves them)">Add PNG…</button>
+    <input id="fileSprites" type="file" multiple accept=".png,.json" hidden>
+    <button id="btnAddPsd" title="Add a PSD / PSB to this character: layers with the same names are updated, new ones are added (with no character open, it starts a new one)">Add PSD / PSB…</button>
+    <select id="dlMenu" title="Download every layer of this character, to repaint in Photoshop, Krita, GIMP, Photopea…" style="width:150px;flex:none"><option value="">⬇ Download all…</option><option value="psd">as one PSD</option><option value="psb">as one PSB (large)</option><option value="png">as PNGs (one per layer)</option></select>
+    <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
+    <span class="muted">Name</span><label for="name" style="margin-right:4px">Character name</label><input id="name" type="text" value="MyCharacter" style="width:150px" aria-label="Character name">
+    <button id="btnTheme" title="Switch the editor's look (Casualties lab terminal / plain)">Theme</button>
+    <button id="btnHelp">How to</button>
+    <button id="btnExport" class="primary">Export rig (.zip)</button>
+  </span>
 </header>
+<div id="modePanels">
+<div id="panelRig" class="modePanel active">
 <main>
   <aside class="left">
     <h2>Layers</h2>
@@ -237,8 +298,6 @@ aside.right{overflow-x:hidden}
   </section>
   <aside class="right"><div id="insp"></div></aside>
 </main>
-</div>
-<div id="toast"></div>
 <div id="tplBrowser" class="modal"><div class="box" style="max-width:920px;width:92vw">
   <div class="row" style="margin-top:0"><h2 style="margin:0;flex:1">Game template — your game's assets</h2><button id="tbClose">Close</button></div>
   <div class="muted" style="margin:4px 0 8px">Tick what you want, then start a new character from it or add it to the one that's open. Wearables become <i>your version</i> of that item (shown only while you wear it).</div>
@@ -275,10 +334,153 @@ aside.right{overflow-x:hidden}
   <p class="muted" style="margin-top:0">Luna Advanced Rig Systems is a fan-made mod and tool, not made by or affiliated with the developer of Casualties: Unknown. The <b>Test</b> tab is a <b>simulation</b>: its movement, states, eyes, mouth and injury rules are re-created from Casualties: Unknown's code by <b>Orson</b>, so you can preview a character outside the game. It is not the game and won't match it exactly. Nothing from the game is included in the editor: the game template (sprites, wearables, animations) is made by the mod from your own copy of the game. Casualties: Unknown, its code and its art belong to Orson.</p>
   <div style="text-align:right;margin-top:10px"><button id="helpClose" class="primary">Got it</button></div>
 </div></div>
+
+
+
+</div>
+<div id="panelPaint" class="modePanel">
+<header>
+<h1>Sprite Paint Editor <span>Luna Advanced Rig Systems</span></h1>
+<div class="grow"></div>
+<button id="paintBtnNew" title="New sprite">New</button>
+<button id="paintBtnOpen" title="Load PNG">Open…</button>
+<input id="paintFileOpen" type="file" accept=".png" hidden>
+<button id="paintBtnSave" class="primary" title="Export PNG">Save PNG</button>
+<button id="paintBtnUndo" title="Undo (Ctrl+Z)">↶ Undo</button>
+<button id="paintBtnRedo" title="Redo (Ctrl+Y)">↷ Redo</button>
+</header>
+
+<main>
+<aside>
+<h2>Tools</h2>
+<div class="section">
+<div class="row"><label>Tool</label>
+<select id="paintToolSel">
+<option value="pencil">Pencil</option>
+<option value="eraser">Eraser</option>
+<option value="fill">Fill</option>
+<option value="picker">Picker</option>
+</select></div>
+<div class="row"><label>Size</label>
+<input id="paintBrushSize" type="range" min="1" max="32" value="4">
+<span id="paintBrushSizeVal">4px</span></div>
+<div class="row"><label>Color</label>
+<input id="paintColorPick" type="color" value="#e0475b">
+<div style="margin-top:4px;display:flex;gap:4px" id="paintQuickColors"></div>
+</div>
+<div class="toolbar" style="margin-top:8px">
+<button id="paintToolZoomIn" title="Zoom in">+</button>
+<button id="paintToolZoomOut" title="Zoom out">-</button>
+<button id="paintToolFit" title="Fit to window">Fit</button>
+</div>
+</div>
+
+<h2>Layers</h2>
+<div class="tabs">
+<button id="paintTabPaint" class="on">Paint</button>
+<button id="paintTabPreview">Preview</button>
+<button id="paintTabExport">Export</button>
+</div>
+<div id="paintLayerView">
+<div class="section" id="paintLayerList">
+<div class="empty">No layers<br>Add one to start painting</div>
+</div>
+<div class="btn-row">
+<button id="paintBtnAddLayer" class="primary">+ Layer</button>
+<button id="paintBtnDelLayer" class="danger">- Delete</button>
+</div>
+<h2>Rig &harr; Paint</h2>
+<div class="section">
+<div class="btn-row" style="flex-direction:column;margin-top:0">
+<button id="paintBtnImportRig" class="primary" title="Import every layer of the open rig as paint layers">Import rig assets</button>
+<button id="paintBtnPushRig" class="danger" title="Write the painted pixels back into the rig layers">Push to rig</button>
+<button id="paintBtnRigPreview" title="Show the rig on the Preview tab">Rig preview</button>
+</div>
+<div id="rigIntegrationStatus" style="font-size:10px;color:var(--dim);margin-top:4px;line-height:1.3"></div>
+<div style="font-size:10px;color:var(--dim);margin-top:4px">Double-click a rig layer to open it here.</div>
+</div>
+</aside>
+
+<div id="viewport">
+<div id="paintCanvasWrap">
+<canvas id="paintCv" width="256" height="256"></canvas>
+<div class="crosshair" id="crosshair"></div>
+</div>
+<div class="coord" id="paintCoord">0, 0</div>
+</div>
+
+<aside class="right">
+<h2>Preview</h2>
+<div class="section">
+<div id="previewWrap" style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
+<canvas id="paintPreview" width="256" height="256" style="max-width:100%;max-height:100%"></canvas>
+</div>
+<div class="row" style="margin-top:8px"><label>Scale</label>
+<input id="paintPreviewScale" type="range" min="1" max="8" value="2">
+<span id="paintPreviewScaleVal">2x</span></div>
+<div class="row" style="margin-top:8px"><label>Rig anim</label>
+<select id="paintAnimClip" style="flex:1;min-width:0;max-width:160px" title="Pick the game animation to preview on the whole rig"></select></div>
+<div class="btn-row">
+<button id="paintBtnAnimPlay" title="Play / pause the animation">⏸ Pause</button>
+<button id="paintBtnAnimPrev" title="Previous animation">◀</button>
+<button id="paintBtnAnimNext" title="Next animation">▶</button>
+</div>
+</div>
+
+<h2>Effects</h2>
+<div class="section">
+<div class="row"><label>Blend</label>
+<select id="paintBlendMode">
+<option value="normal">Normal</option>
+<option value="multiply">Multiply</option>
+<option value="screen">Screen</option>
+<option value="overlay">Overlay</option>
+</select></div>
+<div class="row"><label>Opacity</label>
+<input id="paintLayerOpacity" type="range" min="0" max="100" value="100">
+<span id="paintLayerOpacityVal">100%</span></div>
+</div>
+
+<h2>Info</h2>
+<div class="section">
+<div class="row"><label>Size</label><span id="paintInfoSize">256×256</span></div>
+<div class="row"><label>Layers</label><span id="paintInfoLayers">0</span></div>
+<div class="row"><label>Zoom</label><span id="paintInfoZoom">100%</span></div>
+</div>
+
+<div class="btn-row" style="margin-top:12px">
+<button id="paintBtnFlipH" title="Flip horizontal">Flip H</button>
+<button id="paintBtnFlipV" title="Flip vertical">Flip V</button>
+<button id="paintBtnRotate" title="Rotate 90°">Rotate</button>
+</div>
+</aside>
+</main>
+</div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
 <script>
+window.switchMode = function(mode) {
+  document.body.dataset.mode = mode === 'paint' ? 'paint' : 'rig';
+  if (mode === 'paint') {
+    document.getElementById('modePaint').classList.add('active');
+    document.getElementById('modeRig').classList.remove('active');
+    document.getElementById('panelPaint').classList.add('active');
+    document.getElementById('panelRig').classList.remove('active');
+    if (window.__paintModeShown) window.__paintModeShown();
+  } else {
+    if (window.__stopAnimPreview) window.__stopAnimPreview();
+    document.getElementById('modeRig').classList.add('active');
+    document.getElementById('modePaint').classList.remove('active');
+    document.getElementById('panelRig').classList.add('active');
+    document.getElementById('panelPaint').classList.remove('active');
+    // the rig canvas cannot be sized while its panel is hidden, so re-render now that it is visible
+    if (window.__rigEditor) window.__rigEditor.redraw();
+  }
+}
+
 /*__CORE__*/
-</script>
-<script>
+
 /*__UI__*/
 </script>
 </body>

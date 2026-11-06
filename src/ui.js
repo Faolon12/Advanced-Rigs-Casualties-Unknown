@@ -499,6 +499,13 @@ function layerRow(l, inF, flat) {
   sel.onclick = (e) => e.stopPropagation();
   sel.onchange = () => setRole(l, sel.value);
   row.append(th, right);
+  row.ondblclick = (e) => {
+    e.stopPropagation();
+    if (doc) {
+      switchMode('paint');
+      importRigLayer(l.id);
+    }
+  };
   row.onclick = (e) => {
     if (e.ctrlKey || e.metaKey) { if (selSet.has(l.id)) { selSet.delete(l.id); if (selLayer === l.id) selLayer = [...selSet][0] || null; } else { selSet.add(l.id); selLayer = l.id; } renderLayers(); renderInspector(); draw(); return; }
     if (e.shiftKey && selLayer && flat) { const a = flat.findIndex(o => o.id === selLayer), b = flat.findIndex(o => o.id === l.id); if (a >= 0 && b >= 0) { const [lo, hi] = a < b ? [a, b] : [b, a]; for (let k = lo; k <= hi; k++) selSet.add(flat[k].id); } renderLayers(); return; }
@@ -1053,7 +1060,12 @@ function bindMoveBox(l) {
 function refresh() { renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test' || tab === 'gear') startTest(); draw(); }
 
 // ---------------------------------------------------------------- canvas: rig view
-function resize() { const r = stage.getBoundingClientRect(); const d = window.devicePixelRatio || 1; cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); draw(); }
+function resize() {
+  const r = stage.getBoundingClientRect(); const d = window.devicePixelRatio || 1;
+  // while the rig panel is hidden (paint mode) the stage has no size: keep the last good canvas
+  if (r.width < 2 || r.height < 2) { if (!cv.width || cv.width < 2) { cv.width = 1; cv.height = 1; } draw(); return; }
+  cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); draw();
+}
 window.addEventListener('resize', resize);
 function fitView() {
   if (!doc) return; const d = window.devicePixelRatio || 1;
@@ -2445,5 +2457,76 @@ $('#eyePrev').innerHTML = '<option value="">Eyes: automatic</option>' + RIG.EYE_
 
 // ---------------------------------------------------------------- start
 resize(); renderInspector(); hint('Open your character to begin. New here? Click <b>How to</b>. <span style="opacity:.7">Fan-made, not affiliated with Casualties: Unknown. The Test tab is a simulation based on Orson\'s game code.</span>');
-window.__rigEditor = { addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); } };
+
+// ---- bridge API used by the sprite paint editor (it lives outside this closure)
+function bridgeLayers() { return doc ? doc.layers.filter(l => l.rgba && !l.hidden) : []; }
+function bridgeLayer(id) { return doc ? RIG.layer(doc, id) : null; }
+function bridgeSetPixels(id, rgba) {
+  const l = bridgeLayer(id); if (!l) return false;
+  if (!rgba || rgba.length !== l.w * l.h * 4) return false;
+  l.rgba = new Uint8Array(rgba);
+  imgCache.delete(l);              // the cached canvas is now stale
+  return true;
+}
+function bridgeSnapshot() {
+  if (!doc) return null;
+  const paintOpen = document.getElementById('panelPaint').classList.contains('active');
+  const app = document.getElementById('app');
+  const prev = app.style.visibility;
+  if (paintOpen) { app.style.visibility = 'hidden'; switchMode('rig'); }
+  try {
+    resize(); draw();
+    const c = document.createElement('canvas');
+    c.width = cv.width; c.height = cv.height;
+    c.getContext('2d').drawImage(cv, 0, 0);
+    return c;
+  } finally {
+    if (paintOpen) { switchMode('paint'); app.style.visibility = prev; }
+  }
+}
+
+// ---- animated preview: reuse the editor's Animate tab (the game's own clips)
+let animPrevTab = null;
+function bridgeAnimClips() { return (RIG.GAME && RIG.GAME.clips) ? Object.keys(RIG.GAME.clips).sort() : []; }
+function bridgeStartAnim(clip) {
+  if (!doc || !gameMode()) return false;
+  if (animPrevTab === null) animPrevTab = tab;
+  tabTo('anim');
+  if (clip && RIG.GAME.clips[clip]) AS.clip = clip;
+  AS.t = 0; AS.playing = true;
+  return true;
+}
+function bridgeSetAnimClip(clip) {
+  if (!RIG.GAME || !RIG.GAME.clips[clip]) return false;
+  AS.clip = clip; AS.t = 0; AS.playing = true;
+  return true;
+}
+function bridgeSetAnimPlaying(p) { AS.playing = !!p; return AS.playing; }
+function bridgeIsAnimPlaying() { return !!AS.playing; }
+function bridgeCopyCanvas() {
+  const c = document.createElement('canvas');
+  c.width = cv.width; c.height = cv.height;
+  c.getContext('2d').drawImage(cv, 0, 0);
+  return c;
+}
+function bridgeStopAnim() {
+  if (animPrevTab === null) return;
+  const t = animPrevTab; animPrevTab = null;
+  tabTo(t === 'anim' ? 'rig' : t);
+}
+// the part of the rig canvas the animated character occupies, in canvas pixels
+function bridgeAnimCrop() {
+  if (tab !== 'anim' || !test) return null;
+  const d = window.devicePixelRatio || 1;
+  const W = cv.width / d, H = cv.height / d;
+  const z = test.zoom || 44;
+  const groundY = Math.max(120, (H - 206) * 0.86);
+  const w = 4.8 * z, h = 5.0 * z;
+  return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
+}
+window.__rigEditor = { addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
+  layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, snapshot: bridgeSnapshot,
+  animClips: bridgeAnimClips, startAnim: bridgeStartAnim, stopAnim: bridgeStopAnim, setAnimClip: bridgeSetAnimClip, animCrop: bridgeAnimCrop,
+  setAnimPlaying: bridgeSetAnimPlaying, isAnimPlaying: bridgeIsAnimPlaying, copyCanvas: bridgeCopyCanvas,
+  redraw: () => { resize(); draw(); renderInspector(); }, toastMsg: (m, ms) => toast(m, ms) };
 })();

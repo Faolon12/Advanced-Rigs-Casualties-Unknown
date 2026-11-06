@@ -21,7 +21,7 @@ def src(f):
 
 def main():
     # Validate all source files exist
-    for f in ['ui.html', 'core.js', 'vanilla_hs.js', 'ui.js']:
+    for f in ['ui.html', 'core.js', 'vanilla_hs.js', 'ui.js', 'paint.js']:
         src(f)  # will exit if missing
 
     # Back up previous index.html if it exists
@@ -34,7 +34,7 @@ def main():
 
     html = (src('ui.html')
             .replace('/*__CORE__*/', src('core.js') + '\n' + src('vanilla_hs.js'))
-            .replace('/*__UI__*/', src('ui.js')))
+            .replace('/*__UI__*/', src('ui.js') + '\n\n' + src('paint.js')))
 
     # Sanity check: both markers replaced
     if '/*__CORE__*/' in html:
