@@ -145,13 +145,14 @@ RIG.J = (doc, part) => { const r = RIG.restPx(part); return { x: +(r.x + doc.ali
 // ===================== PSD / PSB reader =====================
 RIG.readPSD = function (buf) {
   const dv = new DataView(buf); let p = 0;
-  const u8 = () => dv.getUint8(p++);
-  const u16 = () => { const v = dv.getUint16(p); p += 2; return v; };
-  const i16 = () => { const v = dv.getInt16(p); p += 2; return v; };
-  const u32 = () => { const v = dv.getUint32(p); p += 4; return v; };
-  const i32 = () => { const v = dv.getInt32(p); p += 4; return v; };
-  const u64 = () => { const hi = u32(), lo = u32(); return hi * 4294967296 + lo; };
-  const str = (n) => { let s = ''; for (let i = 0; i < n; i++) s += String.fromCharCode(u8()); return s; };
+  const need = (n) => { if (p + n > dv.byteLength) throw new Error('PSD file is truncated or corrupt (ran out of data at byte ' + p + ')'); };
+  const u8 = () => { need(1); return dv.getUint8(p++); };
+  const u16 = () => { need(2); const v = dv.getUint16(p); p += 2; return v; };
+  const i16 = () => { need(2); const v = dv.getInt16(p); p += 2; return v; };
+  const u32 = () => { need(4); const v = dv.getUint32(p); p += 4; return v; };
+  const i32 = () => { need(4); const v = dv.getInt32(p); p += 4; return v; };
+  const u64 = () => { need(8); const hi = u32(), lo = u32(); return hi * 4294967296 + lo; };
+  const str = (n) => { need(n); let s = ''; for (let i = 0; i < n; i++) s += String.fromCharCode(u8()); return s; };
   if (str(4) !== '8BPS') throw new Error('Not a PSD/PSB file');
   const ver = u16(); const big = ver === 2; p += 6;
   const channels = u16(), H = u32(), W = u32(), depth = u16(), mode = u16();
