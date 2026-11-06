@@ -164,7 +164,8 @@ async function addSprites(list) {
   for (const f of files.filter(f => /\.png$/i.test(f.name))) {
     const base = f.name.replace(/\.png$/i, '');
     const m = base.match(/^health_([A-Za-z]+)_(outline|middle)$/);
-    try { const img = await decodePng(f); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
+    let img; try { img = await decodePng(f); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
+    if (!img) continue;
     if (m && RIG.PARTS.includes(m[1])) {
       const e = doc.healthScreen[m[1]] = doc.healthScreen[m[1]] || { scale: 3 };
       e[m[2]] = img; hs++;
