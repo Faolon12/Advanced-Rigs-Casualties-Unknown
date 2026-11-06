@@ -14,8 +14,12 @@ button:hover{border-color:#555a66}
 button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
 button.primary:hover{filter:brightness(1.1)}
 button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+button.secondary{background:var(--panel2);border-color:var(--line);color:var(--dim)}
+button.secondary:hover{border-color:var(--text);color:var(--text)}
+button.danger{background:rgba(224,71,91,0.2);border-color:var(--acc);color:var(--acc)}
+button.danger:hover{background:var(--acc);color:#fff}
 select,input[type=text],input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
-input[type=color]{border:none;background:none;width:28px;height:28px;cursor:pointer}
+input[type=color]{border:none;background:none;width:26px;height:26px;cursor:pointer}
 #app{display:grid;grid-template-rows:auto 1fr;height:100%}
 header{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);z-index:10}
 header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
@@ -42,13 +46,16 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 .layer-item{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:#111216}
 .layer-item.active{border-color:var(--acc2);background:var(--panel2)}
 .layer-item .layer-vis{width:16px;height:16px;border:1px solid var(--line);border-radius:3px;flex:0 0 16px}
-.layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px}
+.layer-actions{display:flex;gap:3px;align-items:center}
+.layer-actions button{padding:2px 6px;font-size:11px;min-width:0}
 .btn-row{display:flex;gap:4px;margin-top:8px}
 .btn-row button{flex:1}
 .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);color:var(--text);padding:8px 14px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;white-space:nowrap}
 .toast.show{opacity:1}
 .empty{padding:30px;text-align:center;color:var(--dim)}
 .empty b{color:var(--text)}
+.input-small{width:70px}
 </style>
 </head>
 <body>
@@ -93,7 +100,7 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 </div>
 <div class="btn-row">
 <button id="btnAddLayer" class="primary">+ Layer</button>
-<button id="btnDelLayer">- Delete</button>
+<button id="btnDelLayer" class="danger">- Delete</button>
 </div>
 </aside>
 
@@ -136,7 +143,7 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 /*============================================================
   Sprite Paint Editor — self-contained
   Tools: pencil, eraser, fill, color picker
-  Layers: add/delete/select, paint on active layer
+  Layers: add/delete/select, rename, duplicate, visibility, opacity, move
   Preview: live downscaled composite
   Export: PNG download
 ============================================================*/
@@ -146,9 +153,7 @@ const ctx = cv.getContext('2d', {willReadFrequently:true});
 const preview = document.getElementById('preview');
 const pctx = preview.getContext('2d', {willReadFrequently:true});
 const wrap = document.getElementById('canvas-wrap');
-const viewport = document.getElementById('viewport');
 const coord = document.getElementById('coord');
-const crosshair = document.getElementById('crosshair');
 
 let layers = [];
 let active = null;
@@ -236,15 +241,58 @@ function renderLayers(){
   layers.forEach((l,i)=>{
     const el = document.createElement('div');
     el.className = 'layer-item'+(i===active?' active':'');
+    el.onclick = (ev)=>{ if(!ev.target.closest('button,input,select')) setActive(i); };
+
     const vis = document.createElement('div');
     vis.className = 'layer-vis';
     vis.style.background = i===active ? color : '#33363f';
     el.appendChild(vis);
+
     const name = document.createElement('div');
     name.className = 'layer-name';
     name.textContent = l.name;
     el.appendChild(name);
-    el.onclick = ()=>{ setActive(i); };
+
+    // visibility toggle
+    const visBtn = document.createElement('button');
+    visBtn.className = 'secondary';
+    visBtn.title = l.visible ? 'Hide layer' : 'Show layer';
+    visBtn.textContent = l.visible ? '👁' : '🙈';
+    visBtn.onclick = (ev)=>{ ev.stopPropagation(); toggleVisibility(i); };
+    el.appendChild(visBtn);
+
+    // rename
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'secondary';
+    renameBtn.title = 'Rename';
+    renameBtn.textContent = '✎';
+    renameBtn.onclick = (ev)=>{ ev.stopPropagation(); renameLayer(i); };
+    el.appendChild(renameBtn);
+
+    // duplicate
+    const dupBtn = document.createElement('button');
+    dupBtn.className = 'secondary';
+    dupBtn.title = 'Duplicate';
+    dupBtn.textContent = '📋';
+    dupBtn.onclick = (ev)=>{ ev.stopPropagation(); duplicateLayer(i); };
+    el.appendChild(dupBtn);
+
+    // delete
+    const delBtn = document.createElement('button');
+    delBtn.className = 'danger';
+    delBtn.title = 'Delete layer';
+    delBtn.textContent = '🗑';
+    delBtn.onclick = (ev)=>{ ev.stopPropagation(); deleteLayer(i); };
+    el.appendChild(delBtn);
+
+    // opacity
+    const op = document.createElement('input');
+    op.type = 'range'; op.min = '0'; op.max = '100'; op.value = Math.round(l.opacity*100);
+    op.className = 'input-small';
+    op.title = 'Opacity';
+    op.oninput = (ev)=>{ setOpacity(i, parseInt(ev.target.value)/100); };
+    el.appendChild(op);
+
     list.appendChild(el);
   });
 }
@@ -265,14 +313,52 @@ function addLayer(name=null){
   toast('Layer added');
 }
 
-function deleteLayer(){
+function deleteLayer(idx=null){
+  if(idx===null) idx = active;
   if(layers.length<=1){ toast('Cannot delete last layer'); return; }
-  layers.splice(active,1);
+  layers.splice(idx,1);
   if(active>=layers.length) active = layers.length-1;
+  if(active===null) active = 0;
   dirty = true;
   updateUI();
   composite();
   toast('Layer deleted');
+}
+
+function duplicateLayer(idx){
+  const l = layers[idx];
+  const c = newLayerCanvas(cv.width, cv.height);
+  c.getContext('2d').drawImage(l.canvas, 0, 0);
+  const copy = {name:l.name+' copy', canvas:c, visible:l.visible, opacity:l.opacity};
+  layers.splice(idx+1, 0, copy);
+  active = idx+1;
+  dirty = true;
+  updateUI();
+  composite();
+  toast('Layer duplicated');
+}
+
+function toggleVisibility(idx){
+  layers[idx].visible = !layers[idx].visible;
+  dirty = true;
+  composite();
+  updateUI();
+}
+
+function setOpacity(idx, val){
+  layers[idx].opacity = val;
+  dirty = true;
+  composite();
+  updateUI();
+}
+
+function renameLayer(idx){
+  const name = prompt('Rename layer:', layers[idx].name);
+  if(name!==null){
+    layers[idx].name = name.trim()||'Layer';
+    dirty = true;
+    updateUI();
+  }
 }
 
 function setColor(c){
@@ -420,7 +506,7 @@ document.getElementById('btnSave').onclick = ()=>{
   toast('Exported sprite.png');
 };
 document.getElementById('btnAddLayer').onclick = addLayer;
-document.getElementById('btnDelLayer').onclick = deleteLayer;
+document.getElementById('btnDelLayer').onclick = ()=>deleteLayer(null);
 document.getElementById('toolZoomIn').onclick = ()=>{ zoom=Math.min(zoom+0.25,8); updateUI(); composite(); };
 document.getElementById('toolZoomOut').onclick = ()=>{ zoom=Math.max(zoom-0.25,0.1); updateUI(); composite(); };
 document.getElementById('toolFit').onclick = ()=>{
