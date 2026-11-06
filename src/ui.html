@@ -156,11 +156,11 @@ aside.right{overflow-x:hidden}
 </style>
 </head>
 <body>
-<div id="app">
+<div id="app" role="application">
 <header>
   <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.2 Alpha</small></h1>
-  <button id="btnOpen" class="primary">Open…</button>
-  <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden>
+  <label><button id="btnOpen" class="primary" type="button">Open…</button></label>
+  <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden aria-label="Open character file (PSD/PSB/PNG/JSON/luna)">
   <button id="btnSave" title="Save this character as a project file (.luna) to keep working on it later. Open… loads it back.">Save</button>
   <input id="fileTpl" type="file" webkitdirectory directory multiple hidden>
   <button id="btnBrowse" title="See every asset from your game's template and pick which ones to use">Browse template</button>
@@ -171,7 +171,7 @@ aside.right{overflow-x:hidden}
   <button id="btnAddPsd" title="Add a PSD / PSB to this character: layers with the same names are updated, new ones are added (with no character open, it starts a new one)">Add PSD / PSB…</button>
   <select id="dlMenu" title="Download every layer of this character, to repaint in Photoshop, Krita, GIMP, Photopea…" style="width:150px;flex:none"><option value="">⬇ Download all…</option><option value="psd">as one PSD</option><option value="psb">as one PSB (large)</option><option value="png">as PNGs (one per layer)</option></select>
   <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
-  <span class="muted">Name</span><input id="name" type="text" value="MyCharacter" style="width:150px">
+  <span class="muted">Name</span><label for="name" style="margin-right:4px">Character name</label><input id="name" type="text" value="MyCharacter" style="width:150px" aria-label="Character name">
   <div class="grow"></div>
   <button id="btnTheme" title="Switch the editor's look (Casualties lab terminal / plain)">Theme</button>
   <button id="btnHelp">How to</button>
