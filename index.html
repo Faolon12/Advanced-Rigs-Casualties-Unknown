@@ -156,6 +156,7 @@ aside.right{overflow-x:hidden}
 .sug{display:flex;align-items:center;gap:4px;margin-top:3px;font-size:11px;color:#ffcf4a}
 .sug span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sug button{padding:0 6px;font-size:11px}
+.lyEnd{margin:4px 2px;padding:6px;border:1px dashed var(--line,#444);border-radius:6px;font-size:11px;opacity:.55;text-align:center}.lyEnd.drop{opacity:1;border-color:var(--acc2)}
 </style>
 </head>
 <body>
@@ -2525,6 +2526,13 @@ function renderLayers() {
   }
   const rows = shownRows(); const flat = rows.filter(r => r.l).map(r => r.l);
   for (const r of rows) box.appendChild(r.f ? folderRow(r.f, r.members) : layerRow(r.l, r.inF, flat));
+  const end = document.createElement('div'); end.className = 'lyEnd'; end.textContent = 'Drop here: back of the list, outside folders';
+  end.ondragover = (e) => { if (!dragRow) return; e.preventDefault(); end.classList.add('drop'); };
+  end.ondragleave = () => end.classList.remove('drop');
+  end.ondrop = (e) => { e.preventDefault(); end.classList.remove('drop'); const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src) return;
+    pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src]; const rest = doc.layers.filter(o => !list.includes(o) && !o.cutSource);
+    if (rest.length) moveLayersTo(list, rest[0], false); for (const l of list) delete l.folder; refresh(); startTestIfOpen(); };
+  box.appendChild(end);
   updateBulk(); const sa = $('#lySugAll'); if (sa) sa.style.display = doc.layers.some(l => l.suggest && l.role.type === 'ignore') ? '' : 'none';
 }
 function folderRow(f, members) {
@@ -2538,15 +2546,26 @@ function folderRow(f, members) {
   row.draggable = true;
   row.ondragstart = (e) => { dragFolder = f.id; dragRow = null; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', f.id); } catch (er) { } };
   row.ondragend = () => { dragFolder = null; dragRow = null; };
-  // drop layers on a folder to put them in it (their drawing order doesn't change); drop a folder on a folder to move it there
-  row.ondragover = (e) => { if (!dragRow && !dragFolder) return; e.preventDefault(); row.classList.add('drop'); };
-  row.ondragleave = () => row.classList.remove('drop');
-  row.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); row.classList.remove('drop');
-    if (dragFolder) { const df = doc.folders.find(x => x.id === dragFolder); dragFolder = null; if (!df || df === f || !members.length) return;
-      const mine = doc.layers.filter(o => o.folder === df.id); if (!mine.length) { doc.folders.splice(doc.folders.indexOf(df), 1); doc.folders.splice(doc.folders.indexOf(f), 0, df); renderLayers(); return; }
-      pushUndo(); const top = members.reduce((a, b) => doc.layers.indexOf(a) > doc.layers.indexOf(b) ? a : b); moveLayersTo(mine, top, true); refresh(); startTestIfOpen(); return; }
+  // drop on a folder: middle = into it; top edge = above the folder (outside it); bottom edge = below it (outside it)
+  const zone = (e) => { const r = row.getBoundingClientRect(), y = e.clientY - r.top; return y < r.height * 0.3 ? 'above' : y > r.height * 0.7 ? 'below' : 'in'; };
+  const mark = (z) => { row.classList.toggle('drop', z === 'in'); row.style.boxShadow = z === 'above' ? 'inset 0 2px 0 var(--acc2)' : z === 'below' ? 'inset 0 -2px 0 var(--acc2)' : ''; };
+  row.ondragover = (e) => { if (!dragRow && !dragFolder) return; e.preventDefault(); mark(dragFolder ? (zone(e) === 'below' ? 'below' : 'above') : zone(e)); };
+  row.ondragleave = () => mark(null);
+  row.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); const z = zone(e); mark(null);
+    const idx = (o) => doc.layers.indexOf(o);
+    const top = members.length ? members.reduce((a, b) => idx(a) > idx(b) ? a : b) : null; // in front-most member (top of the list)
+    const bot = members.length ? members.reduce((a, b) => idx(a) < idx(b) ? a : b) : null; // back-most member
+    if (dragFolder) { const df = doc.folders.find(x => x.id === dragFolder); dragFolder = null; if (!df || df === f) return;
+      const mine = doc.layers.filter(o => o.folder === df.id);
+      if (!mine.length || !members.length) { doc.folders.splice(doc.folders.indexOf(df), 1); doc.folders.splice(doc.folders.indexOf(f) + (z === 'below' ? 1 : 0), 0, df); renderLayers(); return; }
+      pushUndo(); if (z === 'below') moveLayersTo(mine, bot, false); else moveLayersTo(mine, top, true); refresh(); startTestIfOpen(); return; }
     const src = dragRow && RIG.layer(doc, dragRow); dragRow = null; if (!src) return;
-    pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src]; for (const l of list) l.folder = f.id; f.open = true; renderLayers(); };
+    pushUndo(); const list = selSet.has(src.id) ? selectedLayers() : [src];
+    if (z === 'in') { for (const l of list) l.folder = f.id; f.open = true; renderLayers(); return; }
+    // outside the folder, just above / below it
+    const rest = members.filter(m => !list.includes(m));
+    if (rest.length) { const t = z === 'below' ? rest.reduce((a, b) => idx(a) < idx(b) ? a : b) : rest.reduce((a, b) => idx(a) > idx(b) ? a : b); moveLayersTo(list, t, z !== 'below'); }
+    for (const l of list) delete l.folder; refresh(); startTestIfOpen(); };
   return row;
 }
 function layerRow(l, inF, flat) {
