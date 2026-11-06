@@ -3,3 +3,5 @@
 This commit should be SSH-signed.
 
 Second line.
+
+Third line.
