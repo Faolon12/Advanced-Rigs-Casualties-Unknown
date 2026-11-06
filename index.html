@@ -231,8 +231,8 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 <header>
 <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.2 Alpha</small></h1>
 <div id="modeSwitcher">
-<button id="modeRig" class="modeBtn active">Rig Editor</button>
-<button id="modePaint" class="modeBtn">Sprite Paint</button>
+<button id="modeRig" class="modeBtn active" onclick="switchMode('rig')">Rig Editor</button>
+<button id="modePaint" class="modeBtn" onclick="switchMode('paint')">Sprite Paint</button>
 </div>
 <div class="grow"></div>
 <button id="btnOpen" class="primary" type="button">Open…</button>
@@ -376,8 +376,6 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 
 </div>
 <div id="panelPaint" class="modePanel">
-
-<div id="app" role="application">
 <header>
 <h1>Sprite Paint Editor <span>Luna Advanced Rig Systems</span></h1>
 <div class="grow"></div>
@@ -456,14 +454,26 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 </aside>
 </main>
 <div class="toast" id="toast"></div>
-</div>
-
 
 </div>
 </div>
 <div class="toast" id="toast"></div>
 </div>
 <script>
+
+window.switchMode = function(mode) {
+  if (mode === 'paint') {
+    document.getElementById('modePaint').classList.add('active');
+    document.getElementById('modeRig').classList.remove('active');
+    document.getElementById('panelPaint').classList.add('active');
+    document.getElementById('panelRig').classList.remove('active');
+  } else {
+    document.getElementById('modeRig').classList.add('active');
+    document.getElementById('modePaint').classList.remove('active');
+    document.getElementById('panelRig').classList.add('active');
+    document.getElementById('panelPaint').classList.remove('active');
+  }
+}
 
 // ===================== Advanced Rigs editor: core (no DOM) =====================
 // Everything here must match the mod (RigDefinition.cs / RigInstance.cs).
@@ -4575,9 +4585,9 @@ let brushSize = 4;
 let color = '#e0475b';
 let dirty = false;
 
-const quickColors = ['#e0475b','#8f5bff','#4cc38a','#e9b44c','#ffffff','#000000','#33363f','#1d1f25'];
-const qc = document.getElementById('quickColors');
-quickColors.forEach(c => {
+const paint_quickColors = ['#e0475b','#8f5bff','#4cc38a','#e9b44c','#ffffff','#000000','#33363f','#1d1f25'];
+const qc = document.getElementById('paintQuickColors');
+paint_quickColors.forEach(c => {
   const s = document.createElement('div');
   s.className = 'color-swatch';
   s.style.background = c;
@@ -4619,29 +4629,29 @@ function composite(){
 }
 
 function updatePreview(){
-  const scale = parseInt(document.getElementById('previewScale').value);
-  document.getElementById('previewScaleVal').textContent = scale+'x';
-  ppaint_ctx.fillStyle = '#0a0a0f';
-  ppaint_ctx.fillRect(0,0,paint_preview.width,paint_preview.height);
+  const scale = parseInt(document.getElementById('paintPreviewScale').value);
+  document.getElementById('paintPreviewScaleVal').textContent = scale+'x';
+  paint_ctx.fillStyle = '#0a0a0f';
+  paint_ctx.fillRect(0,0,paint_preview.width,paint_preview.height);
   layers.forEach(l=>{
     if(l.visible){
-      ppaint_ctx.globalAlpha = l.opacity;
-      ppaint_ctx.drawImage(l.canvas, 0, 0, paint_preview.width, paint_preview.height);
+      paint_ctx.globalAlpha = l.opacity;
+      paint_ctx.drawImage(l.canvas, 0, 0, paint_preview.width, paint_preview.height);
     }
   });
-  ppaint_ctx.globalAlpha = 1;
+  paint_ctx.globalAlpha = 1;
 }
 
 function updateUI(){
-  document.getElementById('infoSize').textContent = paint_cv.width+'×'+paint_cv.height;
-  document.getElementById('infoLayers').textContent = layers.length;
-  document.getElementById('infoZoom').textContent = Math.round(zoom*100)+'%';
-  document.getElementById('brushSizeVal').textContent = brushSize+'px';
+  document.getElementById('paintInfoSize').textContent = paint_cv.width+'×'+paint_cv.height;
+  document.getElementById('paintInfoLayers').textContent = layers.length;
+  document.getElementById('paintInfoZoom').textContent = Math.round(zoom*100)+'%';
+  document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
   renderLayers();
 }
 
 function renderLayers(){
-  const list = document.getElementById('layerList');
+  const list = document.getElementById('paintLayerList');
   if(layers.length===0){
     list.innerHTML = '<div class="empty">No layers<br>Add one to start painting</div>';
     return;
@@ -4772,7 +4782,7 @@ function renameLayer(idx){
 
 function setColor(c){
   color = c;
-  document.getElementById('colorPick').value = c;
+  document.getElementById('paintColorPick').value = c;
   updateUI();
   composite();
 }
@@ -4882,12 +4892,12 @@ paint_wrap.addEventListener('wheel', e=>{
 }, {passive:false});
 
 document.getElementById('toolSel').onchange = e=>{ tool = e.target.value; };
-document.getElementById('brushSize').oninput = e=>{
+document.getElementById('paintBrushSize').oninput = e=>{
   brushSize = parseInt(e.target.value);
-  document.getElementById('brushSizeVal').textContent = brushSize+'px';
+  document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
 };
-document.getElementById('colorPick').oninput = e=>setColor(e.target.value);
-document.getElementById('btnNew').onclick = ()=>{
+document.getElementById('paintColorPick').oninput = e=>setColor(e.target.value);
+document.getElementById('paintBtnNew').onclick = ()=>{
   if(confirm('New sprite will clear all layers. Continue?')){
     layers = []; active = null; zoom = 1; pan = {x:0,y:0};
     paint_cv.width = 256; paint_cv.height = 256;
@@ -4895,8 +4905,8 @@ document.getElementById('btnNew').onclick = ()=>{
     toast('New sprite');
   }
 };
-document.getElementById('btnOpen').onclick = ()=>document.getElementById('fileOpen').click();
-document.getElementById('fileOpen').onchange = async e=>{
+document.getElementById('paintBtnOpen').onclick = ()=>document.getElementById('paintFileOpen').click();
+document.getElementById('paintFileOpen').onchange = async e=>{
   const f = e.target.files[0]; if(!f) return;
   const img = await loadImage(f);
   paint_cv.width = img.width; paint_cv.height = img.height;
@@ -4907,28 +4917,28 @@ document.getElementById('fileOpen').onchange = async e=>{
   updateUI(); composite();
   toast('Opened '+f.name);
 };
-document.getElementById('btnSave').onclick = ()=>{
+document.getElementById('paintBtnSave').onclick = ()=>{
   const link = document.createElement('a');
   link.download = 'sprite.png';
   link.href = paint_cv.toDataURL('image/png');
   link.click();
   toast('Exported sprite.png');
 };
-document.getElementById('btnAddLayer').onclick = addLayer;
-document.getElementById('btnDelLayer').onclick = ()=>deleteLayer(null);
-document.getElementById('toolZoomIn').onclick = ()=>{ zoom=Math.min(zoom+0.25,8); updateUI(); composite(); };
-document.getElementById('toolZoomOut').onclick = ()=>{ zoom=Math.max(zoom-0.25,0.1); updateUI(); composite(); };
-document.getElementById('toolFit').onclick = ()=>{
+document.getElementById('paintBtnAddLayer').onclick = addLayer;
+document.getElementById('paintBtnDelLayer').onclick = ()=>deleteLayer(null);
+document.getElementById('paintToolZoomIn').onclick = ()=>{ zoom=Math.min(zoom+0.25,8); updateUI(); composite(); };
+document.getElementById('paintToolZoomOut').onclick = ()=>{ zoom=Math.max(zoom-0.25,0.1); updateUI(); composite(); };
+document.getElementById('paintToolFit').onclick = ()=>{
   const rect = paint_wrap.getBoundingClientRect();
   zoom = Math.min((rect.width-20)/paint_cv.width, (rect.height-20)/paint_cv.height, 2);
   pan = {x:(rect.width-paint_cv.width*zoom)/2, y:(rect.height-paint_cv.height*zoom)/2};
   updateUI(); composite();
 };
-document.getElementById('previewScale').oninput = e=>{
-  document.getElementById('previewScaleVal').textContent = e.target.value+'x';
+document.getElementById('paintPreviewScale').oninput = e=>{
+  document.getElementById('paintPreviewScaleVal').textContent = e.target.value+'x';
   updatePreview();
 };
-document.getElementById('btnFlipH').onclick = ()=>{
+document.getElementById('paintBtnFlipH').onclick = ()=>{
   if(active===null) return;
   const g = layers[active].canvas.getContext('2d');
   const id = g.getImageData(0,0,paint_cv.width,paint_cv.height);
@@ -4941,7 +4951,7 @@ document.getElementById('btnFlipH').onclick = ()=>{
   g.putImageData(id,0,0);
   dirty = true; composite(); toast('Flipped horizontal');
 };
-document.getElementById('btnFlipV').onclick = ()=>{
+document.getElementById('paintBtnFlipV').onclick = ()=>{
   if(active===null) return;
   const g = layers[active].canvas.getContext('2d');
   const id = g.getImageData(0,0,paint_cv.width,paint_cv.height);
@@ -4954,7 +4964,7 @@ document.getElementById('btnFlipV').onclick = ()=>{
   g.putImageData(id,0,0);
   dirty = true; composite(); toast('Flipped vertical');
 };
-document.getElementById('btnRotate').onclick = ()=>{
+document.getElementById('paintBtnRotate').onclick = ()=>{
   if(active===null) return;
   const c = layers[active].canvas;
   const tmp = document.createElement('canvas');
@@ -4985,23 +4995,6 @@ function loadImage(file){
 addLayer();
 updateUI();
 composite();
-
-
-document.getElementById('modeRig').onclick = () => {
-  document.getElementById('modeRig').classList.add('active');
-  document.getElementById('modePaint').classList.remove('active');
-  document.getElementById('panelRig').classList.add('active');
-  document.getElementById('panelPaint').classList.remove('active');
-};
-document.getElementById('modePaint').onclick = () => {
-  document.getElementById('modePaint').classList.add('active');
-  document.getElementById('modeRig').classList.remove('active');
-  document.getElementById('panelPaint').classList.add('active');
-  document.getElementById('panelRig').classList.remove('active');
-};
-paint_addLayer();
-paint_updateUI();
-paint_composite();
 
 </script>
 </body>
