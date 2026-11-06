@@ -4891,7 +4891,7 @@ paint_wrap.addEventListener('wheel', e=>{
   composite();
 }, {passive:false});
 
-document.getElementById('toolSel').onchange = e=>{ tool = e.target.value; };
+document.getElementById('paintToolSel').onchange = e=>{ tool = e.target.value; };
 document.getElementById('paintBrushSize').oninput = e=>{
   brushSize = parseInt(e.target.value);
   document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
