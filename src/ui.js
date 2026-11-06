@@ -21,10 +21,14 @@ function layerCanvas(l) {
 
 // ---------------------------------------------------------------- loading
 async function decodePng(file) {
-  const bmp = await createImageBitmap(file);
-  const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
-  const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
-  return { w: c.width, h: c.height, rgba: g.getImageData(0, 0, c.width, c.height).data };
+  try {
+    const bmp = await createImageBitmap(file);
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
+    return { w: c.width, h: c.height, rgba: g.getImageData(0, 0, c.width, c.height).data };
+  } catch (e) {
+    throw new Error(`Could not decode image "${file.name}": ${e.message}`);
+  }
 }
 
 const psd_or_rig = (files) => files.some(f => /\.ps[db]$/i.test(f.name) || /^rig\.json$/i.test(f.name));
@@ -83,13 +87,16 @@ async function openFiles(list) {
       toast('Opened ' + psd.name + ' — ' + doc.layers.length + ' layers, parts matched automatically');
     } else if (json) {
       const rig = JSON.parse(await json.text());
-      const images = {}; for (const f of pngs) images[f.name] = await decodePng(f);
+      const images = {}; for (const f of pngs) {
+      try { images[f.name] = await decodePng(f); }
+      catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
+    }
       for (const f of files.filter(f => /\.(wav|ogg|mp3)$/i.test(f.name))) images[f.name] = { raw: new Uint8Array(await f.arrayBuffer()) };
       doc = RIG.docFromRig(rig, images);
       toast('Opened rig ' + doc.name);
     } else if (pngs.length) {
       const decoded = []; let W = 0, H = 0;
-      for (let i = 0; i < pngs.length; i++) { const d = await decodePng(pngs[i]); W = Math.max(W, d.w); H = Math.max(H, d.h); decoded.push({ name: pngs[i].name.replace(/\.png$/i, ''), x: 0, y: 0, w: d.w, h: d.h, rgba: d.rgba, order: i }); }
+      for (let i = 0; i < pngs.length; i++) { try { const d = await decodePng(pngs[i]); W = Math.max(W, d.w); H = Math.max(H, d.h); decoded.push({ name: pngs[i].name.replace(/\\.png$/i, ""), x: 0, y: 0, w: d.w, h: d.h, rgba: d.rgba, order: i }); } catch (e) { toast('Failed to load ' + pngs[i].name + ': ' + e.message, 6000); } }
       const sameSize = decoded.every(d => d.w === decoded[0].w && d.h === decoded[0].h) && decoded.length > 1;
       if (sameSize) { // full-canvas layers exported from an art program: positions are already right
         doc = RIG.newDoc('MyCharacter', W, H, decoded); RIG.autoAssign(doc);
@@ -104,7 +111,10 @@ async function openFiles(list) {
     if (hsFiles.length && doc) await addSprites(hsFiles);
     if (skin.length && !json) {
       if (!doc || (!psd && !pngs.length && !doc.layers.length)) doc = doc || RIG.newDoc('MySkin', 64, 64, []);
-      for (const f of skin) doc.spriteSwaps[f.name.replace(/\.png$/i, '')] = await decodePng(f);
+      for (const f of skin) {
+      try { doc.spriteSwaps[f.name.replace(/\.png$/i, '')] = await decodePng(f); }
+      catch (e) { toast('Failed to load skin ' + f.name + ': ' + e.message, 6000); }
+    }
       doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail');
       toast(skin.length + ' skin sprites added (sprite-replacer format). They show on the body; add a PSD for moving parts.', 5000);
     }
@@ -128,7 +138,7 @@ async function addImages(list) {
   if (art.length) {
     const imgs = []; let replaced = 0;
     for (const f of art) {
-      const d = await decodePng(f); const name = f.name.replace(/\.png$/i, '');
+      try { const d = await decodePng(f); const name = f.name.replace(/\.png$/i, ''); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
       const same = doc.layers.find(l => !l.cutSource && l.name === name);
       if (same) { replaceLayerImage(same, d); replaced++; continue; } // an edited layer coming back
       imgs.push({ name, w: d.w, h: d.h, rgba: d.rgba });
@@ -154,7 +164,7 @@ async function addSprites(list) {
   for (const f of files.filter(f => /\.png$/i.test(f.name))) {
     const base = f.name.replace(/\.png$/i, '');
     const m = base.match(/^health_([A-Za-z]+)_(outline|middle)$/);
-    const img = await decodePng(f);
+    try { const img = await decodePng(f); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
     if (m && RIG.PARTS.includes(m[1])) {
       const e = doc.healthScreen[m[1]] = doc.healthScreen[m[1]] || { scale: 3 };
       e[m[2]] = img; hs++;
@@ -823,7 +833,7 @@ async function updateFromPsdFile(f) {
 }
 function pickReplace(l) {
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.png,image/png';
-  inp.onchange = async () => { const f = inp.files[0]; if (!f) return; replaceLayerImage(l, await decodePng(f)); refresh(); startTestIfOpen(); toast(l.name + ' updated'); };
+  inp.onchange = async () => { const f = inp.files[0]; if (!f) return; try { replaceLayerImage(l, await decodePng(f)); refresh(); startTestIfOpen(); toast(l.name + ' updated'); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); } };
   inp.click();
 }
 // extra art for a part: injury looks (every part, like the game's limbs), mouth / jaw states (head), eyes
@@ -1458,7 +1468,7 @@ function bindGearTab() {
   box.querySelectorAll('[data-gdl]').forEach(b => b.onclick = () => { const sp = b.dataset.gdl, l = myGear(sp), im = l || RIG.GAME.images[sp]; if (!im) return;
     layerCanvas(im).toBlob(bl => { const a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = sp + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }); });
   box.querySelectorAll('[data-grep]').forEach(b => b.onclick = () => { const sp = b.dataset.grep; const inp = $('#gearFile');
-    inp.onchange = async () => { const f = inp.files[0]; inp.value = ''; if (!f) return; const d = await decodePng(f); const w = pieceOf(sp);
+    inp.onchange = async () => { const f = inp.files[0]; inp.value = ''; if (!f) return; try { const d = await decodePng(f); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); return; } const w = pieceOf(sp);
       const l = makeMyGear(g, w); if (!l) return; replaceLayerImage(l, d); thumbCache.clear(); imgCache.clear(); GS.piece = sp; renderInspector(); renderLayers(); startTest(); toast('Replaced. Drag it to fit if it moved.'); };
     inp.click(); });
 }
@@ -2215,7 +2225,7 @@ async function gifLoop(l) {
         addLoopFrames(l, frames, fps, 'gif');
       } else {
         const pngs = files.filter(f => /\.png$/i.test(f.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-        const frames = []; for (const f of pngs) { const d = await decodePng(f); frames.push({ w: d.w, h: d.h, rgba: d.rgba }); }
+        const frames = []; for (const f of pngs) { try { const d = await decodePng(f); frames.push({ w: d.w, h: d.h, rgba: d.rgba }); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); } }
         const fps = Math.max(1, Math.min(60, parseFloat(prompt(frames.length + ' frames. Frames per second?', '12')) || 12));
         addLoopFrames(l, frames, fps, 'gif');
       }
