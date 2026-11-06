@@ -1557,8 +1557,9 @@ function makeMyGear(g, w) { // your copy of one worn sprite (starts as the game'
 }
 const thumbCache = new Map();
 function gearThumb(sprite) {
-  const l = doc && myGear(sprite); const im = l || (RIG.GAME && RIG.GAME.images[sprite]); if (!im) return '';
-  const key = l ? l : sprite; if (!l && thumbCache.has(key)) return thumbCache.get(key);
+const l = doc && myGear(sprite); const override = doc && doc.spriteSwaps && doc.spriteSwaps[sprite];
+const im = l || override || (RIG.GAME && RIG.GAME.images[sprite]); if (!im) return '';
+const key = l || override || sprite; if (!l && !override && thumbCache.has(key)) return thumbCache.get(key);
   let url = ''; try { url = layerCanvas(im).toDataURL(); } catch (e) { }
   if (!l) thumbCache.set(key, url); return url;
 }
@@ -2160,8 +2161,10 @@ function loop(now) {
   items.sort((a, b2) => a.order - b2.order);
   // the game's own sprites (from the game template) for anything the rig doesn't replace, drawn on their real pivots
   const tplDraw = (name) => {
-    const G = RIG.GAME; if (!G || !G.images[name]) return false;
-    const im = G.images[name], sp = G.sprites[name] || {}, pv = sp.pivot || [im.w / 2, im.h / 2];
+    const G = RIG.GAME; if (!G) return false;
+    const im = (doc.spriteSwaps && doc.spriteSwaps[name]) || G.images[name];
+    if (!im) return false;
+    const sp = G.sprites[name] || {}, pv = sp.pivot || [im.w / 2, im.h / 2];
     ctx.drawImage(layerCanvas(im), -pv[0], -(im.h - pv[1])); return true;
   };
   const setM = (m) => ctx.setTransform(d * m[0], d * m[1], d * m[2], d * m[3], d * m[4], d * m[5]);
@@ -2194,7 +2197,7 @@ function loop(now) {
       const gl = doc.layers.find(o => o.role.type === 'gear' && o.role.sprite === it.wear);
       let box;
       if (gl) { const J = RIG.J(doc, it.limb); ctx.drawImage(layerCanvas(gl), gl.x - J.x, gl.y - J.y); box = [gl.x - J.x, gl.y - J.y, gl.w, gl.h]; }
-      else { tplDraw(it.wear); const im = RIG.GAME.images[it.wear], sp = RIG.GAME.sprites[it.wear] || {}; if (im) { const pv = sp.pivot || [im.w / 2, im.h / 2]; box = [-pv[0], -(im.h - pv[1]), im.w, im.h]; } }
+      else { tplDraw(it.wear); const im = (doc.spriteSwaps && doc.spriteSwaps[it.wear]) || RIG.GAME.images[it.wear], sp = RIG.GAME.sprites[it.wear] || {}; if (im) { const pv = sp.pivot || [im.w / 2, im.h / 2]; box = [-pv[0], -(im.h - pv[1]), im.w, im.h]; } }
       if (gearMode && box) { GS.hits.push({ sprite: it.wear, limb: it.limb, m: m.slice(), box });
         if (it.wear === GS.piece) { ctx.save(); ctx.setLineDash([3 * RIG.PPU / z, 3 * RIG.PPU / z]); ctx.lineWidth = 1.5 * RIG.PPU / z; ctx.strokeStyle = '#ffcf4a'; ctx.strokeRect(box[0] - 0.5, box[1] - 0.5, box[2] + 1, box[3] + 1); ctx.restore(); } }
       continue;
@@ -2422,7 +2425,10 @@ function bindAnimInspector(l) {
 // ---------------------------------------------------------------- health screen
 let selHs = null, hsDrag = null;
 // the game's own health screen art comes from the game template (written by the mod from the player's game)
-const hsArt = (name) => (RIG.GAME && RIG.GAME.images[name]) ? layerCanvas(RIG.GAME.images[name]) : null;
+const hsArt = (name) => {
+  const im = (doc && doc.spriteSwaps && doc.spriteSwaps[name]) || (RIG.GAME && RIG.GAME.images[name]);
+  return im ? layerCanvas(im) : null;
+};
 // every item on the health screen: the game's 15 parts + one per injurable piece (same default spots as the mod)
 function hsItems() {
   if (!doc) return [];
@@ -2601,7 +2607,7 @@ $('#eyePrev').innerHTML = '<option value="">Eyes: automatic</option>' + RIG.EYE_
 // ---------------------------------------------------------------- start
 resize(); renderInspector(); hint('Open your character to begin. New here? Click <b>How to</b>. <span style="opacity:.7">Fan-made, not affiliated with Casualties: Unknown. The Test tab is a simulation based on Orson\'s game code.</span>');
 // ---- bridge API used by the sprite paint editor (it lives outside this closure)
-function bridgeLayers() { return doc ? doc.layers.filter(l => l.rgba && !l.hidden) : []; }
+function bridgeLayers() { return doc ? doc.layers.filter(l => l.rgba) : []; }
 function bridgeLayer(id) { return doc ? RIG.layer(doc, id) : null; }
 function bridgeSetPixels(id, rgba, bounds) {
   const l = bridgeLayer(id); if (!l) return false;
@@ -2615,6 +2621,86 @@ function bridgeSetPixels(id, rgba, bounds) {
   l.x = next.x; l.y = next.y; l.w = next.w; l.h = next.h;
   imgCache.delete(l);              // the cached canvas is now stale
   return true;
+}
+function bridgeImageAssets() {
+  if (!doc) return [];
+  const assets = [];
+  const assetIds = new Set();
+  const addAsset = asset => {
+    if (assetIds.has(asset.id)) return;
+    assetIds.add(asset.id);
+    assets.push(asset);
+  };
+  const swaps = doc.spriteSwaps || {};
+  const gameImages = RIG.GAME && RIG.GAME.images ? RIG.GAME.images : {};
+  const gameHealthScreen = RIG.GAME && RIG.GAME.tpl && RIG.GAME.tpl.healthScreen || {};
+  const healthImageKeys = new Set();
+  for (const key of Object.keys(gameHealthScreen)) {
+    const layout = gameHealthScreen[key];
+    if (!layout) continue;
+    for (const field of ['outline', 'middle']) {
+      const imageKey = layout[field];
+      if (!imageKey || !gameImages[imageKey]) continue;
+      healthImageKeys.add(imageKey);
+      const entry = doc.healthScreen && doc.healthScreen[key];
+      const image = entry && entry[field] || swaps[imageKey] || gameImages[imageKey];
+      addAsset({ id: 'health:' + encodeURIComponent(key) + ':' + field,
+        name: key + ' — ' + field, source: 'Health screen', w: image.w, h: image.h, rgba: image.rgba });
+    }
+  }
+  const keys = new Set([...Object.keys(gameImages), ...Object.keys(swaps)]);
+  for (const key of keys) {
+    const representedByLayer = doc.layers.some(l => l.name === key || l.name === key + ' (far)' || l._file === key + '.png');
+    if (healthImageKeys.has(key) || (!swaps[key] && representedByLayer)) continue;
+    const image = swaps[key] || gameImages[key];
+    if (!image || !image.rgba || !Number.isInteger(image.w) || !Number.isInteger(image.h)) continue;
+    addAsset({ id: 'asset:' + encodeURIComponent(key), name: key,
+      source: swaps[key] ? 'Rig sprite swap' : 'Game template', w: image.w, h: image.h, rgba: image.rgba });
+  }
+  for (const key of Object.keys(doc.healthScreen || {})) {
+    const entry = doc.healthScreen[key];
+    if (!entry) continue;
+    for (const field of ['outline', 'middle']) {
+      const image = entry[field];
+      if (!image || !image.rgba || !Number.isInteger(image.w) || !Number.isInteger(image.h)) continue;
+      addAsset({ id: 'health:' + encodeURIComponent(key) + ':' + field,
+        name: key.replace(/^seg:/, 'Segment ') + ' — ' + field, source: 'Health screen',
+        w: image.w, h: image.h, rgba: image.rgba });
+    }
+  }
+  return assets;
+}
+function bridgeSetImageAssetPixels(id, w, h, rgba) {
+  if (!doc || !Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 ||
+      !rgba || rgba.length !== w * h * 4) return false;
+  const image = { w, h, rgba: new Uint8Array(rgba) };
+  if (id.startsWith('asset:')) {
+    const key = decodeURIComponent(id.slice(6));
+    doc.spriteSwaps = doc.spriteSwaps || {};
+    doc.spriteSwaps[key] = image;
+    if (typeof thumbCache !== 'undefined') thumbCache.delete(key);
+    return true;
+  }
+  if (id.startsWith('health:')) {
+    const separator = id.lastIndexOf(':');
+    const key = decodeURIComponent(id.slice(7, separator));
+    const field = id.slice(separator + 1);
+    if (field !== 'outline' && field !== 'middle') return false;
+    doc.healthScreen = doc.healthScreen || {};
+    let entry = doc.healthScreen[key];
+    if (!entry) {
+      const layout = RIG.GAME && RIG.GAME.tpl && RIG.GAME.tpl.healthScreen && RIG.GAME.tpl.healthScreen[key];
+      entry = doc.healthScreen[key] = { scale: 3 };
+      if (layout) {
+        if (layout.x !== undefined) entry.x = layout.x;
+        if (layout.y !== undefined) entry.y = layout.y;
+        if (layout.mirror !== undefined) entry.mirror = !!layout.mirror;
+      }
+    }
+    entry[field] = image;
+    return true;
+  }
+  return false;
 }
 function bridgeSnapshot(excludeLayerId) {
   if (!doc) return null;
@@ -2685,7 +2771,8 @@ function bridgeAnimCrop() {
   return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
 }
 window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
-  layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, snapshot: bridgeSnapshot,
+  layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels,
+  imageAssetsForPaint: bridgeImageAssets, setImageAssetPixels: bridgeSetImageAssetPixels, snapshot: bridgeSnapshot,
   animClips: bridgeAnimClips, startAnim: bridgeStartAnim, stopAnim: bridgeStopAnim, setAnimClip: bridgeSetAnimClip, animCrop: bridgeAnimCrop,
   setAnimPlaying: bridgeSetAnimPlaying, isAnimPlaying: bridgeIsAnimPlaying, copyCanvas: bridgeCopyCanvas,
   redraw: () => { resize(); draw(); renderLayers(); renderInspector(); }, toastMsg: (m, ms) => toast(m, ms) };

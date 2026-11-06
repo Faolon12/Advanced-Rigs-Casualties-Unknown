@@ -189,8 +189,19 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 .row input[type=range]{flex:1}
 .toolbar{display:flex;gap:4px;flex-wrap:wrap}
 .toolbar button{flex:1;min-width:56px}
-.color-swatch{width:24px;height:24px;border:1px solid var(--line);border-radius:4px;cursor:pointer}
-.color-swatch.active{border-color:var(--text);box-shadow:0 0 0 2px var(--acc2)}
+.paint-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.paint-tools button{min-width:0;padding:7px 3px;font-size:11px}
+.paint-tools button .tool-icon{display:block;font-size:17px;line-height:1.2}
+.paint-tools button[aria-pressed=true]{border-color:var(--acc2);box-shadow:inset 0 0 0 1px var(--acc2);background:var(--panel2)}
+.color-swatch{width:25px;height:25px;padding:0;border:1px solid var(--line);border-radius:5px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+.color-swatch:hover,.color-swatch.active{border-color:var(--text);box-shadow:0 0 0 2px var(--acc2)}
+.color-pick-wrap{position:relative;width:42px;height:34px;flex:0 0 42px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel2)}
+.color-pick-wrap input[type=color]{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;cursor:pointer}
+.paint-palette{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.paint-palette-label{font-size:10px;color:var(--dim);margin-top:7px}
+.paint-layer-opacity{position:sticky;top:0;z-index:4;padding:7px 12px 2px;background:var(--panel);border-bottom:1px solid var(--line)}
+.paint-layer-opacity .row{margin-bottom:5px}
+.paint-active-layer-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;margin-bottom:3px}
 .layer-item{display:flex;align-items:center;gap:6px;padding:4px 5px 4px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:#111216;min-width:0}
 .layer-item.active{border-color:var(--acc2);background:var(--panel2)}
 .layer-item .layer-vis{width:14px;height:14px;border:1px solid var(--line);border-radius:3px;flex:0 0 14px}
@@ -354,8 +365,13 @@ canvas#paintPreview{cursor:grab;touch-action:none}
     <li><b>Gear & skins</b>: in game press <b>F9</b> to save every sprite on your character (body, eyes, worn gear like backpacks and helmets, health screen) with its exact game name. Repaint them and load them with <i>Add sprites…</i>. Gear only changes while <i>you</i> wear it; everyone else (and the item on the ground) stays normal.</li>
     <li>Hitboxes never change: your art rides on the game's own body parts.</li>
   </ul>
+  <details>
+    <summary>Sprite Paint tips</summary>
+    <p class="muted">In Sprite Paint, double-click a paint layer to fade the others to 5%; use <i>Hide similar layers when isolating</i> to hide matching names (for example, Head / Head 2 or Front / Back) completely. Double-click again restores opacities. The active layer's opacity control stays with the layer list while you scroll through many layers. Pixel brush and Pixel eraser make crisp square marks (set their size with <i>Size</i>). The read-only preview can be zoomed with the wheel and moved by dragging; its layer and opacity controls only change the preview. Double-click a rig layer to edit it; use <i>Other image assets</i> to open game sprites, tools, wearables, health-screen art and swaps at native size. Paint changes sync back to the rig.</p>
+  </details>
   <h3>Disclaimer</h3>
   <p class="muted" style="margin-top:0">Luna Advanced Rig Systems is a fan-made mod and tool, not made by or affiliated with the developer of Casualties: Unknown. The <b>Test</b> tab is a <b>simulation</b>: its movement, states, eyes, mouth and injury rules are re-created from Casualties: Unknown's code by <b>Orson</b>, so you can preview a character outside the game. It is not the game and won't match it exactly. Nothing from the game is included in the editor: the game template (sprites, wearables, animations) is made by the mod from your own copy of the game. Casualties: Unknown, its code and its art belong to Orson.</p>
+  <p class="muted" style="font-size:11px;margin:6px 0 0">Sprite Paint add-on by Silvasta, made with help from an AI assistant; inspired by Faolonrose's main project.</p>
   <div style="text-align:right;margin-top:10px"><button id="helpClose" class="primary">Got it</button></div>
 </div></div>
 
@@ -378,26 +394,32 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <aside>
 <h2>Tools</h2>
 <div class="section">
-<div class="row"><label>Tool</label>
-<select id="paintToolSel">
-<option value="pencil">Pencil</option>
-<option value="pixel" title="Draw crisp, fully opaque square pixels">Pixel brush (opaque)</option>
-<option value="eraser">Eraser</option>
-<option value="fill">Fill</option>
-<option value="picker">Picker</option>
-</select></div>
+<div id="paintToolButtons" class="paint-tools" role="toolbar" aria-label="Paint tools">
+<button type="button" class="on" data-paint-tool="pencil" aria-pressed="true" title="Pencil"><span class="tool-icon">✎</span>Pencil</button>
+<button type="button" data-paint-tool="pixel" aria-pressed="false" title="Opaque square pixel brush"><span class="tool-icon">▪</span>Pixel</button>
+<button type="button" data-paint-tool="eraser" aria-pressed="false" title="Soft eraser"><span class="tool-icon">◩</span>Eraser</button>
+<button type="button" data-paint-tool="pixel-eraser" aria-pressed="false" title="Square pixel eraser"><span class="tool-icon">□</span>Pixel erase</button>
+<button type="button" data-paint-tool="fill" aria-pressed="false" title="Fill connected area"><span class="tool-icon">▨</span>Fill</button>
+<button type="button" data-paint-tool="picker" aria-pressed="false" title="Pick a color from the canvas"><span class="tool-icon">◉</span>Picker</button>
+</div>
 <div class="row"><label>Size</label>
 <input id="paintBrushSize" type="range" min="1" max="32" value="4">
 <span id="paintBrushSizeVal">4px</span></div>
-<div class="row"><label>Color</label>
-<input id="paintColorPick" type="color" value="#e0475b">
-<div style="margin-top:4px;display:flex;gap:4px" id="paintQuickColors"></div>
+<div class="row" style="align-items:center">
+<label>Color</label>
+<div class="color-pick-wrap" title="Choose a custom color"><input id="paintColorPick" type="color" value="#e0475b" aria-label="Choose paint color"></div>
+<output id="paintColorValue" style="font:12px ui-monospace,monospace;color:var(--text)">#e0475b</output>
 </div>
+<div class="paint-palette-label">Palette</div>
+<div class="paint-palette" id="paintQuickColors" aria-label="Color palette"></div>
+<div class="paint-palette-label">Recent</div>
+<div class="paint-palette" id="paintRecentColors" aria-label="Recently used colors"></div>
 <div class="toolbar" style="margin-top:8px">
 <button id="paintToolZoomIn" title="Zoom in">+</button>
 <button id="paintToolZoomOut" title="Zoom out">-</button>
 <button id="paintToolFit" title="Fit to window">Fit</button>
 </div>
+<div class="muted" style="font-size:10px;margin-top:5px">Pixel tools draw crisp squares; Size sets their width.</div>
 </div>
 
 <h2>Layers</h2>
@@ -406,13 +428,26 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <button id="paintTabPreview">Preview</button>
 <button id="paintTabExport">Export</button>
 </div>
+<div class="section" style="padding-bottom:0">
+<input id="paintLayerFilter" type="search" placeholder="Filter paint layers…" aria-label="Filter paint layers by name" style="width:100%;box-sizing:border-box">
+<label class="muted" style="display:flex;align-items:center;gap:5px;font-size:10px;margin-top:5px"><input id="paintHideSimilarLayers" type="checkbox" checked> Hide similar layers when isolating</label>
+</div>
 <div id="paintLayerView">
+<div id="paintLayerSection">
+<div class="paint-layer-opacity">
+<div id="paintActiveLayerName" class="paint-active-layer-name muted" aria-live="polite">No layer selected</div>
+<div class="row"><label for="paintActiveLayerOpacity">Layer opacity</label>
+<input id="paintActiveLayerOpacity" type="range" min="0" max="100" value="100" aria-label="Active layer opacity">
+<span id="paintActiveLayerOpacityVal">100%</span></div>
+</div>
 <div class="section" id="paintLayerList">
 <div class="empty">No layers<br>Add one to start painting</div>
 </div>
 <div class="btn-row">
 <button id="paintBtnAddLayer" class="primary">+ Layer</button>
 <button id="paintBtnDelLayer" class="danger">- Delete</button>
+</div>
+<div class="muted" style="font-size:10px;margin:2px 2px 8px">Double-click to fade other layers to 5%; similar names can be hidden entirely.</div>
 </div>
 <h2>Rig &harr; Paint</h2>
 <div class="section">
@@ -422,7 +457,16 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <button id="paintBtnRigPreview" title="Show the rig on the Preview tab">Rig preview</button>
 </div>
 <div id="rigIntegrationStatus" style="font-size:10px;color:var(--dim);margin-top:4px;line-height:1.3"></div>
-<div style="font-size:10px;color:var(--dim);margin-top:4px">Double-click a rig layer to open it here.</div>
+<div style="font-size:10px;color:var(--dim);margin-top:4px">Double-click a rig layer to paint it. Edits sync back and refresh its layer thumbnail.</div>
+</div>
+<h2>Other image assets</h2>
+<div class="section">
+<input id="paintImageAssetFilter" type="search" placeholder="Filter image assets…" aria-label="Filter available image assets by name" style="width:100%;margin-bottom:5px">
+<select id="paintImageAssetSelect" aria-label="Choose a game or rig image asset" style="width:100%;margin-bottom:5px">
+<option value="">Load a rig to browse images</option>
+</select>
+<button id="paintBtnImportImageAsset" style="width:100%">Open image asset</button>
+<div id="paintImageAssetHint" class="muted" style="font-size:10px;margin-top:4px">Game sprites, tools, wearables, health-screen art and rig swaps open at their original size.</div>
 </div>
 </aside>
 
@@ -437,7 +481,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <aside class="right">
 <h2>Preview</h2>
 <div class="section">
-<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move." style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
+<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move. Preview controls do not edit the sprite." style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
 <canvas id="paintPreview" width="256" height="256" style="max-width:100%;max-height:100%"></canvas>
 </div>
 <div class="row" style="margin-top:8px"><label>Scale</label>

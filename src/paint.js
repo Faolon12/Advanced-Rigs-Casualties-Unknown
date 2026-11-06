@@ -19,6 +19,9 @@ const paint_coord = document.getElementById('paintCoord');
 
 let layers = [];
 let active = null;
+let activeWorkspaceId = null;
+let layerIsolationOpacities = null;
+let isolatedLayer = null;
 let zoom = 1;
 let pan = {x:0, y:0};          // kept for saved contexts; rendering is 1:1 and CSS handles zoom
 let autoFit = true;            // canvas follows the browser size until the user zooms
@@ -35,22 +38,53 @@ let previewPan = { x: 0, y: 0 };
 let previewRenderTransform = null;
 let previewPointer = null;
 
-const paint_quickColors = ['#e0475b','#8f5bff','#4cc38a','#e9b44c','#ffffff','#000000','#33363f','#1d1f25'];
-const qc = document.getElementById('paintQuickColors');
-paint_quickColors.forEach(c => {
-  const s = document.createElement('div');
-  s.className = 'color-swatch';
-  s.style.background = c;
-  s.title = c;
-  s.onclick = () => { setColor(c); };
-  qc.appendChild(s);
-});
+const paint_quickColors = [
+  '#e0475b','#ff6b6b','#ff9f43','#ffd166','#f7f779','#4cc38a','#00b894','#00cec9',
+  '#54a0ff','#2e86de','#8f5bff','#c56cf0','#ffffff','#c8c8d0','#777780','#33363f','#111216','#000000'
+];
+const paintRecentColors = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('spritePaintRecentColors') || '[]');
+    return Array.isArray(saved) ? saved.filter(c => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 8) : [];
+  } catch (e) { return []; }
+})();
+
+function renderColorSwatches(containerId, colors, emptyText=''){
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.replaceChildren();
+  if (!colors.length && emptyText) {
+    const note = document.createElement('span');
+    note.className = 'muted';
+    note.style.fontSize = '10px';
+    note.textContent = emptyText;
+    container.appendChild(note);
+    return;
+  }
+  colors.forEach(c => {
+    const swatch = document.createElement('button');
+    swatch.type = 'button';
+    swatch.className = 'color-swatch' + (c.toLowerCase() === color.toLowerCase() ? ' active' : '');
+    swatch.style.background = c;
+    swatch.title = c.toUpperCase();
+    swatch.setAttribute('aria-label', 'Use color ' + c.toUpperCase());
+    swatch.setAttribute('aria-pressed', String(c.toLowerCase() === color.toLowerCase()));
+    swatch.onclick = () => setColor(c);
+    container.appendChild(swatch);
+  });
+}
+
+function renderColorPalettes(){
+  renderColorSwatches('paintQuickColors', paint_quickColors);
+  renderColorSwatches('paintRecentColors', paintRecentColors, 'Colors you pick will appear here');
+}
 
 // Context preservation across mode switches
 const paintContext = {
   saved: false,
   layers: null,
   active: null,
+  workspaceId: null,
   zoom: null,
   pan: null,
   tool: null,
@@ -63,6 +97,7 @@ function savePaintContext(){
   // canvases can't survive JSON: keep the live objects, they are never torn down
   paintContext.layers = layers;
   paintContext.active = active;
+  paintContext.workspaceId = activeWorkspaceId;
   paintContext.zoom = zoom;
   paintContext.pan = {x:pan.x, y:pan.y};
   paintContext.tool = tool;
@@ -76,19 +111,23 @@ function restorePaintContext(){
   if(!paintContext.saved) return;
   if(paintContext.layers) layers = paintContext.layers;
   active = paintContext.active;
+  activeWorkspaceId = paintContext.workspaceId || null;
   zoom = paintContext.zoom;
   pan = {x:paintContext.pan.x, y:paintContext.pan.y};
   tool = paintContext.tool;
   brushSize = paintContext.brushSize;
   color = paintContext.color;
   viewTab = paintContext.viewTab;
-  document.getElementById('paintToolSel').value = tool;
+  setPaintTool(tool, false);
   document.getElementById('paintBrushSize').value = brushSize;
   document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
   document.getElementById('paintColorPick').value = color;
+  document.getElementById('paintColorValue').textContent = color.toUpperCase();
+  renderColorPalettes();
   switchPaintTab(viewTab);
   dirty = true;
   updateUI(); composite();
+  scheduleAutoPush();
 }
 
 function toast(msg, ms=2600){
@@ -114,6 +153,7 @@ function composite(){
   paint_ctx.globalCompositeOperation = 'source-over';
   paint_ctx.clearRect(0, 0, paint_cv.width, paint_cv.height);
   layers.forEach(l=>{
+    if (activeWorkspaceId ? l.assetWorkspaceId !== activeWorkspaceId : !!l.assetWorkspaceId) return;
     paint_ctx.globalCompositeOperation = blendOperation(l.blendMode);
     paint_ctx.globalAlpha = l.opacity;
     if(l.visible) paint_ctx.drawImage(l.canvas, 0, 0);
@@ -156,6 +196,7 @@ function updatePreview(){
   paint_pctx.translate(offsetX, offsetY);
   paint_pctx.scale(previewScale, previewScale);
   layers.forEach(l=>{
+    if (activeWorkspaceId ? l.assetWorkspaceId !== activeWorkspaceId : !!l.assetWorkspaceId) return;
     paint_pctx.globalCompositeOperation = blendOperation(l.blendMode);
     paint_pctx.globalAlpha = l.opacity;
     if(l.visible) paint_pctx.drawImage(l.canvas, 0, 0);
@@ -208,7 +249,7 @@ function resetPaintView(){ autoFit = true; syncCanvasScale(); }
 window.addEventListener('resize', ()=>{
   if (document.body.dataset.mode === 'paint' && viewTab === 'paint') syncCanvasScale();
 });
-window.__paintModeShown = ()=>{ populateAnimClips(); syncCanvasScale(); };
+window.__paintModeShown = ()=>{ populateAnimClips(); populateImageAssets(); syncCanvasScale(); };
 
 // ---------------------------------------------------------------- undo / redo
 const undoStack = [], redoStack = [];
@@ -224,7 +265,8 @@ function clonePaintLayers(src){
 }
 
 function paintState(){
-  return { layers: clonePaintLayers(layers), active, w: paint_cv.width, h: paint_cv.height };
+  return { layers: clonePaintLayers(layers), active, w: paint_cv.width, h: paint_cv.height,
+    workspaceId: activeWorkspaceId, layerIsolationOpacities: layerIsolationOpacities && [...layerIsolationOpacities], isolatedLayer };
 }
 
 function pushPaintUndo(){
@@ -239,9 +281,12 @@ function applyPaintState(s){
   restoringPaint = true;
   paint_cv.width = s.w; paint_cv.height = s.h;
   layers = clonePaintLayers(s.layers);
+  activeWorkspaceId = s.workspaceId || null;
   active = (s.active === null || s.active === undefined || !layers.length)
     ? (layers.length ? 0 : null)
     : Math.min(s.active, layers.length - 1);
+  layerIsolationOpacities = s.layerIsolationOpacities ? [...s.layerIsolationOpacities] : null;
+  isolatedLayer = layerIsolationOpacities && s.isolatedLayer < layers.length ? s.isolatedLayer : null;
   dirty = true;
   updateUI(); composite();
   restoringPaint = false;
@@ -274,19 +319,20 @@ function updateUndoButtons(){
 // ---------------------------------------------------------------- automatic push
 let autoPushTimer = null;
 
-function rigPushTargets(){
+function rigPushTargets(workspaceId=activeWorkspaceId){
   const R = window.__rigEditor, doc = R && R.doc;
   if (!doc) return null;
-  if (paint_cv.width !== doc.width || paint_cv.height !== doc.height) return null;
-  const targets = layers.filter(p => p.rigLayerId);
-  return targets.length ? { R, targets } : null;
+  const targets = workspaceId ? [] : layers.filter(p => p.rigLayerId);
+  const assetLayers = workspaceId ? layers.filter(p => p.assetWorkspaceId === workspaceId && p.assetBase) : [];
+  return targets.length || assetLayers.length ? { R, doc, targets, assetLayers, assetWorkspaceId: workspaceId } : null;
 }
 
 function scheduleAutoPush(){
   if (restoringPaint) return;
-  if (!rigPushTargets()) return;
+  const workspaceId = activeWorkspaceId;
+  if (!rigPushTargets(workspaceId)) return;
   clearTimeout(autoPushTimer);
-  autoPushTimer = setTimeout(autoPushNow, 250);
+  autoPushTimer = setTimeout(() => autoPushNow(workspaceId), 250);
 }
 
 function opaqueBounds(canvas){
@@ -300,9 +346,9 @@ function opaqueBounds(canvas){
   return maxX < minX ? null : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
-function autoPushNow(){
+function autoPushNow(workspaceId=activeWorkspaceId){
   clearTimeout(autoPushTimer);
-  const g = rigPushTargets();
+  const g = rigPushTargets(workspaceId);
   if (!g) return 0;
   let pushed = 0, failed = 0;
   for (const p of g.targets) {
@@ -330,8 +376,24 @@ function autoPushNow(){
       pushed++;
     } else failed++;
   }
-  g.R.redraw();
-  rigBridgeStatus('Auto-synced ' + pushed + ' layer' + (pushed === 1 ? '' : 's') + (failed ? '  (' + failed + ' skipped)' : ''));
+  if (g.assetLayers.length) {
+    const base = g.assetLayers[0];
+    const canvas = newLayerCanvas(base.canvas.width, base.canvas.height);
+    const ctx = canvas.getContext('2d');
+    for (const p of layers) {
+      if (p.assetWorkspaceId !== g.assetWorkspaceId || !p.visible) continue;
+      ctx.globalCompositeOperation = blendOperation(p.blendMode);
+      ctx.globalAlpha = p.opacity;
+      ctx.drawImage(p.canvas, 0, 0);
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    if (g.R.setImageAssetPixels(g.assetWorkspaceId, canvas.width, canvas.height, pixels)) pushed++;
+    else failed++;
+  }
+  if (pushed) g.R.redraw();
+  rigBridgeStatus('Auto-synced ' + pushed + ' image' + (pushed === 1 ? '' : 's') + (failed ? '  (' + failed + ' skipped)' : ''));
   if (previewMode === 'rig' && !animPreviewOn) {
     refreshRigPreview();
   }
@@ -456,10 +518,18 @@ function stepAnimPreview(dir){
 
 function updateUI(){
   document.getElementById('paintInfoSize').textContent = paint_cv.width+'×'+paint_cv.height;
-  document.getElementById('paintInfoLayers').textContent = layers.length;
+  document.getElementById('paintInfoLayers').textContent = layers.filter(l =>
+    activeWorkspaceId ? l.assetWorkspaceId === activeWorkspaceId : !l.assetWorkspaceId).length;
   document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
-  document.getElementById('paintLayerOpacityVal').textContent = Math.round((active!==null?layers[active].opacity:1)*100)+'%';
-  document.getElementById('paintLayerOpacity').value = active!==null?Math.round(layers[active].opacity*100):100;
+  const activeLayer = active!==null ? layers[active] : null;
+  const opacity = activeLayer ? Math.round(activeLayer.opacity*100) : 100;
+  document.getElementById('paintActiveLayerName').textContent = activeLayer ? activeLayer.name : 'No layer selected';
+  document.getElementById('paintActiveLayerOpacity').value = opacity;
+  document.getElementById('paintActiveLayerOpacity').disabled = !activeLayer;
+  document.getElementById('paintActiveLayerOpacityVal').textContent = opacity+'%';
+  document.getElementById('paintLayerOpacityVal').textContent = opacity+'%';
+  document.getElementById('paintLayerOpacity').value = opacity;
+  document.getElementById('paintLayerOpacity').disabled = !activeLayer;
   document.getElementById('paintBlendMode').value = active!==null ? (layers[active].blendMode || 'normal') : 'normal';
   syncCanvasScale();
   updateUndoButtons();
@@ -469,15 +539,29 @@ function updateUI(){
 
 function renderLayers(){
   const list = document.getElementById('paintLayerList');
+  const query = document.getElementById('paintLayerFilter').value.trim().toLocaleLowerCase();
   if(layers.length===0){
     list.innerHTML = '<div class="empty">No layers<br>Add one to start painting</div>';
     return;
   }
   list.innerHTML = '';
-  layers.forEach((l,i)=>{
+  const matches = layers.map((layer, index)=>({ layer, index }))
+    .filter(({ layer })=>layer.name.toLocaleLowerCase().includes(query));
+  if (!matches.length) {
+    list.innerHTML = '<div class="empty">No paint layers match.</div>';
+    return;
+  }
+  matches.forEach(({ layer: l, index: i })=>{
     const el = document.createElement('div');
     el.className = 'layer-item'+(i===active?' active':'' );
+    el.dataset.layerIndex = i;
     el.onclick = (ev)=>{ if(!ev.target.closest('button,input,select')) setActive(i); };
+    el.ondblclick = (ev)=>{
+      if(ev.target.closest('button,input,select')) return;
+      ev.preventDefault();
+      isolateLayer(i);
+    };
+    el.title = 'Click to select; double-click to isolate this layer; double-click again to restore';
 
     const vis = document.createElement('div');
     vis.className = 'layer-vis';
@@ -505,8 +589,10 @@ function renderLayers(){
   });
   // keep an open menu pointing at the right row after a re-render
   if (layerMenuIdx >= 0 && layerMenuIdx < layers.length) {
-    const a = list.children[layerMenuIdx] && list.children[layerMenuIdx].querySelector('.layer-menu-btn');
+    const row = list.querySelector('[data-layer-index="'+layerMenuIdx+'"]');
+    const a = row && row.querySelector('.layer-menu-btn');
     if (a && layerMenu.classList.contains('open')) positionLayerMenu(a);
+    else if (layerMenu.classList.contains('open')) closeLayerMenu();
   } else if (layerMenuIdx >= 0) closeLayerMenu();
 }
 
@@ -579,33 +665,113 @@ document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closeLayerMe
 window.addEventListener('resize', closeLayerMenu);
 
 function setActive(i){
+  if (!layers[i]) return;
+  const workspaceId = layers[i].assetWorkspaceId || null;
+  if (workspaceId !== activeWorkspaceId) restoreLayerIsolation();
   active = i;
+  activeWorkspaceId = workspaceId;
+  const R = rigAPI(), doc = R && R.doc;
+  const useLayerCanvas = !!workspaceId || !layers[i].rigLayerId;
+  const w = useLayerCanvas ? layers[i].canvas.width : doc ? doc.width : layers[i].canvas.width;
+  const h = useLayerCanvas ? layers[i].canvas.height : doc ? doc.height : layers[i].canvas.height;
+  if (paint_cv.width !== w || paint_cv.height !== h) {
+    paint_cv.width = w; paint_cv.height = h; autoFit = true;
+  }
+  if (workspaceId) {
+    previewMode = 'paint';
+    rigShot = null;
+  }
+  if (previewMode === 'rig') refreshRigPreview();
+  const layerAside = document.querySelector('#panelPaint main>aside:not(.right)');
+  const layerScrollTop = layerAside ? layerAside.scrollTop : 0;
+  updateUI();
+  if (layerAside) layerAside.scrollTop = layerScrollTop;
+  composite();
+}
+
+function restoreLayerIsolation(){
+  if (!layerIsolationOpacities) return;
+  layers.forEach((layer, i)=>{
+    if (layerIsolationOpacities[i] !== undefined) layer.opacity = layerIsolationOpacities[i];
+  });
+  layerIsolationOpacities = null;
+  isolatedLayer = null;
+}
+
+function similarLayerName(name){
+  return String(name).normalize('NFKD').replace(/([a-z])([A-Z])/g, '$1 $2').toLocaleLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/([a-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([a-z])/g, '$1 $2')
+    .replace(/\b(copy|duplicate|layer|front|back|near|far|left|right|l|r|experiment|disfigured|healed|mouth|mini|jaw|open|half|closed|scared|panic|sad|happy|look|gone)\b/g, ' ')
+    .replace(/\b\d+\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function applyLayerIsolation(){
+  if (!layerIsolationOpacities || isolatedLayer === null || !layers[isolatedLayer]) return;
+  const activeName = similarLayerName(layers[isolatedLayer].name);
+  const workspaceId = layers[isolatedLayer].assetWorkspaceId || null;
+  const hideSimilar = document.getElementById('paintHideSimilarLayers').checked && activeName;
+  layers.forEach((layer, index)=>{
+    if ((layer.assetWorkspaceId || null) !== workspaceId) return;
+    if (index === isolatedLayer) {
+      layer.opacity = layerIsolationOpacities[index];
+      return;
+    }
+    const sameName = hideSimilar && similarLayerName(layer.name) === activeName;
+    layer.opacity = sameName ? 0 : 0.05;
+  });
+}
+
+function isolateLayer(i){
+  if (!layers[i]) return;
+  pushPaintUndo();
+  if (layerIsolationOpacities && isolatedLayer === i) {
+    restoreLayerIsolation();
+  } else {
+    if (!layerIsolationOpacities) layerIsolationOpacities = layers.map(layer=>layer.opacity);
+    isolatedLayer = i;
+    applyLayerIsolation();
+  }
+  active = i;
+  dirty = true;
   if (previewMode === 'rig') refreshRigPreview();
   updateUI();
   composite();
+  toast(layerIsolationOpacities ? 'Layer isolated; double-click again to restore other opacities' : 'Layer opacities restored');
 }
 
 function addLayer(name=null, silent=false){
   if(!silent) pushPaintUndo();
+  restoreLayerIsolation();
   const c = newLayerCanvas(paint_cv.width, paint_cv.height);
-  layers.push({name:name||('Layer '+(layers.length+1)), canvas:c, visible:true, opacity:1, blendMode:'normal'});
+  layers.push({name:name||('Layer '+(layers.length+1)), canvas:c, visible:true, opacity:1, blendMode:'normal',
+    ...(activeWorkspaceId ? { assetWorkspaceId: activeWorkspaceId } : {})});
   active = layers.length-1;
   dirty = true;
   if (previewMode === 'rig') refreshRigPreview();
   updateUI(); composite();
+  scheduleAutoPush();
   if(!silent) toast('Layer added');
 }
 
 function deleteLayer(idx=null){
   if(idx===null) idx = active;
-  if(layers.length<=1){ toast('Cannot delete last layer'); return; }
+  const workspaceId = layers[idx] && layers[idx].assetWorkspaceId;
+  const workspaceCount = layers.filter(l => (l.assetWorkspaceId || null) === (workspaceId || null)).length;
+  if(workspaceCount<=1){ toast('Cannot delete the last layer in this image'); return; }
   pushPaintUndo();
+  restoreLayerIsolation();
   layers.splice(idx,1);
   if(active>=layers.length) active = layers.length-1;
   if(active===null) active = 0;
+  if (layers[active]) setActive(active);
   dirty = true;
   if (previewMode === 'rig') refreshRigPreview();
   updateUI(); composite();
+  scheduleAutoPush();
   toast('Layer deleted');
 }
 
@@ -613,14 +779,17 @@ function duplicateLayer(idx){
   const l = layers[idx];
   if(!l) return;
   pushPaintUndo();
-  const c = newLayerCanvas(paint_cv.width, paint_cv.height);
+  restoreLayerIsolation();
+  const c = newLayerCanvas(l.canvas.width, l.canvas.height);
   c.getContext('2d').drawImage(l.canvas, 0, 0);
-  const copy = {name:l.name+' copy', canvas:c, visible:l.visible, opacity:l.opacity, blendMode:l.blendMode || 'normal'};
+  const copy = {name:l.name+' copy', canvas:c, visible:l.visible, opacity:l.opacity, blendMode:l.blendMode || 'normal',
+    ...(l.assetWorkspaceId ? { assetWorkspaceId: l.assetWorkspaceId } : {})};
   layers.splice(idx+1, 0, copy);
   active = idx+1;
   dirty = true;
   if (previewMode === 'rig') refreshRigPreview();
   updateUI(); composite();
+  scheduleAutoPush();
   toast('Layer duplicated');
 }
 
@@ -631,12 +800,15 @@ function toggleVisibility(idx){
   dirty = true;
   if (previewMode === 'rig') refreshRigPreview();
   composite(); updateUI();
+  scheduleAutoPush();
 }
 
 function setOpacity(idx, val){
+  restoreLayerIsolation();
   layers[idx].opacity = val;
   dirty = true;
   composite(); updateUI();
+  scheduleAutoPush();
 }
 
 function renameLayer(idx){
@@ -651,10 +823,35 @@ function renameLayer(idx){
   }
 }
 
-function setColor(c){
-  color = c;
-  document.getElementById('paintColorPick').value = c;
+function setColor(c, remember=true){
+  if (!/^#[0-9a-f]{6}$/i.test(c)) return;
+  color = c.toLowerCase();
+  document.getElementById('paintColorPick').value = color;
+  document.getElementById('paintColorValue').textContent = color.toUpperCase();
+  if (remember) {
+    const previous = paintRecentColors.indexOf(color);
+    if (previous >= 0) paintRecentColors.splice(previous, 1);
+    paintRecentColors.unshift(color);
+    paintRecentColors.splice(8);
+    try { localStorage.setItem('spritePaintRecentColors', JSON.stringify(paintRecentColors)); } catch (e) {}
+  }
+  renderColorPalettes();
   updateUI(); composite();
+}
+
+function setPaintTool(nextTool, resetPixelSize=true){
+  if (!['pencil','pixel','pixel-eraser','eraser','fill','picker'].includes(nextTool)) return;
+  tool = nextTool;
+  document.querySelectorAll('#paintToolButtons [data-paint-tool]').forEach(button => {
+    const selected = button.dataset.paintTool === tool;
+    button.classList.toggle('on', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+  if (resetPixelSize && (tool === 'pixel' || tool === 'pixel-eraser')) {
+    brushSize = 1;
+    document.getElementById('paintBrushSize').value = '1';
+    document.getElementById('paintBrushSizeVal').textContent = '1px';
+  }
 }
 
 function getCanvasPos(e){
@@ -666,18 +863,19 @@ function getCanvasPos(e){
   return {x:Math.floor(x), y:Math.floor(y)};
 }
 
-function paintPixelLine(g, from, to){
+function paintPixelLine(g, from, to, erase=false){
   const dx = to.x - from.x, dy = to.y - from.y;
   const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
   const leftOffset = Math.floor(brushSize / 2);
   g.globalAlpha = 1;
-  g.globalCompositeOperation = 'source-over';
-  g.fillStyle = color;
+  g.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
+  g.fillStyle = erase ? '#000' : color;
   for (let i = 0; i <= steps; i++) {
     const x = Math.round(from.x + dx * i / steps);
     const y = Math.round(from.y + dy * i / steps);
     g.fillRect(x - leftOffset, y - leftOffset, brushSize, brushSize);
   }
+  g.globalCompositeOperation = 'source-over';
 }
 
 function paint(x,y){
@@ -695,6 +893,8 @@ function paint(x,y){
     }
   } else if(tool==='pixel'){
     paintPixelLine(g, lastPos || {x,y}, {x,y});
+  } else if(tool==='pixel-eraser'){
+    paintPixelLine(g, lastPos || {x,y}, {x,y}, true);
   } else if(tool==='eraser'){
     g.globalCompositeOperation = 'destination-out';
     g.strokeStyle = '#000';
@@ -814,36 +1014,44 @@ paint_wrap.addEventListener('wheel', e=>{
   syncCanvasScale();
 }, {passive:false});
 
-document.getElementById('paintToolSel').onchange = e=>{
-  tool = e.target.value;
-  if (tool === 'pixel') {
-    brushSize = 1;
-    document.getElementById('paintBrushSize').value = '1';
-    document.getElementById('paintBrushSizeVal').textContent = '1px';
-  }
+document.querySelectorAll('#paintToolButtons [data-paint-tool]').forEach(button => {
+  button.onclick = () => setPaintTool(button.dataset.paintTool);
+});
+document.getElementById('paintLayerFilter').oninput = ()=>renderLayers();
+document.getElementById('paintHideSimilarLayers').onchange = ()=>{
+  if (!layerIsolationOpacities) return;
+  applyLayerIsolation();
+  dirty = true;
+  composite();
 };
 document.getElementById('paintBrushSize').oninput = e=>{
   brushSize = parseInt(e.target.value);
   document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
 };
-document.getElementById('paintColorPick').oninput = e=>setColor(e.target.value);
+document.getElementById('paintColorPick').oninput = e=>setColor(e.target.value, false);
+document.getElementById('paintColorPick').onchange = e=>setColor(e.target.value, true);
 document.getElementById('paintBlendMode').onchange = e=>{
   if(active===null) return;
   pushPaintUndo();
   layers[active].blendMode = e.target.value;
   composite();
+  scheduleAutoPush();
 };
 document.getElementById('paintLayerOpacity').oninput = e=>{
   const val = parseInt(e.target.value)/100;
   document.getElementById('paintLayerOpacityVal').textContent = Math.round(val*100)+'%';
   if(active!==null) setOpacity(active, val);
 };
+document.getElementById('paintActiveLayerOpacity').oninput = e=>{
+  if(active!==null) setOpacity(active, parseInt(e.target.value)/100);
+};
 
 document.getElementById('paintBtnNew').onclick = ()=>{
   if(confirm('New sprite will clear all layers. Continue?')){
     pushPaintUndo();
+    restoreLayerIsolation();
     layers = [{name:'Layer 1', canvas:newLayerCanvas(256, 256), visible:true, opacity:1, blendMode:'normal'}];
-    active = 0; zoom = 1; pan = {x:0,y:0};
+    active = 0; activeWorkspaceId = null; zoom = 1; pan = {x:0,y:0};
     previewMode = 'paint'; rigShot = null; previewPan = { x: 0, y: 0 };
     paint_cv.width = 256; paint_cv.height = 256;
     autoFit = true;
@@ -856,9 +1064,10 @@ document.getElementById('paintFileOpen').onchange = async e=>{
   const f = e.target.files[0]; if(!f) return;
   const img = await loadImage(f);
   pushPaintUndo();
+  restoreLayerIsolation();
   paint_cv.width = img.width; paint_cv.height = img.height;
   layers = [{name:f.name.replace(/\.[^/.]+$/,''), canvas:img, visible:true, opacity:1}];
-  active = 0;
+  active = 0; activeWorkspaceId = null;
   previewMode = 'paint'; rigShot = null; previewPan = { x: 0, y: 0 };
   zoom = 1; pan = {x:0,y:0};
   autoFit = true;
@@ -957,6 +1166,7 @@ document.addEventListener('keydown', (e)=>{
   else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redoPaint(); }
 });
 document.getElementById('paintLayerOpacity').addEventListener('pointerdown', ()=>pushPaintUndo());
+document.getElementById('paintActiveLayerOpacity').addEventListener('pointerdown', ()=>pushPaintUndo());
 
 // animated rig preview
 document.getElementById('paintBtnAnimPlay').onclick = toggleRigAnimPreview;
@@ -1028,6 +1238,7 @@ document.getElementById('paintTabExport').onclick = ()=>{ previewMode = 'paint';
 
 addLayer(null, true);
 restorePaintContext();
+renderColorPalettes();
 populateAnimClips();
 updateUI(); composite();
 
@@ -1065,20 +1276,18 @@ function isBlankCanvas(c) {
 }
 
 function paintCanvasIsBlank() {
-  return layers.length === 0 || (layers.length === 1 && !layers[0].rigLayerId && isBlankCanvas(layers[0].canvas));
+  return layers.length === 0 || (layers.length === 1 && !layers[0].rigLayerId &&
+    !layers[0].assetWorkspaceId && isBlankCanvas(layers[0].canvas));
 }
 
-// The paint canvas is the sprite canvas: it must match the rig document or
-// nothing lines up when pushing back. Only resize while there is nothing worth keeping.
+// Layer canvases are independent; the main canvas is resized to the current workspace.
 function fitPaintToRig(doc) {
   if (paint_cv.width === doc.width && paint_cv.height === doc.height) return true;
-  if (!paintCanvasIsBlank()) {
-    toast('Paint canvas is ' + paint_cv.width + 'x' + paint_cv.height + ' but the rig is ' + doc.width + 'x' + doc.height + '. Press New first, then import again.', 8000);
-    return false;
-  }
   paint_cv.width = doc.width;
   paint_cv.height = doc.height;
-  layers = []; active = null; zoom = 1; pan = { x: 0, y: 0 };
+  activeWorkspaceId = null;
+  restoreLayerIsolation();
+  zoom = 1; pan = { x: 0, y: 0 };
   autoFit = true;
   return true;
 }
@@ -1086,12 +1295,16 @@ function fitPaintToRig(doc) {
 function makePaintLayer(l) {
   const c = newLayerCanvas(paint_cv.width, paint_cv.height);
   c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(l.rgba), l.w, l.h), l.x, l.y);
-  return { name: l.name || 'Rig Layer', canvas: c, visible: true, opacity: 1,
+  return { name: l.name || 'Rig Layer', canvas: c, visible: !l.hidden, opacity: 1,
     rigLayerId: l.id, rigX: l.x, rigY: l.y, rigW: l.w, rigH: l.h };
 }
 
 function useWholeRigPreview() {
   const R = rigAPI();
+  if (activeWorkspaceId) {
+    previewMode = 'paint';
+    return;
+  }
   if (!R || !R.doc || !layers.some(p => p.rigLayerId)) {
     previewMode = 'paint';
     return;
@@ -1113,10 +1326,13 @@ function importRigLayer(layerId) {
   if (!fitPaintToRig(doc)) return;
   if (paintCanvasIsBlank()) { layers = []; active = null; }
   pushPaintUndo();
+  restoreLayerIsolation();
+  activeWorkspaceId = null;
   const idx = layers.findIndex(p => p.rigLayerId === layerId);
   const pl = makePaintLayer(l);
   if (idx >= 0) layers[idx] = pl; else layers.push(pl);
   active = idx >= 0 ? idx : layers.length - 1;
+  setActive(active);
   dirty = true;
   populateAnimClips();
   useWholeRigPreview();
@@ -1133,14 +1349,18 @@ function importAllRigAssets() {
   if (!fitPaintToRig(doc)) return;
   if (paintCanvasIsBlank()) { layers = []; active = null; }
   pushPaintUndo();
+  restoreLayerIsolation();
   let n = 0;
+  let lastRigIndex = -1;
   for (const l of flat) {
     const idx = layers.findIndex(p => p.rigLayerId === l.id);
     const pl = makePaintLayer(l);
     if (idx >= 0) layers[idx] = pl; else layers.push(pl);
+    lastRigIndex = idx >= 0 ? idx : layers.length - 1;
     n++;
   }
-  active = layers.length - 1;
+  active = lastRigIndex;
+  setActive(active);
   dirty = true;
   populateAnimClips();
   useWholeRigPreview();
@@ -1152,13 +1372,77 @@ function importAllRigAssets() {
 function pushPaintToRig() {
   const R = window.__rigEditor, doc = R && R.doc;
   if (!doc) { toast('Open a rig first'); return; }
-  if (paint_cv.width !== doc.width || paint_cv.height !== doc.height) {
-    toast('Paint canvas (' + paint_cv.width + 'x' + paint_cv.height + ') does not match the rig (' + doc.width + 'x' + doc.height + '). Import the rig assets first.', 8000);
+  if (!rigPushTargets()) { toast('Nothing to push: import a rig layer or open an image asset first'); return; }
+  const n = autoPushNow();
+  toast(n ? 'Pushed ' + n + ' image(s) to the rig' : 'Could not push: check the linked image sizes', n ? 2500 : 7000);
+}
+
+function populateImageAssets(){
+  const select = document.getElementById('paintImageAssetSelect');
+  const hint = document.getElementById('paintImageAssetHint');
+  const filter = document.getElementById('paintImageAssetFilter');
+  const R = rigAPI();
+  if (!select) return;
+  const previous = select.value;
+  const query = filter ? filter.value.trim().toLocaleLowerCase() : '';
+  const assets = (R && R.imageAssetsForPaint ? R.imageAssetsForPaint() : [])
+    .filter(asset => !query || (asset.name + ' ' + asset.source).toLocaleLowerCase().includes(query));
+  select.replaceChildren();
+  if (!assets.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = query ? 'No image assets match' : 'Load a rig to browse images';
+    select.appendChild(option);
+    if (hint) hint.textContent = query ? 'Try another asset name or clear the filter.' : 'Load a game template or rig containing image assets first.';
     return;
   }
-  if (!layers.some(p => p.rigLayerId)) { toast('Nothing to push: import the rig assets first'); return; }
-  const n = autoPushNow();
-  toast(n ? 'Pushed ' + n + ' layer(s) to the rig' : 'Could not push: layer sizes do not match', n ? 2500 : 7000);
+  const groups = new Map();
+  for (const asset of assets) {
+    if (!groups.has(asset.source)) {
+      const group = document.createElement('optgroup');
+      group.label = asset.source;
+      groups.set(asset.source, group);
+      select.appendChild(group);
+    }
+    const option = document.createElement('option');
+    option.value = asset.id;
+    option.textContent = asset.name + ' (' + asset.w + '×' + asset.h + ')';
+    groups.get(asset.source).appendChild(option);
+  }
+  if (assets.some(asset => asset.id === previous)) select.value = previous;
+  if (hint) hint.textContent = assets.length + ' image asset(s) available. Open one to edit at native size; changes sync to the rig.';
+}
+
+function importImageAsset(){
+  const R = rigAPI(), select = document.getElementById('paintImageAssetSelect');
+  if (!R || !R.doc) { toast('Open a rig or load the game template first'); return; }
+  const asset = (R.imageAssetsForPaint ? R.imageAssetsForPaint() : []).find(item => item.id === select.value);
+  if (!asset) { populateImageAssets(); toast('Choose an available image asset'); return; }
+  if (!Number.isInteger(asset.w) || !Number.isInteger(asset.h) || !asset.rgba || asset.rgba.length !== asset.w * asset.h * 4) {
+    toast('Could not open "' + asset.name + '": its image data is invalid', 6000);
+    return;
+  }
+  restoreLayerIsolation();
+  let existing = -1;
+  for (let i = 0; i < layers.length; i++) if (layers[i].assetWorkspaceId === asset.id) existing = i;
+  if (existing >= 0) {
+    setActive(existing);
+    toast('Opened image asset: ' + asset.name);
+    return;
+  }
+  pushPaintUndo();
+  const canvas = newLayerCanvas(asset.w, asset.h);
+  canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(asset.rgba), asset.w, asset.h), 0, 0);
+  layers.push({ name: asset.name, canvas, visible: true, opacity: 1, blendMode: 'normal',
+    assetWorkspaceId: asset.id, assetBase: true });
+  active = layers.length - 1;
+  activeWorkspaceId = asset.id;
+  paint_cv.width = asset.w; paint_cv.height = asset.h;
+  autoFit = true; previewMode = 'paint'; rigShot = null;
+  dirty = true;
+  updateUI(); composite();
+  rigBridgeStatus('Opened "' + asset.name + '" (' + asset.w + '×' + asset.h + ')');
+  toast('Opened image asset: ' + asset.name);
 }
 
 // Show the rig itself on the paint Preview tab.
@@ -1177,8 +1461,12 @@ function renderRigPreview() {
 function initRigIntegration() {
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   on('paintBtnImportRig', importAllRigAssets);
+  on('paintBtnImportImageAsset', importImageAsset);
   on('paintBtnPushRig', pushPaintToRig);
   on('paintBtnRigPreview', renderRigPreview);
+  const filter = document.getElementById('paintImageAssetFilter');
+  if (filter) filter.oninput = populateImageAssets;
+  populateImageAssets();
 }
 
 initRigIntegration();

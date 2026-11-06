@@ -41,6 +41,15 @@ Turn a layered drawing into a fully custom character, with moving tails, ears, h
 - **Sounds:** keep the game's character sounds, or pick your own `.wav`/`.ogg`/`.mp3` files for pain, bark, pant, growl, yawn and more (or any game sound by name). Preview them in the character panel.
 - **Export** a ready-to-use rig folder as a `.zip`.
 
+## Sprite Paint mode
+
+- **Paint on layers:** click a visible tool button to choose Pencil, Pixel brush, Eraser, Pixel eraser, Fill or Picker; use undo/redo, blending, per-layer opacity and transparent PNG export. The selected layer's opacity slider stays pinned above the layer list while scrolling. Pixel tools start at 1 px. Choose a color from the palette, the custom color picker or your saved Recent colors.
+- **Find layers:** use the filter above the paint layer list to show matching layer names.
+- **Focus a layer:** double-click a paint layer to keep it at its current opacity and fade the others to 5%. Turn on **Hide similar layers when isolating** to make similarly named layers (such as Head / Head 2 or Arm Front / Arm Back) fully transparent. Double-click again to restore the previous opacities.
+- **Read-only preview:** see the full sprite while painting; scroll to zoom, drag to pan, or use **Center preview**. **Show active layer on top** and **Preview opacity** only affect the preview.
+- **Edit image assets:** use **Other image assets** to find and open game sprites (including tools and wearables), health-screen art, and rig sprite swaps. Each opens at its original size; edits sync to the right rig asset while preserving its pivots and layout. Rig images hidden from the layer list can also be imported.
+- **Work with a rig:** double-click a rig layer to open it in Paint. Imported layer edits sync back to the rig; **Push to rig** refreshes the rig layer list and thumbnails. Opaque pixel-brush strokes outside a layer's original bounds expand that rig layer as needed.
+
 ## Using it
 
 1. Draw your character standing and **facing right**, at the game's scale (8 px = 1 unit; the game's character is about 50 px tall). Put each part on its own layer.
@@ -68,6 +77,7 @@ Luna Advanced Rig Systems is a fan-made mod and tool. It is **not made by or aff
 
 * **The editor's Test tab is a simulation.** Its movement, wall jumps, states, eyes, mouth and injury rules are re-created from *Casualties: Unknown*'s code by **Orson**, to preview characters outside the game. It is not the game and won't match it exactly (the game's own animations and movement numbers aren't included).
 * **Nothing from the game is included.** The game template (the character's sprites, every wearable, the health screen art and the animations) is written by the mod from the player's own copy of the game, and loaded into the editor from there. *Casualties: Unknown*, its code and its art belong to Orson.
+* **Sprite Paint add-on:** developed by **Silvasta** with help from an AI assistant, inspired by **Faolonrose's main project**.
 
 ## Commit Signing
 
