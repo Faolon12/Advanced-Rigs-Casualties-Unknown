@@ -4987,6 +4987,18 @@ updateUI();
 composite();
 
 
+document.getElementById('modeRig').onclick = () => {
+  document.getElementById('modeRig').classList.add('active');
+  document.getElementById('modePaint').classList.remove('active');
+  document.getElementById('panelRig').classList.add('active');
+  document.getElementById('panelPaint').classList.remove('active');
+};
+document.getElementById('modePaint').onclick = () => {
+  document.getElementById('modePaint').classList.add('active');
+  document.getElementById('modeRig').classList.remove('active');
+  document.getElementById('panelPaint').classList.add('active');
+  document.getElementById('panelRig').classList.remove('active');
+};
 paint_addLayer();
 paint_updateUI();
 paint_composite();
