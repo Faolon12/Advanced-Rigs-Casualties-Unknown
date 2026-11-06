@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Luna Advanced Rig Systems – Editor (Casualties Release V0.2 Alpha)</title>
+
 <style>
+
 :root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -153,9 +155,103 @@ aside.right{overflow-x:hidden}
 .folderRow .fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .folderRow button{padding:1px 6px;font-size:11px}
 .folderRow.drop{outline:1px solid var(--acc2)}
+
+
+#modeSwitcher{display:flex;gap:6px;margin:0 12px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.modeBtn{padding:4px 10px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer;font-size:12px}
+.modeBtn.active{background:var(--acc);color:#fff;border-color:var(--acc)}
+#modePanels{display:flex;flex:1;min-height:0}
+.modePanel{display:none;flex:1;min-height:0}
+.modePanel.active{display:flex}
+
+
+:root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+button,select,input{font:inherit;color:var(--text)}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:#555a66}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button.primary:hover{filter:brightness(1.1)}
+button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+button.secondary{background:var(--panel2);border-color:var(--line);color:var(--dim)}
+button.secondary:hover{border-color:var(--text);color:var(--text)}
+button.danger{background:rgba(224,71,91,0.2);border-color:var(--acc);color:var(--acc)}
+button.danger:hover{background:var(--acc);color:#fff}
+select,input[type=text],input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+input[type=color]{border:none;background:none;width:26px;height:26px;cursor:pointer}
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+header{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);z-index:10}
+header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
+header h1 span{color:var(--acc)}
+header .grow{flex:1}
+main{display:grid;grid-template-columns:300px 1fr 340px;height:calc(100% - 48px);min-height:0;gap:0}
+aside{background:var(--panel);overflow:auto;min-height:0;border-right:1px solid var(--line)}
+aside.right{border-left:1px solid var(--line);border-right:none}
+#viewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#canvas-wrap{position:relative;display:inline-block;cursor:crosshair}
+canvas#cv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5)}
+canvas#preview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3)}
+.crosshair{position:absolute;top:50%;left:50%;width:20px;height:20px;transform:translate(-50%,-50%);pointer-events:none;border:1px dashed var(--acc2);border-radius:50%;display:none}
+#canvas-wrap.painting .crosshair{display:block}
+h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 12px 6px;padding-top:10px;border-top:1px solid var(--line)}
+.section{padding:0 12px 10px}
+.row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.row label{flex:0 0 90px;font-size:12px;color:var(--dim)}
+.row input[type=range]{flex:1}
+.toolbar{display:flex;gap:4px;flex-wrap:wrap}
+.toolbar button{flex:1;min-width:56px}
+.color-swatch{width:24px;height:24px;border:1px solid var(--line);border-radius:4px;cursor:pointer}
+.color-swatch.active{border-color:var(--text);box-shadow:0 0 0 2px var(--acc2)}
+.layer-item{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:#111216}
+.layer-item.active{border-color:var(--acc2);background:var(--panel2)}
+.layer-item .layer-vis{width:16px;height:16px;border:1px solid var(--line);border-radius:3px;flex:0 0 16px}
+.layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px}
+.layer-actions{display:flex;gap:3px;align-items:center}
+.layer-actions button{padding:2px 6px;font-size:11px;min-width:0}
+.btn-row{display:flex;gap:4px;margin-top:8px}
+.btn-row button{flex:1}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);color:var(--text);padding:8px 14px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;white-space:nowrap}
+.toast.show{opacity:1}
+.empty{padding:30px;text-align:center;color:var(--dim)}
+.empty b{color:var(--text)}
+.input-small{width:70px}
+
+
+#paintViewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#paintCanvasWrap{position:relative;display:inline-block;cursor:crosshair}
+canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5)}
+canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3)}
+#paintCoord{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none}
+
 </style>
 </head>
 <body>
+<div id="app" role="application">
+<header>
+<h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.2 Alpha</small></h1>
+<div id="modeSwitcher">
+<button id="modeRig" class="modeBtn active">Rig Editor</button>
+<button id="modePaint" class="modeBtn">Sprite Paint</button>
+</div>
+<div class="grow"></div>
+<button id="btnOpen" class="primary" type="button">Open…</button>
+<input id="fileOpen" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden aria-label="Open character file">
+<button id="btnSave" title="Save project (.luna)">Save</button>
+<input id="fileTpl" type="file" webkitdirectory directory multiple hidden>
+<button id="btnBrowse" title="Browse game template">Browse template</button>
+<button id="btnTemplate" title="Load game template">Game template</button>
+<span id="gameBadge" class="pill" style="cursor:pointer"></span>
+<button id="btnSprites" title="Add PNGs">Add PNG…</button>
+<input id="fileSprites" type="file" multiple accept=".png,.json" hidden>
+<button id="btnAddPsd" title="Add PSD/PSB">Add PSD / PSB…</button>
+<select id="dlMenu" style="width:150px;flex:none"><option value="">⬇ Download all…</option><option value="psd">as one PSD</option><option value="psb">as one PSB</option></select>
+<button id="btnAuto" title="Auto setup">Auto setup</button>
+<span class="muted">Name</span><label for="name" style="margin-right:4px">Character name</label><input id="name" type="text" value="MyCharacter" style="width:150px" aria-label="Character name">
+</header>
+<div id="modePanels">
+<div id="panelRig" class="modePanel active">
+
 <div id="app" role="application">
 <header>
   <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.2 Alpha</small></h1>
@@ -275,7 +371,100 @@ aside.right{overflow-x:hidden}
   <p class="muted" style="margin-top:0">Luna Advanced Rig Systems is a fan-made mod and tool, not made by or affiliated with the developer of Casualties: Unknown. The <b>Test</b> tab is a <b>simulation</b>: its movement, states, eyes, mouth and injury rules are re-created from Casualties: Unknown's code by <b>Orson</b>, so you can preview a character outside the game. It is not the game and won't match it exactly. Nothing from the game is included in the editor: the game template (sprites, wearables, animations) is made by the mod from your own copy of the game. Casualties: Unknown, its code and its art belong to Orson.</p>
   <div style="text-align:right;margin-top:10px"><button id="helpClose" class="primary">Got it</button></div>
 </div></div>
+
+
+
+</div>
+<div id="panelPaint" class="modePanel">
+
+<div id="app" role="application">
+<header>
+<h1>Sprite Paint Editor <span>Luna Advanced Rig Systems</span></h1>
+<div class="grow"></div>
+<button id="paintBtnNew" title="New sprite">New</button>
+<button id="paintBtnOpen" title="Load PNG">Open…</button>
+<input id="paintFileOpen" type="file" accept=".png" hidden>
+<button id="paintBtnSave" class="primary" title="Export PNG">Save PNG</button>
+</header>
+
+<main>
+<aside>
+<h2>Tools</h2>
+<div class="section">
+<div class="row"><label>Tool</label>
+<select id="paintToolSel">
+<option value="pencil">Pencil</option>
+<option value="eraser">Eraser</option>
+<option value="fill">Fill</option>
+<option value="picker">Picker</option>
+</select></div>
+<div class="row"><label>Size</label>
+<input id="paintBrushSize" type="range" min="1" max="32" value="4">
+<span id="paintBrushSizeVal">4px</span></div>
+<div class="row"><label>Color</label>
+<input id="paintColorPick" type="color" value="#e0475b">
+<div style="margin-top:4px;display:flex;gap:4px" id="paintQuickColors"></div>
+</div>
+<div class="toolbar" style="margin-top:8px">
+<button id="paintToolZoomIn" title="Zoom in">+</button>
+<button id="paintToolZoomOut" title="Zoom out">-</button>
+<button id="paintToolFit" title="Fit to window">Fit</button>
+</div>
+</div>
+
+<h2>Layers</h2>
+<div class="section" id="paintLayerList">
+<div class="empty">No layers<br>Add one to start painting</div>
+</div>
+<div class="btn-row">
+<button id="paintBtnAddLayer" class="primary">+ Layer</button>
+<button id="paintBtnDelLayer" class="danger">- Delete</button>
+</div>
+</aside>
+
+<div id="viewport">
+<div id="paintCanvasWrap">
+<canvas id="paintCv" width="256" height="256"></canvas>
+<div class="crosshair" id="crosshair"></div>
+</div>
+<div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none" id="paintCoord">0, 0</div>
+</div>
+
+<aside class="right">
+<h2>Preview</h2>
+<div class="section">
+<div id="previewWrap" style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:200px;overflow:hidden">
+<canvas id="paintPreview" width="128" height="128" style="max-width:100%;max-height:100%"></canvas>
+</div>
+<div class="row" style="margin-top:8px"><label>Scale</label>
+<input id="paintPreviewScale" type="range" min="1" max="8" value="2">
+<span id="paintPreviewScaleVal">2x</span></div>
+</div>
+
+<h2>Info</h2>
+<div class="section">
+<div class="row"><label>Size</label><span id="paintInfoSize">256×256</span></div>
+<div class="row"><label>Layers</label><span id="paintInfoLayers">0</span></div>
+<div class="row"><label>Zoom</label><span id="paintInfoZoom">100%</span></div>
+</div>
+
+<div class="btn-row" style="margin-top:12px">
+<button id="paintBtnFlipH" title="Flip horizontal">Flip H</button>
+<button id="paintBtnFlipV" title="Flip vertical">Flip V</button>
+<button id="paintBtnRotate" title="Rotate 90°">Rotate</button>
+</div>
+</aside>
+</main>
+<div class="toast" id="toast"></div>
+</div>
+
+
+</div>
+</div>
+<div class="toast" id="toast"></div>
+</div>
 <script>
+
 // ===================== Advanced Rigs editor: core (no DOM) =====================
 // Everything here must match the mod (RigDefinition.cs / RigInstance.cs).
 'use strict';
@@ -1903,8 +2092,9 @@ if (typeof module !== 'undefined') module.exports = RIG;
 RIG.HS_LAYOUT = [{"part": "Head", "outline": "headoutline", "middle": "headMiddle", "x": 0.0, "y": 238.5, "w": 138, "h": 135, "mirror": false}, {"part": "UpTorso", "outline": "thoraxOutline", "middle": "thoraxMiddle", "x": 0, "y": 124.5, "w": 114, "h": 99, "mirror": false}, {"part": "DownTorso", "outline": "abdomenOutline", "middle": "abdomenMiddle", "x": 0, "y": 30, "w": 120, "h": 90, "mirror": false}, {"part": "UpArmF", "outline": "armOutline", "middle": "armMiddle", "x": -96.0, "y": 139.5, "w": 108, "h": 63, "mirror": false}, {"part": "DownArmF", "outline": "forearmOutline", "middle": "forearmMiddle", "x": -201.0, "y": 130.5, "w": 102, "h": 51, "mirror": false}, {"part": "HandF", "outline": "handOutline", "middle": "handMiddle", "x": -292.5, "y": 130.5, "w": 87, "h": 81, "mirror": false}, {"part": "UpArmB", "outline": "armOutline", "middle": "armMiddle", "x": 96.0, "y": 139.5, "w": 108, "h": 63, "mirror": true}, {"part": "DownArmB", "outline": "forearmOutline", "middle": "forearmMiddle", "x": 201.0, "y": 130.5, "w": 102, "h": 51, "mirror": true}, {"part": "HandB", "outline": "handOutline", "middle": "handMiddle", "x": 292.5, "y": 130.5, "w": 87, "h": 81, "mirror": true}, {"part": "ThighF", "outline": "thighOutline", "middle": "thighMiddle", "x": -46.5, "y": -66.0, "w": 93, "h": 132, "mirror": false}, {"part": "CrusF", "outline": "crusOutline", "middle": "crusMiddle", "x": -48.0, "y": -160.47, "w": 72, "h": 75, "mirror": false}, {"part": "FootF", "outline": "footOutline", "middle": "footMiddle", "x": -48.0, "y": -233.97, "w": 72, "h": 96, "mirror": false}, {"part": "ThighB", "outline": "thighOutline", "middle": "thighMiddle", "x": 46.5, "y": -66.0, "w": 93, "h": 132, "mirror": true}, {"part": "CrusB", "outline": "crusOutline", "middle": "crusMiddle", "x": 48.2, "y": -160.47, "w": 72, "h": 75, "mirror": true}, {"part": "FootB", "outline": "footOutline", "middle": "footMiddle", "x": 48.2, "y": -233.97, "w": 72, "h": 96, "mirror": true}];
 RIG.HS_IMAGES = {};
 
-</script>
-<script>
+
+
+
 'use strict';
 (function () {
 const $ = (s) => document.querySelector(s);
@@ -4354,6 +4544,452 @@ $('#eyePrev').innerHTML = '<option value="">Eyes: automatic</option>' + RIG.EYE_
 resize(); renderInspector(); hint('Open your character to begin. New here? Click <b>How to</b>. <span style="opacity:.7">Fan-made, not affiliated with Casualties: Unknown. The Test tab is a simulation based on Orson\'s game code.</span>');
 window.__rigEditor = { addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); } };
 })();
+
+
+
+/* ===== Sprite Paint Editor script ===== */
+
+/*============================================================
+  Sprite Paint Editor — self-contained
+  Tools: pencil, eraser, fill, color picker
+  Layers: add/delete/select, rename, duplicate, visibility, opacity, move
+  Preview: live downscaled composite
+  Export: PNG download
+============================================================*/
+
+const paint_cv = document.getElementById('paintCv');
+const paint_ctx = paint_cv.getContext('2d', {willReadFrequently:true});
+const paint_preview = document.getElementById('paintPreview');
+const paint_pctx = paint_preview.getContext('2d', {willReadFrequently:true});
+const paint_wrap = document.getElementById('paintCanvasWrap');
+const paint_coord = document.getElementById('paintCoord');
+
+let layers = [];
+let active = null;
+let zoom = 1;
+let pan = {x:0, y:0};
+let isDown = false;
+let lastPos = null;
+let tool = 'pencil';
+let brushSize = 4;
+let color = '#e0475b';
+let dirty = false;
+
+const quickColors = ['#e0475b','#8f5bff','#4cc38a','#e9b44c','#ffffff','#000000','#33363f','#1d1f25'];
+const qc = document.getElementById('quickColors');
+quickColors.forEach(c => {
+  const s = document.createElement('div');
+  s.className = 'color-swatch';
+  s.style.background = c;
+  s.title = c;
+  s.onclick = () => { setColor(c); };
+  qc.appendChild(s);
+});
+
+function toast(msg, ms=2600){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(()=>t.classList.remove('show'), ms);
+}
+
+function newLayerCanvas(w,h){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.fillStyle = '#00000000';
+  g.fillRect(0,0,w,h);
+  return c;
+}
+
+function composite(){
+  paint_ctx.fillStyle = '#0a0a0f';
+  paint_ctx.fillRect(0,0,paint_cv.width,paint_cv.height);
+  paint_ctx.save();
+  paint_ctx.translate(pan.x, pan.y);
+  paint_ctx.scale(zoom, zoom);
+  layers.forEach((l,i)=>{
+    paint_ctx.globalAlpha = l.opacity;
+    if(l.visible) paint_ctx.drawImage(l.canvas, 0, 0);
+  });
+  paint_ctx.globalAlpha = 1;
+  paint_ctx.restore();
+  updatePreview();
+}
+
+function updatePreview(){
+  const scale = parseInt(document.getElementById('previewScale').value);
+  document.getElementById('previewScaleVal').textContent = scale+'x';
+  ppaint_ctx.fillStyle = '#0a0a0f';
+  ppaint_ctx.fillRect(0,0,paint_preview.width,paint_preview.height);
+  layers.forEach(l=>{
+    if(l.visible){
+      ppaint_ctx.globalAlpha = l.opacity;
+      ppaint_ctx.drawImage(l.canvas, 0, 0, paint_preview.width, paint_preview.height);
+    }
+  });
+  ppaint_ctx.globalAlpha = 1;
+}
+
+function updateUI(){
+  document.getElementById('infoSize').textContent = paint_cv.width+'×'+paint_cv.height;
+  document.getElementById('infoLayers').textContent = layers.length;
+  document.getElementById('infoZoom').textContent = Math.round(zoom*100)+'%';
+  document.getElementById('brushSizeVal').textContent = brushSize+'px';
+  renderLayers();
+}
+
+function renderLayers(){
+  const list = document.getElementById('layerList');
+  if(layers.length===0){
+    list.innerHTML = '<div class="empty">No layers<br>Add one to start painting</div>';
+    return;
+  }
+  list.innerHTML = '';
+  layers.forEach((l,i)=>{
+    const el = document.createElement('div');
+    el.className = 'layer-item'+(i===active?' active':'');
+    el.onclick = (ev)=>{ if(!ev.target.closest('button,input,select')) setActive(i); };
+
+    const vis = document.createElement('div');
+    vis.className = 'layer-vis';
+    vis.style.background = i===active ? color : '#33363f';
+    el.appendChild(vis);
+
+    const name = document.createElement('div');
+    name.className = 'layer-name';
+    name.textContent = l.name;
+    el.appendChild(name);
+
+    // visibility toggle
+    const visBtn = document.createElement('button');
+    visBtn.className = 'secondary';
+    visBtn.title = l.visible ? 'Hide layer' : 'Show layer';
+    visBtn.textContent = l.visible ? '👁' : '🙈';
+    visBtn.onclick = (ev)=>{ ev.stopPropagation(); toggleVisibility(i); };
+    el.appendChild(visBtn);
+
+    // rename
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'secondary';
+    renameBtn.title = 'Rename';
+    renameBtn.textContent = '✎';
+    renameBtn.onclick = (ev)=>{ ev.stopPropagation(); renameLayer(i); };
+    el.appendChild(renameBtn);
+
+    // duplicate
+    const dupBtn = document.createElement('button');
+    dupBtn.className = 'secondary';
+    dupBtn.title = 'Duplicate';
+    dupBtn.textContent = '📋';
+    dupBtn.onclick = (ev)=>{ ev.stopPropagation(); duplicateLayer(i); };
+    el.appendChild(dupBtn);
+
+    // delete
+    const delBtn = document.createElement('button');
+    delBtn.className = 'danger';
+    delBtn.title = 'Delete layer';
+    delBtn.textContent = '🗑';
+    delBtn.onclick = (ev)=>{ ev.stopPropagation(); deleteLayer(i); };
+    el.appendChild(delBtn);
+
+    // opacity
+    const op = document.createElement('input');
+    op.type = 'range'; op.min = '0'; op.max = '100'; op.value = Math.round(l.opacity*100);
+    op.className = 'input-small';
+    op.title = 'Opacity';
+    op.oninput = (ev)=>{ setOpacity(i, parseInt(ev.target.value)/100); };
+    el.appendChild(op);
+
+    list.appendChild(el);
+  });
+}
+
+function setActive(i){
+  active = i;
+  updateUI();
+  composite();
+}
+
+function addLayer(name=null){
+  const c = newLayerCanvas(paint_cv.width, paint_cv.height);
+  layers.push({name:name||('Layer '+(layers.length+1)), canvas:c, visible:true, opacity:1});
+  active = layers.length-1;
+  dirty = true;
+  updateUI();
+  composite();
+  toast('Layer added');
+}
+
+function deleteLayer(idx=null){
+  if(idx===null) idx = active;
+  if(layers.length<=1){ toast('Cannot delete last layer'); return; }
+  layers.splice(idx,1);
+  if(active>=layers.length) active = layers.length-1;
+  if(active===null) active = 0;
+  dirty = true;
+  updateUI();
+  composite();
+  toast('Layer deleted');
+}
+
+function duplicateLayer(idx){
+  const l = layers[idx];
+  const c = newLayerCanvas(paint_cv.width, paint_cv.height);
+  c.getContext('2d').drawImage(l.canvas, 0, 0);
+  const copy = {name:l.name+' copy', canvas:c, visible:l.visible, opacity:l.opacity};
+  layers.splice(idx+1, 0, copy);
+  active = idx+1;
+  dirty = true;
+  updateUI();
+  composite();
+  toast('Layer duplicated');
+}
+
+function toggleVisibility(idx){
+  layers[idx].visible = !layers[idx].visible;
+  dirty = true;
+  composite();
+  updateUI();
+}
+
+function setOpacity(idx, val){
+  layers[idx].opacity = val;
+  dirty = true;
+  composite();
+  updateUI();
+}
+
+function renameLayer(idx){
+  const name = prompt('Rename layer:', layers[idx].name);
+  if(name!==null){
+    layers[idx].name = name.trim()||'Layer';
+    dirty = true;
+    updateUI();
+  }
+}
+
+function setColor(c){
+  color = c;
+  document.getElementById('colorPick').value = c;
+  updateUI();
+  composite();
+}
+
+function getCanvasPos(e){
+  const rect = paint_cv.getBoundingClientRect();
+  const x = (e.clientX - rect.left - pan.x) / zoom;
+  const y = (e.clientY - rect.top - pan.y) / zoom;
+  return {x:Math.round(x), y:Math.round(y)};
+}
+
+function paint(x,y){
+  if(active===null) return;
+  const g = layers[active].canvas.getContext('2d');
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  if(tool==='pencil'){
+    g.strokeStyle = color;
+    g.lineWidth = brushSize;
+    if(lastPos){
+      g.beginPath(); g.moveTo(lastPos.x,lastPos.y); g.lineTo(x,y); g.stroke();
+    } else {
+      g.beginPath(); g.arc(x,y,brushSize/2,0,Math.PI*2); g.fill();
+    }
+  } else if(tool==='eraser'){
+    g.globalCompositeOperation = 'destination-out';
+    g.strokeStyle = '#000';
+    g.lineWidth = brushSize;
+    if(lastPos){
+      g.beginPath(); g.moveTo(lastPos.x,lastPos.y); g.lineTo(x,y); g.stroke();
+    } else {
+      g.clearRect(x-brushSize/2, y-brushSize/2, brushSize, brushSize);
+    }
+    g.globalCompositeOperation = 'source-over';
+  } else if(tool==='fill'){
+    floodFill(g, x, y, color);
+  } else if(tool==='picker'){
+    const px = g.getImageData(x,y,1,1).data;
+    setColor(`#${px[0].toString(16).padStart(2,'0')}${px[1].toString(16).padStart(2,'0')}${px[2].toString(16).padStart(2,'0')}`);
+  }
+  dirty = true;
+  composite();
+}
+
+function floodFill(g, sx, sy, newColor){
+  const w = g.canvas.width, h = g.canvas.height;
+  const id = g.getImageData(0,0,w,h);
+  const data = id.data;
+  const get = (x,y)=>(y*w+x)*4;
+  const target = [data[get(sx,sy)], data[get(sx,sy)+1], data[get(sx,sy)+2], data[get(sx,sy)+3]];
+  const nc = hexToRgb(newColor);
+  if(colorsEqual(target,nc)) return;
+  const stack=[{x:sx,y:sy}];
+  while(stack.length){
+    const p = stack.pop();
+    const idx = get(p.x,p.y);
+    if(!colorsEqual([data[idx],data[idx+1],data[idx+2],data[idx+3]],target)) continue;
+    data[idx]=nc.r; data[idx+1]=nc.g; data[idx+2]=nc.b;
+    for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=p.x+d[0], ny=p.y+d[1];
+      if(nx>=0&&nx<w&&ny>=0&&ny<h) stack.push({x:nx,y:ny});
+    }
+  }
+  g.putImageData(id,0,0);
+}
+
+function hexToRgb(h){
+  const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+  return {r,g,b,a:255};
+}
+function colorsEqual(a,b){ return a[0]===b.r&&a[1]===b.g&&a[2]===b.b&&a[3]===b.a; }
+
+paint_cv.addEventListener('mousedown', e=>{
+  if(e.button!==0||active===null) return;
+  isDown = true;
+  lastPos = getCanvasPos(e);
+  paint(lastPos.x, lastPos.y);
+  paint_wrap.classList.add('painting');
+});
+window.addEventListener('mouseup', e=>{
+  if(!isDown) return;
+  isDown = false;
+  lastPos = null;
+  paint_wrap.classList.remove('painting');
+});
+paint_cv.addEventListener('mousemove', e=>{
+  if(!isDown) return;
+  const pos = getCanvasPos(e);
+  paint(pos.x, pos.y);
+  lastPos = pos;
+});
+paint_cv.addEventListener('mousemove', e=>{
+  const pos = getCanvasPos(e);
+  paint_coord.textContent = pos.x+', '+pos.y;
+});
+paint_wrap.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const delta = -e.deltaY * 0.001;
+  const newZoom = Math.min(Math.max(zoom*(1+delta), 0.1), 8);
+  const rect = paint_cv.getBoundingClientRect();
+  const mx = (e.clientX - rect.left - pan.x) / zoom;
+  const my = (e.clientY - rect.top - pan.y) / zoom;
+  zoom = newZoom;
+  pan.x = e.clientX - rect.left - mx*zoom;
+  pan.y = e.clientY - rect.top - my*zoom;
+  updateUI();
+  composite();
+}, {passive:false});
+
+document.getElementById('toolSel').onchange = e=>{ tool = e.target.value; };
+document.getElementById('brushSize').oninput = e=>{
+  brushSize = parseInt(e.target.value);
+  document.getElementById('brushSizeVal').textContent = brushSize+'px';
+};
+document.getElementById('colorPick').oninput = e=>setColor(e.target.value);
+document.getElementById('btnNew').onclick = ()=>{
+  if(confirm('New sprite will clear all layers. Continue?')){
+    layers = []; active = null; zoom = 1; pan = {x:0,y:0};
+    paint_cv.width = 256; paint_cv.height = 256;
+    updateUI(); composite();
+    toast('New sprite');
+  }
+};
+document.getElementById('btnOpen').onclick = ()=>document.getElementById('fileOpen').click();
+document.getElementById('fileOpen').onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const img = await loadImage(f);
+  paint_cv.width = img.width; paint_cv.height = img.height;
+  layers = [{name:f.name.replace(/\.[^/.]+$/,''), canvas:img, visible:true, opacity:1}];
+  active = 0;
+  zoom = 1; pan = {x:0,y:0};
+  dirty = true;
+  updateUI(); composite();
+  toast('Opened '+f.name);
+};
+document.getElementById('btnSave').onclick = ()=>{
+  const link = document.createElement('a');
+  link.download = 'sprite.png';
+  link.href = paint_cv.toDataURL('image/png');
+  link.click();
+  toast('Exported sprite.png');
+};
+document.getElementById('btnAddLayer').onclick = addLayer;
+document.getElementById('btnDelLayer').onclick = ()=>deleteLayer(null);
+document.getElementById('toolZoomIn').onclick = ()=>{ zoom=Math.min(zoom+0.25,8); updateUI(); composite(); };
+document.getElementById('toolZoomOut').onclick = ()=>{ zoom=Math.max(zoom-0.25,0.1); updateUI(); composite(); };
+document.getElementById('toolFit').onclick = ()=>{
+  const rect = paint_wrap.getBoundingClientRect();
+  zoom = Math.min((rect.width-20)/paint_cv.width, (rect.height-20)/paint_cv.height, 2);
+  pan = {x:(rect.width-paint_cv.width*zoom)/2, y:(rect.height-paint_cv.height*zoom)/2};
+  updateUI(); composite();
+};
+document.getElementById('previewScale').oninput = e=>{
+  document.getElementById('previewScaleVal').textContent = e.target.value+'x';
+  updatePreview();
+};
+document.getElementById('btnFlipH').onclick = ()=>{
+  if(active===null) return;
+  const g = layers[active].canvas.getContext('2d');
+  const id = g.getImageData(0,0,paint_cv.width,paint_cv.height);
+  g.clearRect(0,0,paint_cv.width,paint_cv.height);
+  for(let y=0;y<paint_cv.height;y++) for(let x=0;x<paint_cv.width;x++){
+    const src = (y*paint_cv.width+x)*4;
+    const dst = (y*paint_cv.width+(paint_cv.width-1-x))*4;
+    id.data[dst]=id.data[src]; id.data[dst+1]=id.data[src+1]; id.data[dst+2]=id.data[src+2]; id.data[dst+3]=id.data[src+3];
+  }
+  g.putImageData(id,0,0);
+  dirty = true; composite(); toast('Flipped horizontal');
+};
+document.getElementById('btnFlipV').onclick = ()=>{
+  if(active===null) return;
+  const g = layers[active].canvas.getContext('2d');
+  const id = g.getImageData(0,0,paint_cv.width,paint_cv.height);
+  g.clearRect(0,0,paint_cv.width,paint_cv.height);
+  for(let y=0;y<paint_cv.height;y++) for(let x=0;x<paint_cv.width;x++){
+    const src = (y*paint_cv.width+x)*4;
+    const dst = ((paint_cv.height-1-y)*paint_cv.width+x)*4;
+    id.data[dst]=id.data[src]; id.data[dst+1]=id.data[src+1]; id.data[dst+2]=id.data[src+2]; id.data[dst+3]=id.data[src+3];
+  }
+  g.putImageData(id,0,0);
+  dirty = true; composite(); toast('Flipped vertical');
+};
+document.getElementById('btnRotate').onclick = ()=>{
+  if(active===null) return;
+  const c = layers[active].canvas;
+  const tmp = document.createElement('canvas');
+  tmp.width = c.height; tmp.height = c.width;
+  const tg = tmp.getContext('2d');
+  tg.translate(c.height/2, c.width/2);
+  tg.rotate(Math.PI/2);
+  tg.drawImage(c, -c.width/2, -c.height/2);
+  layers[active].canvas = tmp;
+  paint_cv.width = tmp.width; paint_cv.height = tmp.height;
+  dirty = true; composite(); toast('Rotated 90°');
+};
+
+function loadImage(file){
+  return new Promise((res,rej)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      c.getContext('2d').drawImage(img,0,0);
+      res(c);
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+addLayer();
+updateUI();
+composite();
+
+
+paint_addLayer();
+paint_updateUI();
+paint_composite();
 
 </script>
 </body>
