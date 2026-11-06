@@ -353,6 +353,11 @@ canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3
 <button id="paintBtnOpen" title="Load PNG">Open…</button>
 <input id="paintFileOpen" type="file" accept=".png" hidden>
 <button id="paintBtnSave" class="primary" title="Export PNG">Save PNG</button>
+<h2>Rig Integration</h2> <div class="section">
+<button id="paintBtnImportRig" class="primary" title="Import rig assets as paint layers">Import Rig Assets</button>
+<button id="paintBtnRigPreview" title="Show rig preview alongside paint">Rig Preview</button>
+<button id="paintBtnPushRig" class="danger" title="Push paint composite back to rig">Push to Rig</button>
+<div id="rigIntegrationStatus" style="font-size:10px;color:var(--muted);margin-top:4px;"></div>
 </header>
 
 <main>
@@ -2597,6 +2602,13 @@ function layerRow(l, inF, flat) {
   sel.onclick = (e) => e.stopPropagation();
   sel.onchange = () => setRole(l, sel.value);
   row.append(th, right);
+  row.ondblclick = (e) => {
+    e.stopPropagation();
+    if (doc) {
+      switchMode('paint');
+      importRigLayer(l.id);
+    }
+  };
   row.onclick = (e) => {
     if (e.ctrlKey || e.metaKey) { if (selSet.has(l.id)) { selSet.delete(l.id); if (selLayer === l.id) selLayer = [...selSet][0] || null; } else { selSet.add(l.id); selLayer = l.id; } renderLayers(); renderInspector(); draw(); return; }
     if (e.shiftKey && selLayer && flat) { const a = flat.findIndex(o => o.id === selLayer), b = flat.findIndex(o => o.id === l.id); if (a >= 0 && b >= 0) { const [lo, hi] = a < b ? [a, b] : [b, a]; for (let k = lo; k <= hi; k++) selSet.add(flat[k].id); } renderLayers(); return; }
@@ -5074,6 +5086,143 @@ document.getElementById('paintTabExport').onclick = ()=>switchPaintTab('export')
 addLayer();
 restorePaintContext();
 updateUI(); composite();
+
+
+
+// ============================================================================
+// Rig <-> Paint Cross-Integration Bridge
+// ============================================================================
+
+// Import a rig layer into paint as a paint layer
+function importRigLayer(layerId) {
+  if (!doc) { toast('Open a rig first'); return; }
+  const layer = RIG.layer(doc, layerId);
+  if (!layer) { toast('Layer not found'); return; }
+  
+  const c = document.createElement('canvas');
+  c.width = layer.w;
+  c.height = layer.h;
+  const g = c.getContext('2d');
+  g.putImageData(new ImageData(new Uint8ClampedArray(layer.rgba), layer.w, layer.h), 0, 0);
+  
+  const pLayer = { name: layer.name || 'Rig Layer', canvas: c, visible: true, opacity: 1.0, rigLayerId: layerId, rigX: layer.x || 0, rigY: layer.y || 0 };
+  layers.push(pLayer);
+  active = layers.length - 1;
+  dirty = true;
+  composite();
+  updateUI();
+  document.getElementById('rigIntegrationStatus').textContent = 'Imported: ' + pLayer.name;
+  toast('Imported rig layer: ' + pLayer.name);
+}
+
+// Import ALL rig doc layers into paint
+function importAllRigAssets() {
+  if (!doc) { toast('Open a rig first'); return; }
+  const flat = RIG.allLayers(doc);
+  if (!flat.length) { toast('No layers in rig'); return; }
+  
+  for (const l of flat) {
+    if (l.role.type === 'ignore') continue;
+    const c = document.createElement('canvas');
+    c.width = l.w;
+    c.height = l.h;
+    const g = c.getContext('2d');
+    g.putImageData(new ImageData(new Uint8ClampedArray(l.rgba), l.w, l.h), 0, 0);
+    layers.push({ name: l.name || 'Rig Layer', canvas: c, visible: true, opacity: 1.0, rigLayerId: l.id, rigX: l.x || 0, rigY: l.y || 0 });
+  }
+  
+  if (layers.length > 0) {
+    active = layers.length - 1;
+    dirty = true;
+    composite();
+    updateUI();
+    document.getElementById('rigIntegrationStatus').textContent = 'Imported ' + layers.length + ' rig layers';
+    toast('Imported ' + layers.length + ' rig layers');
+  }
+}
+
+// Push paint composite back to rig
+function pushPaintToRig() {
+  if (!doc) { toast('Open a rig first'); return; }
+  const flat = RIG.allLayers(doc);
+  if (!flat.length) { toast('No layers in rig'); return; }
+  
+  // Composite paint canvas to image data
+  const g = paint_ctx;
+  const img = g.getImageData(0, 0, paint_cv.width, paint_cv.height);
+  
+  // Push to all rig layers that have paint counterparts, or create new ones
+  let pushed = 0;
+  for (const l of flat) {
+    const pLayer = layers.find(p => p.rigLayerId === l.id);
+    if (pLayer && pLayer.canvas) {
+      const pCtx = pLayer.canvas.getContext('2d');
+      const pImg = pCtx.getImageData(0, 0, pLayer.canvas.width, pLayer.canvas.height);
+      l.rgba = new Uint8Array(pImg.data);
+      l.w = pLayer.canvas.width;
+      l.h = pLayer.canvas.height;
+      pushed++;
+    }
+  }
+  
+  if (pushed > 0) {
+    draw(); // redraw rig canvas
+    document.getElementById('rigIntegrationStatus').textContent = 'Pushed ' + pushed + ' layers to rig';
+    toast('Pushed ' + pushed + ' layers to rig');
+  } else {
+    toast('No matching rig layers found');
+  }
+}
+
+// Show rig preview in paint preview tab
+function renderRigPreview() {
+  const preview = document.getElementById('paintPreview');
+  const pctx = preview.getContext('2d');
+  if (!doc || !RIG.GAME) {
+    pctx.fillStyle = '#1a1a2e';
+    pctx.fillRect(0, 0, preview.width, preview.height);
+    return;
+  }
+  
+  // Render rig composite onto preview
+  pctx.fillStyle = '#1a1a2e';
+  pctx.fillRect(0, 0, preview.width, preview.height);
+  
+  const flat = RIG.allLayers(doc);
+  const scale = Math.min(preview.width / doc.width, preview.height / doc.height);
+  pctx.save();
+  pctx.scale(scale, scale);
+  
+  for (const l of flat) {
+    if (l.hidden || l.role.type === 'ignore') continue;
+    const c = layerCanvas(l);
+    pctx.drawImage(c, l.x, l.y);
+  }
+  
+  pctx.restore();
+}
+
+// Wire up rig integration buttons
+function initRigIntegration() {
+  document.getElementById('paintBtnImportRig').onclick = () => importAllRigAssets();
+  document.getElementById('paintBtnPushRig').onclick = () => pushPaintToRig();
+  
+  const btnPreview = document.getElementById('paintBtnRigPreview');
+  btnPreview.onclick = () => {
+    document.getElementById('paintTabPreview').click();
+    renderRigPreview();
+  };
+  
+  // Re-render rig preview when switching to preview tab
+  const origTabClick = document.getElementById('paintTabPreview').onclick;
+  document.getElementById('paintTabPreview').onclick = (e) => {
+    renderRigPreview();
+    if (origTabClick) origTabClick(e);
+  };
+}
+
+// Call init after paint functions are defined
+initRigIntegration();
 
 </script>
 </body>
