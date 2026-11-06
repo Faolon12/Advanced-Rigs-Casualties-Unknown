@@ -21,10 +21,14 @@ function layerCanvas(l) {
 
 // ---------------------------------------------------------------- loading
 async function decodePng(file) {
-  const bmp = await createImageBitmap(file);
-  const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
-  const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
-  return { w: c.width, h: c.height, rgba: g.getImageData(0, 0, c.width, c.height).data };
+  try {
+    const bmp = await createImageBitmap(file);
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
+    return { w: c.width, h: c.height, rgba: g.getImageData(0, 0, c.width, c.height).data };
+  } catch (e) {
+    throw new Error(`Could not decode image "${file.name}": ${e.message}`);
+  }
 }
 
 const psd_or_rig = (files) => files.some(f => /\.ps[db]$/i.test(f.name) || /^rig\.json$/i.test(f.name));
@@ -85,13 +89,16 @@ async function openFiles(list) {
       toast('Opened ' + psd.name + ' — ' + doc.layers.length + ' layers' + (manualMode ? '. Manual setup: nothing assigned or moved. Set roles on the left (Ctrl/Shift-click several → Set role), then Move skeleton to line it up.' : ', parts matched automatically'), manualMode ? 9000 : 4000);
     } else if (json) {
       const rig = JSON.parse(await json.text());
-      const images = {}; for (const f of pngs) images[f.name] = await decodePng(f);
+      const images = {}; for (const f of pngs) {
+      try { images[f.name] = await decodePng(f); }
+      catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
+    }
       for (const f of files.filter(f => /\.(wav|ogg|mp3)$/i.test(f.name))) images[f.name] = { raw: new Uint8Array(await f.arrayBuffer()) };
       doc = RIG.docFromRig(rig, images);
       toast('Opened rig ' + doc.name);
     } else if (pngs.length) {
       const decoded = []; let W = 0, H = 0;
-      for (let i = 0; i < pngs.length; i++) { const d = await decodePng(pngs[i]); W = Math.max(W, d.w); H = Math.max(H, d.h); decoded.push({ name: pngs[i].name.replace(/\.png$/i, ''), x: 0, y: 0, w: d.w, h: d.h, rgba: d.rgba, order: i }); }
+      for (let i = 0; i < pngs.length; i++) { try { const d = await decodePng(pngs[i]); W = Math.max(W, d.w); H = Math.max(H, d.h); decoded.push({ name: pngs[i].name.replace(/\\.png$/i, ""), x: 0, y: 0, w: d.w, h: d.h, rgba: d.rgba, order: i }); } catch (e) { toast('Failed to load ' + pngs[i].name + ': ' + e.message, 6000); } }
       const sameSize = decoded.every(d => d.w === decoded[0].w && d.h === decoded[0].h) && decoded.length > 1;
       if (sameSize) { // full-canvas layers exported from an art program: positions are already right
         doc = RIG.newDoc('MyCharacter', W, H, decoded); RIG.autoAssign(doc);
@@ -106,7 +113,10 @@ async function openFiles(list) {
     if (hsFiles.length && doc) await addSprites(hsFiles);
     if (skin.length && !json) {
       if (!doc || (!psd && !pngs.length && !doc.layers.length)) doc = doc || RIG.newDoc('MySkin', 64, 64, []);
-      for (const f of skin) doc.spriteSwaps[f.name.replace(/\.png$/i, '')] = await decodePng(f);
+      for (const f of skin) {
+      try { doc.spriteSwaps[f.name.replace(/\.png$/i, '')] = await decodePng(f); }
+      catch (e) { toast('Failed to load skin ' + f.name + ': ' + e.message, 6000); }
+    }
       doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail');
       toast(skin.length + ' skin sprites added (sprite-replacer format). They show on the body; add a PSD for moving parts.', 5000);
     }
@@ -130,7 +140,7 @@ async function addImages(list) {
   if (art.length) {
     const imgs = []; let replaced = 0;
     for (const f of art) {
-      const d = await decodePng(f); const name = f.name.replace(/\.png$/i, '');
+      try { const d = await decodePng(f); const name = f.name.replace(/\.png$/i, ''); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
       const same = doc.layers.find(l => !l.cutSource && l.name === name);
       if (same) { replaceLayerImage(same, d); replaced++; continue; } // an edited layer coming back
       imgs.push({ name, w: d.w, h: d.h, rgba: d.rgba });
@@ -159,7 +169,8 @@ async function addSprites(list) {
   for (const f of files.filter(f => /\.png$/i.test(f.name))) {
     const base = f.name.replace(/\.png$/i, '');
     const m = base.match(/^health_([A-Za-z]+)_(outline|middle)$/);
-    const img = await decodePng(f);
+    let img; try { img = await decodePng(f); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
+    if (!img) continue;
     if (m && RIG.PARTS.includes(m[1])) {
       const e = doc.healthScreen[m[1]] = doc.healthScreen[m[1]] || { scale: 3 };
       e[m[2]] = img; hs++;
@@ -531,6 +542,13 @@ function layerRow(l, inF, flat) {
   sel.onclick = (e) => e.stopPropagation();
   sel.onchange = () => setRole(l, sel.value);
   row.append(th, right);
+  row.ondblclick = (e) => {
+    e.stopPropagation();
+    if (doc) {
+      switchMode('paint');
+      importRigLayer(l.id);
+    }
+  };
   row.onclick = (e) => {
     if (e.ctrlKey || e.metaKey) { if (selSet.has(l.id)) { selSet.delete(l.id); if (selLayer === l.id) selLayer = [...selSet][0] || null; } else { selSet.add(l.id); selLayer = l.id; } renderLayers(); renderInspector(); draw(); return; }
     if (e.shiftKey && selLayer && flat) { const a = flat.findIndex(o => o.id === selLayer), b = flat.findIndex(o => o.id === l.id); if (a >= 0 && b >= 0) { const [lo, hi] = a < b ? [a, b] : [b, a]; for (let k = lo; k <= hi; k++) selSet.add(flat[k].id); } renderLayers(); return; }
@@ -936,7 +954,7 @@ async function updateFromPsdFile(f) {
 }
 function pickReplace(l) {
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.png,image/png';
-  inp.onchange = async () => { const f = inp.files[0]; if (!f) return; replaceLayerImage(l, await decodePng(f)); refresh(); startTestIfOpen(); toast(l.name + ' updated'); };
+  inp.onchange = async () => { const f = inp.files[0]; if (!f) return; try { replaceLayerImage(l, await decodePng(f)); refresh(); startTestIfOpen(); toast(l.name + ' updated'); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); } };
   inp.click();
 }
 // extra art for a part: injury looks (every part, like the game's limbs), mouth / jaw states (head), eyes
@@ -1155,7 +1173,12 @@ function bindMoveBox(l) {
 function refresh() { syncPpu(); renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test' || tab === 'gear') startTest(); draw(); }
 
 // ---------------------------------------------------------------- canvas: rig view
-function resize() { const r = stage.getBoundingClientRect(); const d = window.devicePixelRatio || 1; cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); draw(); }
+function resize() {
+  const r = stage.getBoundingClientRect(); const d = window.devicePixelRatio || 1;
+  // while the rig panel is hidden (paint mode) the stage has no size: keep the last good canvas
+  if (r.width < 2 || r.height < 2) { if (!cv.width || cv.width < 2) { cv.width = 1; cv.height = 1; } draw(); return; }
+  cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); draw();
+}
 window.addEventListener('resize', resize);
 function fitView() {
   if (!doc) return; const d = window.devicePixelRatio || 1;
@@ -1581,7 +1604,7 @@ function bindGearTab() {
   box.querySelectorAll('[data-gdl]').forEach(b => b.onclick = () => { const sp = b.dataset.gdl, l = myGear(sp), im = l || RIG.GAME.images[sp]; if (!im) return;
     layerCanvas(im).toBlob(bl => { const a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = sp + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }); });
   box.querySelectorAll('[data-grep]').forEach(b => b.onclick = () => { const sp = b.dataset.grep; const inp = $('#gearFile');
-    inp.onchange = async () => { const f = inp.files[0]; inp.value = ''; if (!f) return; const d = await decodePng(f); const w = pieceOf(sp);
+    inp.onchange = async () => { const f = inp.files[0]; inp.value = ''; if (!f) return; try { const d = await decodePng(f); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); return; } const w = pieceOf(sp);
       const l = makeMyGear(g, w); if (!l) return; replaceLayerImage(l, d); thumbCache.clear(); imgCache.clear(); GS.piece = sp; renderInspector(); renderLayers(); startTest(); toast('Replaced. Drag it to fit if it moved.'); };
     inp.click(); });
 }
@@ -2353,7 +2376,7 @@ async function gifLoop(l) {
         addLoopFrames(l, frames, fps, 'gif');
       } else {
         const pngs = files.filter(f => /\.png$/i.test(f.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-        const frames = []; for (const f of pngs) { const d = await decodePng(f); frames.push({ w: d.w, h: d.h, rgba: d.rgba }); }
+        const frames = []; for (const f of pngs) { try { const d = await decodePng(f); frames.push({ w: d.w, h: d.h, rgba: d.rgba }); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); } }
         const fps = Math.max(1, Math.min(60, parseFloat(prompt(frames.length + ' frames. Frames per second?', '12')) || 12));
         addLoopFrames(l, frames, fps, 'gif');
       }
@@ -2573,5 +2596,75 @@ $('#eyePrev').innerHTML = '<option value="">Eyes: automatic</option>' + RIG.EYE_
 
 // ---------------------------------------------------------------- start
 resize(); renderInspector(); hint('Open your character to begin. New here? Click <b>How to</b>. <span style="opacity:.7">Fan-made, not affiliated with Casualties: Unknown. The Test tab is a simulation based on Orson\'s game code.</span>');
-window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); } };
+// ---- bridge API used by the sprite paint editor (it lives outside this closure)
+function bridgeLayers() { return doc ? doc.layers.filter(l => l.rgba && !l.hidden) : []; }
+function bridgeLayer(id) { return doc ? RIG.layer(doc, id) : null; }
+function bridgeSetPixels(id, rgba) {
+  const l = bridgeLayer(id); if (!l) return false;
+  if (!rgba || rgba.length !== l.w * l.h * 4) return false;
+  l.rgba = new Uint8Array(rgba);
+  imgCache.delete(l);              // the cached canvas is now stale
+  return true;
+}
+function bridgeSnapshot() {
+  if (!doc) return null;
+  const paintOpen = document.getElementById('panelPaint').classList.contains('active');
+  const app = document.getElementById('app');
+  const prev = app.style.visibility;
+  if (paintOpen) { app.style.visibility = 'hidden'; switchMode('rig'); }
+  try {
+    resize(); draw();
+    const c = document.createElement('canvas');
+    c.width = cv.width; c.height = cv.height;
+    c.getContext('2d').drawImage(cv, 0, 0);
+    return c;
+  } finally {
+    if (paintOpen) { switchMode('paint'); app.style.visibility = prev; }
+  }
+}
+
+// ---- animated preview: reuse the editor's Animate tab (the game's own clips)
+let animPrevTab = null;
+function bridgeAnimClips() { return (RIG.GAME && RIG.GAME.clips) ? Object.keys(RIG.GAME.clips).sort() : []; }
+function bridgeStartAnim(clip) {
+  if (!doc || !gameMode()) return false;
+  if (animPrevTab === null) animPrevTab = tab;
+  tabTo('anim');
+  if (clip && RIG.GAME.clips[clip]) AS.clip = clip;
+  AS.t = 0; AS.playing = true;
+  return true;
+}
+function bridgeSetAnimClip(clip) {
+  if (!RIG.GAME || !RIG.GAME.clips[clip]) return false;
+  AS.clip = clip; AS.t = 0; AS.playing = true;
+  return true;
+}
+function bridgeSetAnimPlaying(p) { AS.playing = !!p; return AS.playing; }
+function bridgeIsAnimPlaying() { return !!AS.playing; }
+function bridgeCopyCanvas() {
+  const c = document.createElement('canvas');
+  c.width = cv.width; c.height = cv.height;
+  c.getContext('2d').drawImage(cv, 0, 0);
+  return c;
+}
+function bridgeStopAnim() {
+  if (animPrevTab === null) return;
+  const t = animPrevTab; animPrevTab = null;
+  tabTo(t === 'anim' ? 'rig' : t);
+}
+// the part of the rig canvas the animated character occupies, in canvas pixels
+function bridgeAnimCrop() {
+  if (tab !== 'anim' || !test) return null;
+  const d = window.devicePixelRatio || 1;
+  const W = cv.width / d, H = cv.height / d;
+  const z = test.zoom || 44;
+  const groundY = Math.max(120, (H - 206) * 0.86);
+  const w = 4.8 * z, h = 5.0 * z;
+  return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
+}
+window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
+  layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, snapshot: bridgeSnapshot,
+  animClips: bridgeAnimClips, startAnim: bridgeStartAnim, stopAnim: bridgeStopAnim, setAnimClip: bridgeSetAnimClip, animCrop: bridgeAnimCrop,
+  setAnimPlaying: bridgeSetAnimPlaying, isAnimPlaying: bridgeIsAnimPlaying, copyCanvas: bridgeCopyCanvas,
+  redraw: () => { resize(); draw(); renderInspector(); }, toastMsg: (m, ms) => toast(m, ms) };
 })();

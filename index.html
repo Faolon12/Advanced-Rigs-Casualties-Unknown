@@ -29,9 +29,7 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 .layer.sel{background:#2b2236;box-shadow:inset 3px 0 0 var(--acc2)}
 .layer canvas{width:34px;height:34px;image-rendering:pixelated;background:#111;border-radius:4px}
 .layer .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.layer .nm small{color:var(--dim)}
-.layer select{width:100%;margin-top:2px;font-size:12px}
-.layer.hiddenL .nm{opacity:.55}
+.layer .nm small{color:var(--dim)}.layer.hiddenL .nm{opacity:.55}
 #center{display:grid;grid-template-rows:auto 1fr auto;min-height:0;min-width:0}
 .tabs{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap}
 .tabs .sep{width:1px;height:20px;background:var(--line);margin:0 4px}
@@ -44,17 +42,9 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 #dopeCv{flex:1;width:100%;min-height:0;cursor:pointer}
 #cv{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
 #hint{padding:6px 12px;color:var(--dim);border-top:1px solid var(--line);font-size:12px;min-height:30px}
-.sec{padding:0 12px 10px}
-.row{display:flex;gap:6px;align-items:center;margin:6px 0}
-.row label{flex:0 0 110px;color:var(--dim)}
-.row .v{width:46px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
-.row input[type=range]{flex:1}
-.seg{display:flex;gap:4px;align-items:center;padding:3px 0;border-bottom:1px solid #22242b}
-.seg span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec{padding:0 12px 10px}.row .v{width:46px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}.seg span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg button{padding:1px 6px}
-.muted{color:var(--dim)}
-.empty{padding:30px 16px;text-align:center;color:var(--dim)}
-#drop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;text-align:center;color:var(--dim);pointer-events:none}
+.muted{color:var(--dim)}#drop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;text-align:center;color:var(--dim);pointer-events:none}
 #drop b{color:var(--text);font-size:16px}
 #drop.over{background:rgba(143,91,255,.12);outline:2px dashed var(--acc2);outline-offset:-10px}
 .pill{display:inline-block;padding:1px 7px;border-radius:9px;background:#2a2d36;color:var(--dim);font-size:11px}
@@ -82,9 +72,7 @@ details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 [data-theme=casualties] body{font-family:"Cascadia Mono","Consolas","DejaVu Sans Mono",ui-monospace,monospace;font-size:12.5px;
   background:radial-gradient(1200px 600px at 50% -10%,rgba(63,174,106,.07),transparent 60%),var(--bg)}
 [data-theme=casualties] body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
-  background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}
-[data-theme=casualties] header{background:linear-gradient(180deg,#101318,#0b0d10);border-bottom:1px solid #2a1416;box-shadow:0 1px 0 rgba(195,39,47,.25),0 6px 18px rgba(0,0,0,.5)}
-[data-theme=casualties] header{gap:5px}
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}[data-theme=casualties] header{gap:5px}
 [data-theme=casualties] header button{font-size:10px;padding:4px 7px;letter-spacing:.04em}
 [data-theme=casualties] header #name{width:120px!important}
 [data-theme=casualties] header h1{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#e8efe6}
@@ -100,7 +88,7 @@ details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 [data-theme=casualties] select,[data-theme=casualties] input[type=text],[data-theme=casualties] input[type=number]{background:#090b0d;border:1px solid #243028;border-radius:2px;color:#cfe0cf}
 [data-theme=casualties] input[type=range]{accent-color:var(--acc)}
 [data-theme=casualties] input[type=checkbox]{accent-color:var(--acc2)}
-[data-theme=casualties] aside{background:linear-gradient(180deg,#0d0f12,#0a0c0e)}
+[data-theme=casualties] 
 [data-theme=casualties] h2{color:var(--acc2);letter-spacing:.18em;font-size:10.5px;border-bottom:1px dashed #1e2a22;padding-bottom:4px}
 [data-theme=casualties] h2::before{content:"// ";color:#3d5a46}
 [data-theme=casualties] .layer{border-bottom:1px solid #141a16}
@@ -125,11 +113,8 @@ details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 [data-theme=casualties] ::-webkit-scrollbar-track{background:#08090b}
 
 /* the side panels never scroll sideways: rows wrap, inputs shrink */
-aside.right{overflow-x:hidden}
-.sec{overflow-wrap:anywhere}
-.row{flex-wrap:wrap;min-width:0}
-.row label{flex:0 0 96px;min-width:0}
-.row > select,.row > input[type=text],.row > input[type=range]{min-width:0;flex:1 1 100px;max-width:100%}
+aside
+.sec{overflow-wrap:anywhere}.row > select,.row > input[type=text],.row > input[type=range]{min-width:0;flex:1 1 100px;max-width:100%}
 .row > button{flex:0 0 auto}
 .row input[type=number]{min-width:0;max-width:70px}
 .seg{min-width:0}
@@ -153,35 +138,126 @@ aside.right{overflow-x:hidden}
 .folderRow .fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .folderRow button{padding:1px 6px;font-size:11px}
 .folderRow.drop{outline:1px solid var(--acc2)}
+
+
+#modeSwitcher{display:flex;gap:6px;margin:0;border-bottom:none;padding-bottom:0}
+.modeBtn{padding:4px 10px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer;font-size:12px}
+.modeBtn.active{background:var(--acc);color:#fff;border-color:var(--acc)}
+#modePanels{display:flex;flex:1;min-height:0}
+.modePanel{display:none;flex:1;min-height:0}
+.modePanel.active{display:flex;flex-direction:column}
+#panelPaint main{flex:1;min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);gap:0}
+#panelPaint header{flex:none}#panelPaint #viewport{flex:1;min-height:0;min-width:0;overflow:auto}
+#panelRig main{flex:1;min-height:0;height:auto}
+body[data-mode=paint] #rigHeaderTools{display:none}
+#panelPaint aside{flex:none}
+#panelPaint .right{flex:none}
+
+:root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+button,select,input{font:inherit;color:var(--text)}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:#555a66}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button.primary:hover{filter:brightness(1.1)}
+button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+button.secondary{background:var(--panel2);border-color:var(--line);color:var(--dim)}
+button.secondary:hover{border-color:var(--text);color:var(--text)}
+button.danger{background:rgba(224,71,91,0.2);border-color:var(--acc);color:var(--acc)}
+button.danger:hover{background:var(--acc);color:#fff}
+select,input[type=text],input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+input[type=color]{border:none;background:none;width:26px;height:26px;cursor:pointer}
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;row-gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);z-index:10}
+header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
+header h1 span{color:var(--acc)}
+header .grow{flex:1}
+main{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);min-height:0;gap:0;overflow:hidden}
+aside{background:var(--panel);overflow:auto;min-height:0;min-width:0;border-right:1px solid var(--line)}
+aside.right{border-left:1px solid var(--line);border-right:none}
+#viewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#canvas-wrap{position:relative;display:inline-block;cursor:crosshair}
+canvas#cv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5)}
+canvas#preview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3)}
+.crosshair{position:absolute;top:50%;left:50%;width:20px;height:20px;transform:translate(-50%,-50%);pointer-events:none;border:1px dashed var(--acc2);border-radius:50%;display:none}
+#canvas-wrap.painting .crosshair{display:block}
+h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 12px 6px;padding-top:10px;border-top:1px solid var(--line)}
+.section{padding:0 12px 10px}
+.row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.row label{flex:0 0 90px;font-size:12px;color:var(--dim)}
+.row input[type=range]{flex:1}
+.toolbar{display:flex;gap:4px;flex-wrap:wrap}
+.toolbar button{flex:1;min-width:56px}
+.color-swatch{width:24px;height:24px;border:1px solid var(--line);border-radius:4px;cursor:pointer}
+.color-swatch.active{border-color:var(--text);box-shadow:0 0 0 2px var(--acc2)}
+.layer-item{display:flex;align-items:center;gap:6px;padding:4px 5px 4px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:#111216;min-width:0}
+.layer-item.active{border-color:var(--acc2);background:var(--panel2)}
+.layer-item .layer-vis{width:14px;height:14px;border:1px solid var(--line);border-radius:3px;flex:0 0 14px}
+.layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;min-width:0}
+.layer-actions{display:flex;gap:3px;align-items:center}
+.layer-actions button{padding:2px 6px;font-size:11px;min-width:0}
+.layer-menu-btn{padding:0 7px;font-size:15px;line-height:1.5;min-width:0;flex:none;background:none;border:none;color:var(--dim);cursor:pointer;border-radius:4px}
+.layer-menu-btn:hover{background:#22242c;color:var(--text)}
+#layerMenu{position:fixed;z-index:80;display:none;min-width:186px;padding:5px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 26px rgba(0,0,0,.55)}
+#layerMenu.open{display:block}
+#layerMenu .mi{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:5px;background:none;color:var(--text);font-size:12px;text-align:left;cursor:pointer}
+#layerMenu .mi:hover{background:#22242c}
+#layerMenu .sep{height:1px;margin:4px 2px;background:var(--line)}
+#layerMenu .op{display:flex;align-items:center;gap:6px;padding:4px 8px 3px;font-size:11px;color:var(--dim)}
+#layerMenu .op input[type=range]{flex:1;min-width:84px}
+#layerMenu .op span:last-child{min-width:32px;text-align:right;color:var(--text)}
+.btn-row{display:flex;gap:4px;margin-top:8px}
+.btn-row button{flex:1}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);color:var(--text);padding:8px 14px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;white-space:nowrap}
+.toast.show{opacity:1}
+.empty{padding:30px;text-align:center;color:var(--dim)}
+.empty b{color:var(--text)}
+.input-small{width:70px}
+
+
+#paintViewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#paintCanvasWrap{position:relative;display:flex;align-items:center;justify-content:center;padding:12px;min-width:100%;min-height:100%}
+canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);display:block;flex:none}
+canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block}
+#paintCoord{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none}
+
 .sug{display:flex;align-items:center;gap:4px;margin-top:3px;font-size:11px;color:#ffcf4a}
 .sug span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sug button{padding:0 6px;font-size:11px}
 .lyEnd{margin:4px 2px;padding:6px;border:1px dashed var(--line,#444);border-radius:6px;font-size:11px;opacity:.55;text-align:center}.lyEnd.drop{opacity:1;border-color:var(--acc2)}
 </style>
 </head>
-<body>
-<div id="app">
+<body data-mode="rig">
+<div id="app" role="application">
 <header>
   <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.3 Alpha</small></h1>
-  <button id="btnOpen" class="primary">Open…</button>
-  <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden>
-  <button id="btnSave" title="Save this character as a project file (.luna) to keep working on it later. Open… loads it back.">Save</button>
-  <input id="fileTpl" type="file" webkitdirectory directory multiple hidden>
-  <button id="btnBrowse" title="See every asset from your game's template and pick which ones to use">Browse template</button>
-  <button id="btnTemplate" title="Start from the game's own character (every body part, mouth and jaw state and eye, put together exactly like the game). Comes from YOUR game: the mod saves it to BepInEx\plugins\AdvancedRigs\GameTemplate the first time you play (or press F10).">Game template</button>
-  <span id="gameBadge" class="pill" style="cursor:pointer" title="The game template (sprites, wearables, animations) from your game. Click to load / reload it."></span>
-  <button id="btnSprites" title="Add PNGs to this character: body parts, tail pieces, wings, frames (placed by name) — or skins / gear / health screen art named like the game's sprites (F9 in game saves them)">Add PNG…</button>
-  <input id="fileSprites" type="file" multiple accept=".png,.json" hidden>
-  <button id="btnAddPsd" title="Add a PSD / PSB to this character: layers with the same names are updated, new ones are added (with no character open, it starts a new one)">Add PSD / PSB…</button>
-  <select id="dlMenu" title="Download every layer of this character, to repaint in Photoshop, Krita, GIMP, Photopea…" style="width:150px;flex:none"><option value="">⬇ Download all…</option><option value="psd">as one PSD</option><option value="psb">as one PSB (large)</option><option value="png">as PNGs (one per layer)</option></select>
-  <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
-  <label class="muted" title="Manual setup: opening or adding files assigns nothing and moves nothing. You give every layer its role on the left (select several + set role), move parts yourself and place bones by hand." style="display:flex;align-items:center;gap:4px;cursor:pointer"><input id="manualMode" type="checkbox">Manual</label>
-  <span class="muted">Name</span><input id="name" type="text" value="MyCharacter" style="width:150px">
+  <div id="modeSwitcher">
+    <button id="modeRig" class="modeBtn active" onclick="switchMode('rig')">Rig Editor</button>
+    <button id="modePaint" class="modeBtn" onclick="switchMode('paint')">Sprite Paint</button>
+  </div>
   <div class="grow"></div>
-  <button id="btnTheme" title="Switch the editor's look (Casualties lab terminal / plain)">Theme</button>
-  <button id="btnHelp">How to</button>
-  <button id="btnExport" class="primary">Export rig (.zip)</button>
+  <span id="rigHeaderTools">
+    <label><button id="btnOpen" class="primary" type="button">Open…</button></label>
+    <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden aria-label="Open character file (PSD/PSB/PNG/JSON/luna)">
+    <button id="btnSave" title="Save this character as a project file (.luna) to keep working on it later. Open… loads it back.">Save</button>
+    <input id="fileTpl" type="file" webkitdirectory directory multiple hidden>
+    <button id="btnBrowse" title="See every asset from your game's template and pick which ones to use">Browse template</button>
+    <button id="btnTemplate" title="Start from the game's own character (every body part, mouth and jaw state and eye, put together exactly like the game). Comes from YOUR game: the mod saves it to BepInEx\plugins\AdvancedRigs\GameTemplate the first time you play (or press F10).">Game template</button>
+    <span id="gameBadge" class="pill" style="cursor:pointer" title="The game template (sprites, wearables, animations) from your game. Click to load / reload it."></span>
+    <button id="btnSprites" title="Add PNGs to this character: body parts, tail pieces, wings, frames (placed by name) — or skins / gear / health screen art named like the game's sprites (F9 in game saves them)">Add PNG…</button>
+    <input id="fileSprites" type="file" multiple accept=".png,.json" hidden>
+    <button id="btnAddPsd" title="Add a PSD / PSB to this character: layers with the same names are updated, new ones are added (with no character open, it starts a new one)">Add PSD / PSB…</button>
+    <select id="dlMenu" title="Download every layer of this character, to repaint in Photoshop, Krita, GIMP, Photopea…" style="width:150px;flex:none"><option value="">⬇ Download all…</option><option value="psd">as one PSD</option><option value="psb">as one PSB (large)</option><option value="png">as PNGs (one per layer)</option></select>
+    <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
+    <span class="muted">Name</span><label for="name" style="margin-right:4px">Character name</label><input id="name" type="text" value="MyCharacter" style="width:150px" aria-label="Character name">
+    <button id="btnTheme" title="Switch the editor's look (Casualties lab terminal / plain)">Theme</button>
+    <button id="btnHelp">How to</button>
+    <button id="btnExport" class="primary">Export rig (.zip)</button>
+  </span>
 </header>
+<div id="modePanels">
+<div id="panelRig" class="modePanel active">
 <main>
   <aside class="left">
     <h2>Layers</h2>
@@ -244,8 +320,6 @@ aside.right{overflow-x:hidden}
   </section>
   <aside class="right"><div id="insp"></div></aside>
 </main>
-</div>
-<div id="toast"></div>
 <div id="tplBrowser" class="modal"><div class="box" style="max-width:920px;width:92vw">
   <div class="row" style="margin-top:0"><h2 style="margin:0;flex:1">Game template — your game's assets</h2><button id="tbClose">Close</button></div>
   <div class="muted" style="margin:4px 0 8px">Tick what you want, then start a new character from it or add it to the one that's open. Wearables become <i>your version</i> of that item (shown only while you wear it).</div>
@@ -282,7 +356,151 @@ aside.right{overflow-x:hidden}
   <p class="muted" style="margin-top:0">Luna Advanced Rig Systems is a fan-made mod and tool, not made by or affiliated with the developer of Casualties: Unknown. The <b>Test</b> tab is a <b>simulation</b>: its movement, states, eyes, mouth and injury rules are re-created from Casualties: Unknown's code by <b>Orson</b>, so you can preview a character outside the game. It is not the game and won't match it exactly. Nothing from the game is included in the editor: the game template (sprites, wearables, animations) is made by the mod from your own copy of the game. Casualties: Unknown, its code and its art belong to Orson.</p>
   <div style="text-align:right;margin-top:10px"><button id="helpClose" class="primary">Got it</button></div>
 </div></div>
+
+
+
+</div>
+<div id="panelPaint" class="modePanel">
+<header>
+<h1>Sprite Paint Editor <span>Luna Advanced Rig Systems</span></h1>
+<div class="grow"></div>
+<button id="paintBtnNew" title="New sprite">New</button>
+<button id="paintBtnOpen" title="Load PNG">Open…</button>
+<input id="paintFileOpen" type="file" accept=".png" hidden>
+<button id="paintBtnSave" class="primary" title="Export PNG">Save PNG</button>
+<button id="paintBtnUndo" title="Undo (Ctrl+Z)">↶ Undo</button>
+<button id="paintBtnRedo" title="Redo (Ctrl+Y)">↷ Redo</button>
+</header>
+
+<main>
+<aside>
+<h2>Tools</h2>
+<div class="section">
+<div class="row"><label>Tool</label>
+<select id="paintToolSel">
+<option value="pencil">Pencil</option>
+<option value="eraser">Eraser</option>
+<option value="fill">Fill</option>
+<option value="picker">Picker</option>
+</select></div>
+<div class="row"><label>Size</label>
+<input id="paintBrushSize" type="range" min="1" max="32" value="4">
+<span id="paintBrushSizeVal">4px</span></div>
+<div class="row"><label>Color</label>
+<input id="paintColorPick" type="color" value="#e0475b">
+<div style="margin-top:4px;display:flex;gap:4px" id="paintQuickColors"></div>
+</div>
+<div class="toolbar" style="margin-top:8px">
+<button id="paintToolZoomIn" title="Zoom in">+</button>
+<button id="paintToolZoomOut" title="Zoom out">-</button>
+<button id="paintToolFit" title="Fit to window">Fit</button>
+</div>
+</div>
+
+<h2>Layers</h2>
+<div class="tabs">
+<button id="paintTabPaint" class="on">Paint</button>
+<button id="paintTabPreview">Preview</button>
+<button id="paintTabExport">Export</button>
+</div>
+<div id="paintLayerView">
+<div class="section" id="paintLayerList">
+<div class="empty">No layers<br>Add one to start painting</div>
+</div>
+<div class="btn-row">
+<button id="paintBtnAddLayer" class="primary">+ Layer</button>
+<button id="paintBtnDelLayer" class="danger">- Delete</button>
+</div>
+<h2>Rig &harr; Paint</h2>
+<div class="section">
+<div class="btn-row" style="flex-direction:column;margin-top:0">
+<button id="paintBtnImportRig" class="primary" title="Import every layer of the open rig as paint layers">Import rig assets</button>
+<button id="paintBtnPushRig" class="danger" title="Write the painted pixels back into the rig layers">Push to rig</button>
+<button id="paintBtnRigPreview" title="Show the rig on the Preview tab">Rig preview</button>
+</div>
+<div id="rigIntegrationStatus" style="font-size:10px;color:var(--dim);margin-top:4px;line-height:1.3"></div>
+<div style="font-size:10px;color:var(--dim);margin-top:4px">Double-click a rig layer to open it here.</div>
+</div>
+</aside>
+
+<div id="viewport">
+<div id="paintCanvasWrap">
+<canvas id="paintCv" width="256" height="256"></canvas>
+<div class="crosshair" id="crosshair"></div>
+</div>
+<div class="coord" id="paintCoord">0, 0</div>
+</div>
+
+<aside class="right">
+<h2>Preview</h2>
+<div class="section">
+<div id="previewWrap" style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
+<canvas id="paintPreview" width="256" height="256" style="max-width:100%;max-height:100%"></canvas>
+</div>
+<div class="row" style="margin-top:8px"><label>Scale</label>
+<input id="paintPreviewScale" type="range" min="1" max="8" value="2">
+<span id="paintPreviewScaleVal">2x</span></div>
+<div class="row" style="margin-top:8px"><label>Rig anim</label>
+<select id="paintAnimClip" style="flex:1;min-width:0;max-width:160px" title="Pick the game animation to preview on the whole rig"></select></div>
+<div class="btn-row">
+<button id="paintBtnAnimPlay" title="Play / pause the animation">⏸ Pause</button>
+<button id="paintBtnAnimPrev" title="Previous animation">◀</button>
+<button id="paintBtnAnimNext" title="Next animation">▶</button>
+</div>
+</div>
+
+<h2>Effects</h2>
+<div class="section">
+<div class="row"><label>Blend</label>
+<select id="paintBlendMode">
+<option value="normal">Normal</option>
+<option value="multiply">Multiply</option>
+<option value="screen">Screen</option>
+<option value="overlay">Overlay</option>
+</select></div>
+<div class="row"><label>Opacity</label>
+<input id="paintLayerOpacity" type="range" min="0" max="100" value="100">
+<span id="paintLayerOpacityVal">100%</span></div>
+</div>
+
+<h2>Info</h2>
+<div class="section">
+<div class="row"><label>Size</label><span id="paintInfoSize">256×256</span></div>
+<div class="row"><label>Layers</label><span id="paintInfoLayers">0</span></div>
+<div class="row"><label>Zoom</label><span id="paintInfoZoom">100%</span></div>
+</div>
+
+<div class="btn-row" style="margin-top:12px">
+<button id="paintBtnFlipH" title="Flip horizontal">Flip H</button>
+<button id="paintBtnFlipV" title="Flip vertical">Flip V</button>
+<button id="paintBtnRotate" title="Rotate 90°">Rotate</button>
+</div>
+</aside>
+</main>
+</div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
 <script>
+window.switchMode = function(mode) {
+  document.body.dataset.mode = mode === 'paint' ? 'paint' : 'rig';
+  if (mode === 'paint') {
+    document.getElementById('modePaint').classList.add('active');
+    document.getElementById('modeRig').classList.remove('active');
+    document.getElementById('panelPaint').classList.add('active');
+    document.getElementById('panelRig').classList.remove('active');
+    if (window.__paintModeShown) window.__paintModeShown();
+  } else {
+    if (window.__stopAnimPreview) window.__stopAnimPreview();
+    document.getElementById('modeRig').classList.add('active');
+    document.getElementById('modePaint').classList.remove('active');
+    document.getElementById('panelRig').classList.add('active');
+    document.getElementById('panelPaint').classList.remove('active');
+    // the rig canvas cannot be sized while its panel is hidden, so re-render now that it is visible
+    if (window.__rigEditor) window.__rigEditor.redraw();
+  }
+}
+
 // ===================== Advanced Rigs editor: core (no DOM) =====================
 // Everything here must match the mod (RigDefinition.cs / RigInstance.cs).
 'use strict';
@@ -435,13 +653,14 @@ RIG.J = (doc, part) => { const r = RIG.restPx(part); return { x: +(r.x + doc.ali
 // ===================== PSD / PSB reader =====================
 RIG.readPSD = function (buf) {
   const dv = new DataView(buf); let p = 0;
-  const u8 = () => dv.getUint8(p++);
-  const u16 = () => { const v = dv.getUint16(p); p += 2; return v; };
-  const i16 = () => { const v = dv.getInt16(p); p += 2; return v; };
-  const u32 = () => { const v = dv.getUint32(p); p += 4; return v; };
-  const i32 = () => { const v = dv.getInt32(p); p += 4; return v; };
-  const u64 = () => { const hi = u32(), lo = u32(); return hi * 4294967296 + lo; };
-  const str = (n) => { let s = ''; for (let i = 0; i < n; i++) s += String.fromCharCode(u8()); return s; };
+  const need = (n) => { if (p + n > dv.byteLength) throw new Error('PSD file is truncated or corrupt (ran out of data at byte ' + p + ')'); };
+  const u8 = () => { need(1); return dv.getUint8(p++); };
+  const u16 = () => { need(2); const v = dv.getUint16(p); p += 2; return v; };
+  const i16 = () => { need(2); const v = dv.getInt16(p); p += 2; return v; };
+  const u32 = () => { need(4); const v = dv.getUint32(p); p += 4; return v; };
+  const i32 = () => { need(4); const v = dv.getInt32(p); p += 4; return v; };
+  const u64 = () => { need(8); const hi = u32(), lo = u32(); return hi * 4294967296 + lo; };
+  const str = (n) => { need(n); let s = ''; for (let i = 0; i < n; i++) s += String.fromCharCode(u8()); return s; };
   if (str(4) !== '8BPS') throw new Error('Not a PSD/PSB file');
   const ver = u16(); const big = ver === 2; p += 6;
   const channels = u16(), H = u32(), W = u32(), depth = u16(), mode = u16();
@@ -2051,8 +2270,7 @@ if (typeof module !== 'undefined') module.exports = RIG;
 RIG.HS_LAYOUT = [{"part": "Head", "outline": "headoutline", "middle": "headMiddle", "x": 0.0, "y": 238.5, "w": 138, "h": 135, "mirror": false}, {"part": "UpTorso", "outline": "thoraxOutline", "middle": "thoraxMiddle", "x": 0, "y": 124.5, "w": 114, "h": 99, "mirror": false}, {"part": "DownTorso", "outline": "abdomenOutline", "middle": "abdomenMiddle", "x": 0, "y": 30, "w": 120, "h": 90, "mirror": false}, {"part": "UpArmF", "outline": "armOutline", "middle": "armMiddle", "x": -96.0, "y": 139.5, "w": 108, "h": 63, "mirror": false}, {"part": "DownArmF", "outline": "forearmOutline", "middle": "forearmMiddle", "x": -201.0, "y": 130.5, "w": 102, "h": 51, "mirror": false}, {"part": "HandF", "outline": "handOutline", "middle": "handMiddle", "x": -292.5, "y": 130.5, "w": 87, "h": 81, "mirror": false}, {"part": "UpArmB", "outline": "armOutline", "middle": "armMiddle", "x": 96.0, "y": 139.5, "w": 108, "h": 63, "mirror": true}, {"part": "DownArmB", "outline": "forearmOutline", "middle": "forearmMiddle", "x": 201.0, "y": 130.5, "w": 102, "h": 51, "mirror": true}, {"part": "HandB", "outline": "handOutline", "middle": "handMiddle", "x": 292.5, "y": 130.5, "w": 87, "h": 81, "mirror": true}, {"part": "ThighF", "outline": "thighOutline", "middle": "thighMiddle", "x": -46.5, "y": -66.0, "w": 93, "h": 132, "mirror": false}, {"part": "CrusF", "outline": "crusOutline", "middle": "crusMiddle", "x": -48.0, "y": -160.47, "w": 72, "h": 75, "mirror": false}, {"part": "FootF", "outline": "footOutline", "middle": "footMiddle", "x": -48.0, "y": -233.97, "w": 72, "h": 96, "mirror": false}, {"part": "ThighB", "outline": "thighOutline", "middle": "thighMiddle", "x": 46.5, "y": -66.0, "w": 93, "h": 132, "mirror": true}, {"part": "CrusB", "outline": "crusOutline", "middle": "crusMiddle", "x": 48.2, "y": -160.47, "w": 72, "h": 75, "mirror": true}, {"part": "FootB", "outline": "footOutline", "middle": "footMiddle", "x": 48.2, "y": -233.97, "w": 72, "h": 96, "mirror": true}];
 RIG.HS_IMAGES = {};
 
-</script>
-<script>
+
 'use strict';
 (function () {
 const $ = (s) => document.querySelector(s);
@@ -2076,10 +2294,14 @@ function layerCanvas(l) {
 
 // ---------------------------------------------------------------- loading
 async function decodePng(file) {
-  const bmp = await createImageBitmap(file);
-  const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
-  const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
-  return { w: c.width, h: c.height, rgba: g.getImageData(0, 0, c.width, c.height).data };
+  try {
+    const bmp = await createImageBitmap(file);
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
+    return { w: c.width, h: c.height, rgba: g.getImageData(0, 0, c.width, c.height).data };
+  } catch (e) {
+    throw new Error(`Could not decode image "${file.name}": ${e.message}`);
+  }
 }
 
 const psd_or_rig = (files) => files.some(f => /\.ps[db]$/i.test(f.name) || /^rig\.json$/i.test(f.name));
@@ -2140,13 +2362,16 @@ async function openFiles(list) {
       toast('Opened ' + psd.name + ' — ' + doc.layers.length + ' layers' + (manualMode ? '. Manual setup: nothing assigned or moved. Set roles on the left (Ctrl/Shift-click several → Set role), then Move skeleton to line it up.' : ', parts matched automatically'), manualMode ? 9000 : 4000);
     } else if (json) {
       const rig = JSON.parse(await json.text());
-      const images = {}; for (const f of pngs) images[f.name] = await decodePng(f);
+      const images = {}; for (const f of pngs) {
+      try { images[f.name] = await decodePng(f); }
+      catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
+    }
       for (const f of files.filter(f => /\.(wav|ogg|mp3)$/i.test(f.name))) images[f.name] = { raw: new Uint8Array(await f.arrayBuffer()) };
       doc = RIG.docFromRig(rig, images);
       toast('Opened rig ' + doc.name);
     } else if (pngs.length) {
       const decoded = []; let W = 0, H = 0;
-      for (let i = 0; i < pngs.length; i++) { const d = await decodePng(pngs[i]); W = Math.max(W, d.w); H = Math.max(H, d.h); decoded.push({ name: pngs[i].name.replace(/\.png$/i, ''), x: 0, y: 0, w: d.w, h: d.h, rgba: d.rgba, order: i }); }
+      for (let i = 0; i < pngs.length; i++) { try { const d = await decodePng(pngs[i]); W = Math.max(W, d.w); H = Math.max(H, d.h); decoded.push({ name: pngs[i].name.replace(/\\.png$/i, ""), x: 0, y: 0, w: d.w, h: d.h, rgba: d.rgba, order: i }); } catch (e) { toast('Failed to load ' + pngs[i].name + ': ' + e.message, 6000); } }
       const sameSize = decoded.every(d => d.w === decoded[0].w && d.h === decoded[0].h) && decoded.length > 1;
       if (sameSize) { // full-canvas layers exported from an art program: positions are already right
         doc = RIG.newDoc('MyCharacter', W, H, decoded); RIG.autoAssign(doc);
@@ -2161,7 +2386,10 @@ async function openFiles(list) {
     if (hsFiles.length && doc) await addSprites(hsFiles);
     if (skin.length && !json) {
       if (!doc || (!psd && !pngs.length && !doc.layers.length)) doc = doc || RIG.newDoc('MySkin', 64, 64, []);
-      for (const f of skin) doc.spriteSwaps[f.name.replace(/\.png$/i, '')] = await decodePng(f);
+      for (const f of skin) {
+      try { doc.spriteSwaps[f.name.replace(/\.png$/i, '')] = await decodePng(f); }
+      catch (e) { toast('Failed to load skin ' + f.name + ': ' + e.message, 6000); }
+    }
       doc.hideVanillaTail = doc.chains.some(c => c.attachTo === 'tail');
       toast(skin.length + ' skin sprites added (sprite-replacer format). They show on the body; add a PSD for moving parts.', 5000);
     }
@@ -2185,7 +2413,7 @@ async function addImages(list) {
   if (art.length) {
     const imgs = []; let replaced = 0;
     for (const f of art) {
-      const d = await decodePng(f); const name = f.name.replace(/\.png$/i, '');
+      try { const d = await decodePng(f); const name = f.name.replace(/\.png$/i, ''); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
       const same = doc.layers.find(l => !l.cutSource && l.name === name);
       if (same) { replaceLayerImage(same, d); replaced++; continue; } // an edited layer coming back
       imgs.push({ name, w: d.w, h: d.h, rgba: d.rgba });
@@ -2214,7 +2442,8 @@ async function addSprites(list) {
   for (const f of files.filter(f => /\.png$/i.test(f.name))) {
     const base = f.name.replace(/\.png$/i, '');
     const m = base.match(/^health_([A-Za-z]+)_(outline|middle)$/);
-    const img = await decodePng(f);
+    let img; try { img = await decodePng(f); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); }
+    if (!img) continue;
     if (m && RIG.PARTS.includes(m[1])) {
       const e = doc.healthScreen[m[1]] = doc.healthScreen[m[1]] || { scale: 3 };
       e[m[2]] = img; hs++;
@@ -2586,6 +2815,13 @@ function layerRow(l, inF, flat) {
   sel.onclick = (e) => e.stopPropagation();
   sel.onchange = () => setRole(l, sel.value);
   row.append(th, right);
+  row.ondblclick = (e) => {
+    e.stopPropagation();
+    if (doc) {
+      switchMode('paint');
+      importRigLayer(l.id);
+    }
+  };
   row.onclick = (e) => {
     if (e.ctrlKey || e.metaKey) { if (selSet.has(l.id)) { selSet.delete(l.id); if (selLayer === l.id) selLayer = [...selSet][0] || null; } else { selSet.add(l.id); selLayer = l.id; } renderLayers(); renderInspector(); draw(); return; }
     if (e.shiftKey && selLayer && flat) { const a = flat.findIndex(o => o.id === selLayer), b = flat.findIndex(o => o.id === l.id); if (a >= 0 && b >= 0) { const [lo, hi] = a < b ? [a, b] : [b, a]; for (let k = lo; k <= hi; k++) selSet.add(flat[k].id); } renderLayers(); return; }
@@ -2991,7 +3227,7 @@ async function updateFromPsdFile(f) {
 }
 function pickReplace(l) {
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.png,image/png';
-  inp.onchange = async () => { const f = inp.files[0]; if (!f) return; replaceLayerImage(l, await decodePng(f)); refresh(); startTestIfOpen(); toast(l.name + ' updated'); };
+  inp.onchange = async () => { const f = inp.files[0]; if (!f) return; try { replaceLayerImage(l, await decodePng(f)); refresh(); startTestIfOpen(); toast(l.name + ' updated'); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); } };
   inp.click();
 }
 // extra art for a part: injury looks (every part, like the game's limbs), mouth / jaw states (head), eyes
@@ -3210,7 +3446,12 @@ function bindMoveBox(l) {
 function refresh() { syncPpu(); renderLayers(); renderInspector(); updateHeadStates(); if (tab === 'test' || tab === 'gear') startTest(); draw(); }
 
 // ---------------------------------------------------------------- canvas: rig view
-function resize() { const r = stage.getBoundingClientRect(); const d = window.devicePixelRatio || 1; cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); draw(); }
+function resize() {
+  const r = stage.getBoundingClientRect(); const d = window.devicePixelRatio || 1;
+  // while the rig panel is hidden (paint mode) the stage has no size: keep the last good canvas
+  if (r.width < 2 || r.height < 2) { if (!cv.width || cv.width < 2) { cv.width = 1; cv.height = 1; } draw(); return; }
+  cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); draw();
+}
 window.addEventListener('resize', resize);
 function fitView() {
   if (!doc) return; const d = window.devicePixelRatio || 1;
@@ -3636,7 +3877,7 @@ function bindGearTab() {
   box.querySelectorAll('[data-gdl]').forEach(b => b.onclick = () => { const sp = b.dataset.gdl, l = myGear(sp), im = l || RIG.GAME.images[sp]; if (!im) return;
     layerCanvas(im).toBlob(bl => { const a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = sp + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }); });
   box.querySelectorAll('[data-grep]').forEach(b => b.onclick = () => { const sp = b.dataset.grep; const inp = $('#gearFile');
-    inp.onchange = async () => { const f = inp.files[0]; inp.value = ''; if (!f) return; const d = await decodePng(f); const w = pieceOf(sp);
+    inp.onchange = async () => { const f = inp.files[0]; inp.value = ''; if (!f) return; try { const d = await decodePng(f); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); return; } const w = pieceOf(sp);
       const l = makeMyGear(g, w); if (!l) return; replaceLayerImage(l, d); thumbCache.clear(); imgCache.clear(); GS.piece = sp; renderInspector(); renderLayers(); startTest(); toast('Replaced. Drag it to fit if it moved.'); };
     inp.click(); });
 }
@@ -4408,7 +4649,7 @@ async function gifLoop(l) {
         addLoopFrames(l, frames, fps, 'gif');
       } else {
         const pngs = files.filter(f => /\.png$/i.test(f.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-        const frames = []; for (const f of pngs) { const d = await decodePng(f); frames.push({ w: d.w, h: d.h, rgba: d.rgba }); }
+        const frames = []; for (const f of pngs) { try { const d = await decodePng(f); frames.push({ w: d.w, h: d.h, rgba: d.rgba }); } catch (e) { toast('Failed to load ' + f.name + ': ' + e.message, 6000); } }
         const fps = Math.max(1, Math.min(60, parseFloat(prompt(frames.length + ' frames. Frames per second?', '12')) || 12));
         addLoopFrames(l, frames, fps, 'gif');
       }
@@ -4628,8 +4869,1064 @@ $('#eyePrev').innerHTML = '<option value="">Eyes: automatic</option>' + RIG.EYE_
 
 // ---------------------------------------------------------------- start
 resize(); renderInspector(); hint('Open your character to begin. New here? Click <b>How to</b>. <span style="opacity:.7">Fan-made, not affiliated with Casualties: Unknown. The Test tab is a simulation based on Orson\'s game code.</span>');
-window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); } };
+// ---- bridge API used by the sprite paint editor (it lives outside this closure)
+function bridgeLayers() { return doc ? doc.layers.filter(l => l.rgba && !l.hidden) : []; }
+function bridgeLayer(id) { return doc ? RIG.layer(doc, id) : null; }
+function bridgeSetPixels(id, rgba) {
+  const l = bridgeLayer(id); if (!l) return false;
+  if (!rgba || rgba.length !== l.w * l.h * 4) return false;
+  l.rgba = new Uint8Array(rgba);
+  imgCache.delete(l);              // the cached canvas is now stale
+  return true;
+}
+function bridgeSnapshot() {
+  if (!doc) return null;
+  const paintOpen = document.getElementById('panelPaint').classList.contains('active');
+  const app = document.getElementById('app');
+  const prev = app.style.visibility;
+  if (paintOpen) { app.style.visibility = 'hidden'; switchMode('rig'); }
+  try {
+    resize(); draw();
+    const c = document.createElement('canvas');
+    c.width = cv.width; c.height = cv.height;
+    c.getContext('2d').drawImage(cv, 0, 0);
+    return c;
+  } finally {
+    if (paintOpen) { switchMode('paint'); app.style.visibility = prev; }
+  }
+}
+
+// ---- animated preview: reuse the editor's Animate tab (the game's own clips)
+let animPrevTab = null;
+function bridgeAnimClips() { return (RIG.GAME && RIG.GAME.clips) ? Object.keys(RIG.GAME.clips).sort() : []; }
+function bridgeStartAnim(clip) {
+  if (!doc || !gameMode()) return false;
+  if (animPrevTab === null) animPrevTab = tab;
+  tabTo('anim');
+  if (clip && RIG.GAME.clips[clip]) AS.clip = clip;
+  AS.t = 0; AS.playing = true;
+  return true;
+}
+function bridgeSetAnimClip(clip) {
+  if (!RIG.GAME || !RIG.GAME.clips[clip]) return false;
+  AS.clip = clip; AS.t = 0; AS.playing = true;
+  return true;
+}
+function bridgeSetAnimPlaying(p) { AS.playing = !!p; return AS.playing; }
+function bridgeIsAnimPlaying() { return !!AS.playing; }
+function bridgeCopyCanvas() {
+  const c = document.createElement('canvas');
+  c.width = cv.width; c.height = cv.height;
+  c.getContext('2d').drawImage(cv, 0, 0);
+  return c;
+}
+function bridgeStopAnim() {
+  if (animPrevTab === null) return;
+  const t = animPrevTab; animPrevTab = null;
+  tabTo(t === 'anim' ? 'rig' : t);
+}
+// the part of the rig canvas the animated character occupies, in canvas pixels
+function bridgeAnimCrop() {
+  if (tab !== 'anim' || !test) return null;
+  const d = window.devicePixelRatio || 1;
+  const W = cv.width / d, H = cv.height / d;
+  const z = test.zoom || 44;
+  const groundY = Math.max(120, (H - 206) * 0.86);
+  const w = 4.8 * z, h = 5.0 * z;
+  return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
+}
+window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
+  layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, snapshot: bridgeSnapshot,
+  animClips: bridgeAnimClips, startAnim: bridgeStartAnim, stopAnim: bridgeStopAnim, setAnimClip: bridgeSetAnimClip, animCrop: bridgeAnimCrop,
+  setAnimPlaying: bridgeSetAnimPlaying, isAnimPlaying: bridgeIsAnimPlaying, copyCanvas: bridgeCopyCanvas,
+  redraw: () => { resize(); draw(); renderInspector(); }, toastMsg: (m, ms) => toast(m, ms) };
 })();
+
+
+/* ===== Sprite Paint Editor script ===== */
+
+/*============================================================
+  Sprite Paint Editor — self-contained
+  Tools: pencil, eraser, fill, color picker
+  Layers: add/delete/select, rename, duplicate, visibility, opacity, move
+  Preview: live composite of all layers with effects
+  Export: PNG download
+  Tabs: Paint / Preview / Export
+  Context: state preserved across mode switches
+============================================================*/
+
+const paint_cv = document.getElementById('paintCv');
+const paint_ctx = paint_cv.getContext('2d', {willReadFrequently:true});
+const paint_preview = document.getElementById('paintPreview');
+const paint_pctx = paint_preview.getContext('2d', {willReadFrequently:true});
+const paint_wrap = document.getElementById('paintCanvasWrap');
+const paint_coord = document.getElementById('paintCoord');
+
+let layers = [];
+let active = null;
+let zoom = 1;
+let pan = {x:0, y:0};          // kept for saved contexts; rendering is 1:1 and CSS handles zoom
+let autoFit = true;            // canvas follows the browser size until the user zooms
+let isDown = false;
+let lastPos = null;
+let tool = 'pencil';
+let brushSize = 4;
+let color = '#e0475b';
+let dirty = false;
+let viewTab = 'paint'; // 'paint' | 'preview' | 'export'
+let previewMode = 'paint'; // what the Preview tab shows: 'paint' | 'rig'
+let rigShot = null;        // last rendered rig canvas, for the rig preview
+
+const paint_quickColors = ['#e0475b','#8f5bff','#4cc38a','#e9b44c','#ffffff','#000000','#33363f','#1d1f25'];
+const qc = document.getElementById('paintQuickColors');
+paint_quickColors.forEach(c => {
+  const s = document.createElement('div');
+  s.className = 'color-swatch';
+  s.style.background = c;
+  s.title = c;
+  s.onclick = () => { setColor(c); };
+  qc.appendChild(s);
+});
+
+// Context preservation across mode switches
+const paintContext = {
+  saved: false,
+  layers: null,
+  active: null,
+  zoom: null,
+  pan: null,
+  tool: null,
+  brushSize: null,
+  color: null,
+  viewTab: null
+};
+
+function savePaintContext(){
+  // canvases can't survive JSON: keep the live objects, they are never torn down
+  paintContext.layers = layers;
+  paintContext.active = active;
+  paintContext.zoom = zoom;
+  paintContext.pan = {x:pan.x, y:pan.y};
+  paintContext.tool = tool;
+  paintContext.brushSize = brushSize;
+  paintContext.color = color;
+  paintContext.viewTab = viewTab;
+  paintContext.saved = true;
+}
+
+function restorePaintContext(){
+  if(!paintContext.saved) return;
+  if(paintContext.layers) layers = paintContext.layers;
+  active = paintContext.active;
+  zoom = paintContext.zoom;
+  pan = {x:paintContext.pan.x, y:paintContext.pan.y};
+  tool = paintContext.tool;
+  brushSize = paintContext.brushSize;
+  color = paintContext.color;
+  viewTab = paintContext.viewTab;
+  document.getElementById('paintToolSel').value = tool;
+  document.getElementById('paintBrushSize').value = brushSize;
+  document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
+  document.getElementById('paintColorPick').value = color;
+  switchPaintTab(viewTab);
+  dirty = true;
+  updateUI(); composite();
+}
+
+function toast(msg, ms=2600){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(()=>t.classList.remove('show'), ms);
+}
+
+function newLayerCanvas(w,h){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.fillStyle = '#00000000';
+  g.fillRect(0,0,w,h);
+  return c;
+}
+
+function composite(){
+  paint_ctx.setTransform(1, 0, 0, 1, 0, 0);
+  paint_ctx.globalAlpha = 1;
+  paint_ctx.fillStyle = '#0a0a0f';
+  paint_ctx.fillRect(0, 0, paint_cv.width, paint_cv.height);
+  layers.forEach(l=>{
+    paint_ctx.globalAlpha = l.opacity;
+    if(l.visible) paint_ctx.drawImage(l.canvas, 0, 0);
+  });
+  paint_ctx.globalAlpha = 1;
+  updatePreview();
+}
+
+function updatePreview(){
+  if (previewMode === 'rig' && (animPreviewOn || lastAnimShot)) { drawAnimPreview(lastAnimShot, lastAnimCrop); return; }
+  const scale = parseInt(document.getElementById('paintPreviewScale').value);
+  document.getElementById('paintPreviewScaleVal').textContent = scale+'x';
+  paint_pctx.fillStyle = '#0a0a0f';
+  paint_pctx.fillRect(0,0,paint_preview.width,paint_preview.height);
+  paint_pctx.save();
+  const pw = paint_preview.width, ph = paint_preview.height;
+  const lw = paint_cv.width, lh = paint_cv.height;
+  const fit = Math.min(pw/lw, ph/lh);
+  paint_pctx.translate((pw - lw*fit)/2, (ph - lh*fit)/2);
+  paint_pctx.scale(fit*scale, fit*scale);
+  layers.forEach(l=>{
+    paint_pctx.globalAlpha = l.opacity;
+    if(l.visible) paint_pctx.drawImage(l.canvas, 0, 0);
+  });
+  paint_pctx.globalAlpha = 1;
+  paint_pctx.restore();
+  if (previewMode === 'rig') drawRigShot(paint_pctx, paint_preview);
+}
+
+function drawRigShot(g, el){
+  g.fillStyle = '#0a0a0f';
+  g.fillRect(0, 0, el.width, el.height);
+  if (!rigShot) return;
+  const fit = Math.min(el.width / rigShot.width, el.height / rigShot.height);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(rigShot, (el.width - rigShot.width * fit) / 2, (el.height - rigShot.height * fit) / 2, rigShot.width * fit, rigShot.height * fit);
+}
+
+// ---------------------------------------------------------------- view fitting
+// The canvas bitmap is always the sprite's real size; CSS scales it uniformly so
+// it fills the browser instead of sitting in a fixed rectangle.
+function fitZoom(){
+  const vp = document.getElementById('viewport');
+  const r = vp ? vp.getBoundingClientRect() : { width: 0, height: 0 };
+  if (r.width < 2 || r.height < 2) return zoom;
+  const availW = Math.max(64, r.width - 32);
+  const availH = Math.max(64, r.height - 32);
+  return Math.max(0.1, Math.min(availW / paint_cv.width, availH / paint_cv.height, 32));
+}
+
+function syncCanvasScale(){
+  if (autoFit) zoom = fitZoom();
+  paint_cv.style.width = Math.max(1, Math.round(paint_cv.width * zoom)) + 'px';
+  paint_cv.style.height = Math.max(1, Math.round(paint_cv.height * zoom)) + 'px';
+  const z = document.getElementById('paintInfoZoom');
+  if (z) z.textContent = Math.round(zoom * 100) + '%';
+}
+
+function resetPaintView(){ autoFit = true; syncCanvasScale(); }
+
+window.addEventListener('resize', ()=>{
+  if (document.body.dataset.mode === 'paint' && viewTab === 'paint') syncCanvasScale();
+});
+window.__paintModeShown = ()=>{ populateAnimClips(); syncCanvasScale(); };
+
+// ---------------------------------------------------------------- undo / redo
+const undoStack = [], redoStack = [];
+const UNDO_LIMIT = 40;
+let restoringPaint = false;
+
+function clonePaintLayers(src){
+  return src.map(l=>{
+    const c = newLayerCanvas(l.canvas.width, l.canvas.height);
+    c.getContext('2d').drawImage(l.canvas, 0, 0);
+    return Object.assign({}, l, { canvas: c });
+  });
+}
+
+function paintState(){
+  return { layers: clonePaintLayers(layers), active, w: paint_cv.width, h: paint_cv.height };
+}
+
+function pushPaintUndo(){
+  if (restoringPaint) return;
+  undoStack.push(paintState());
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoButtons();
+}
+
+function applyPaintState(s){
+  restoringPaint = true;
+  paint_cv.width = s.w; paint_cv.height = s.h;
+  layers = clonePaintLayers(s.layers);
+  active = (s.active === null || s.active === undefined || !layers.length)
+    ? (layers.length ? 0 : null)
+    : Math.min(s.active, layers.length - 1);
+  dirty = true;
+  updateUI(); composite();
+  restoringPaint = false;
+  scheduleAutoPush();
+}
+
+function undoPaint(){
+  if (!undoStack.length) { toast('Nothing to undo'); return; }
+  redoStack.push(paintState());
+  applyPaintState(undoStack.pop());
+  updateUndoButtons();
+  toast('Undo');
+}
+
+function redoPaint(){
+  if (!redoStack.length) { toast('Nothing to redo'); return; }
+  undoStack.push(paintState());
+  applyPaintState(redoStack.pop());
+  updateUndoButtons();
+  toast('Redo');
+}
+
+function updateUndoButtons(){
+  const u = document.getElementById('paintBtnUndo');
+  const r = document.getElementById('paintBtnRedo');
+  if (u) u.disabled = undoStack.length === 0;
+  if (r) r.disabled = redoStack.length === 0;
+}
+
+// ---------------------------------------------------------------- automatic push
+let autoPushTimer = null;
+
+function rigPushTargets(){
+  const R = window.__rigEditor, doc = R && R.doc;
+  if (!doc) return null;
+  if (paint_cv.width !== doc.width || paint_cv.height !== doc.height) return null;
+  const targets = layers.filter(p => p.rigLayerId);
+  return targets.length ? { R, targets } : null;
+}
+
+function scheduleAutoPush(){
+  if (restoringPaint) return;
+  if (!rigPushTargets()) return;
+  clearTimeout(autoPushTimer);
+  autoPushTimer = setTimeout(autoPushNow, 250);
+}
+
+function autoPushNow(){
+  clearTimeout(autoPushTimer);
+  const g = rigPushTargets();
+  if (!g) return 0;
+  let pushed = 0, failed = 0;
+  for (const p of g.targets) {
+    const l = g.R.layerById(p.rigLayerId);
+    if (!l || !p.canvas) { failed++; continue; }
+    const sx = Math.round(l.x), sy = Math.round(l.y);
+    let data;
+    try { data = p.canvas.getContext('2d').getImageData(sx, sy, l.w, l.h).data; }
+    catch (e) { failed++; continue; }
+    if (g.R.setLayerPixels(l.id, data)) pushed++; else failed++;
+  }
+  g.R.redraw();
+  rigBridgeStatus('Auto-synced ' + pushed + ' layer' + (pushed === 1 ? '' : 's') + (failed ? '  (' + failed + ' skipped)' : ''));
+  if (previewMode === 'rig' && viewTab === 'preview' && !animPreviewOn) {
+    rigShot = g.R.snapshot();
+    updatePreview();
+  }
+  return pushed;
+}
+
+// ---------------------------------------------------------------- animated rig preview
+let animPreviewOn = false;
+let animFrame = 0;
+let lastAnimShot = null, lastAnimCrop = null;
+
+function populateAnimClips(){
+  const sel = document.getElementById('paintAnimClip');
+  if (!sel) return;
+  const R = window.__rigEditor;
+  const clips = (R && R.animClips) ? R.animClips() : [];
+  const cur = sel.value;
+  sel.innerHTML = clips.length
+    ? clips.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">' + c + '</option>').join('')
+    : '<option value="">No animations</option>';
+  if (cur && clips.includes(cur)) sel.value = cur;
+}
+
+function drawAnimPreview(shot, crop){
+  paint_pctx.setTransform(1, 0, 0, 1, 0, 0);
+  paint_pctx.globalAlpha = 1;
+  paint_pctx.fillStyle = '#0a0a0f';
+  paint_pctx.fillRect(0, 0, paint_preview.width, paint_preview.height);
+  if (!shot) return;
+  const src = crop || { x: 0, y: 0, w: shot.width, h: shot.height };
+  const fit = Math.min(paint_preview.width / src.w, paint_preview.height / src.h);
+  paint_pctx.imageSmoothingEnabled = false;
+  paint_pctx.drawImage(shot, src.x, src.y, src.w, src.h,
+    (paint_preview.width - src.w * fit) / 2, (paint_preview.height - src.h * fit) / 2,
+    src.w * fit, src.h * fit);
+}
+
+function animPreviewTick(){
+  animFrame = requestAnimationFrame(animPreviewTick);
+  if (!animPreviewOn) return;
+  if (document.body.dataset.mode !== 'paint' || viewTab === 'export') return;
+  const R = window.__rigEditor;
+  if (!R || !R.copyCanvas) return;
+  lastAnimShot = R.copyCanvas();
+  lastAnimCrop = R.animCrop ? R.animCrop() : null;
+  drawAnimPreview(lastAnimShot, lastAnimCrop);
+}
+
+function startRigAnimPreview(){
+  const R = window.__rigEditor;
+  if (!R || !R.doc) { toast('Open a rig first'); return; }
+  const clips = R.animClips ? R.animClips() : [];
+  if (!clips.length) { toast('Animation needs the game template: click Game template first', 7000); return; }
+  populateAnimClips();
+  const sel = document.getElementById('paintAnimClip');
+  const clip = sel && sel.value ? sel.value : clips[0];
+  if (R.snapshot) R.snapshot();       // give the hidden rig canvas a real size
+  if (!R.startAnim || !R.startAnim(clip)) { toast('Could not start the animation preview', 6000); return; }
+  animPreviewOn = true;
+  previewMode = 'rig';
+  // stay on the Paint tab so you can keep painting while the rig animates on the right
+  switchPaintTab(viewTab === 'export' ? 'paint' : viewTab);
+  const btn = document.getElementById('paintBtnAnimPlay');
+  if (btn) btn.textContent = '⏸ Pause';
+  if (!animFrame) animFrame = requestAnimationFrame(animPreviewTick);
+}
+
+function stopRigAnimPreview(){
+  animPreviewOn = false;
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = 0; }
+  const R = window.__rigEditor;
+  if (R && R.stopAnim) R.stopAnim();
+  const btn = document.getElementById('paintBtnAnimPlay');
+  if (btn) btn.textContent = '▶ Play';
+  if (previewMode === 'rig') updatePreview();
+}
+window.__stopAnimPreview = stopRigAnimPreview;
+
+function toggleRigAnimPreview(){
+  const R = window.__rigEditor;
+  if (!animPreviewOn) { startRigAnimPreview(); return; }
+  if (!R || !R.setAnimPlaying) return;
+  const playing = R.isAnimPlaying ? R.isAnimPlaying() : true;
+  R.setAnimPlaying(!playing);
+  const btn = document.getElementById('paintBtnAnimPlay');
+  if (btn) btn.textContent = playing ? '▶ Play' : '⏸ Pause';
+}
+
+function setAnimPreviewClip(name){
+  const R = window.__rigEditor;
+  if (!R || !name) return;
+  if (R.setAnimClip) R.setAnimClip(name);
+  const sel = document.getElementById('paintAnimClip');
+  if (sel) sel.value = name;
+  if (animPreviewOn) {
+    if (R.setAnimPlaying) R.setAnimPlaying(true);
+    const btn = document.getElementById('paintBtnAnimPlay');
+    if (btn) btn.textContent = '⏸ Pause';
+  }
+}
+
+function stepAnimPreview(dir){
+  const sel = document.getElementById('paintAnimClip');
+  if (!sel || sel.options.length < 1 || !sel.value) return;
+  let i = sel.selectedIndex;
+  i = (i + dir + sel.options.length) % sel.options.length;
+  sel.selectedIndex = i;
+  setAnimPreviewClip(sel.value);
+}
+
+function updateUI(){
+  document.getElementById('paintInfoSize').textContent = paint_cv.width+'×'+paint_cv.height;
+  document.getElementById('paintInfoLayers').textContent = layers.length;
+  document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
+  document.getElementById('paintLayerOpacityVal').textContent = Math.round((active!==null?layers[active].opacity:1)*100)+'%';
+  document.getElementById('paintLayerOpacity').value = active!==null?Math.round(layers[active].opacity*100):100;
+  syncCanvasScale();
+  updateUndoButtons();
+  renderLayers();
+  switchPaintTab(viewTab);
+}
+
+function renderLayers(){
+  const list = document.getElementById('paintLayerList');
+  if(layers.length===0){
+    list.innerHTML = '<div class="empty">No layers<br>Add one to start painting</div>';
+    return;
+  }
+  list.innerHTML = '';
+  layers.forEach((l,i)=>{
+    const el = document.createElement('div');
+    el.className = 'layer-item'+(i===active?' active':'' );
+    el.onclick = (ev)=>{ if(!ev.target.closest('button,input,select')) setActive(i); };
+
+    const vis = document.createElement('div');
+    vis.className = 'layer-vis';
+    vis.style.background = i===active ? color : '#33363f';
+    el.appendChild(vis);
+
+    const name = document.createElement('div');
+    name.className = 'layer-name';
+    name.textContent = l.name;
+    el.appendChild(name);
+
+    // one compact menu instead of four icons + an opacity slider per row
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'layer-menu-btn';
+    menuBtn.title = 'Layer options';
+    menuBtn.textContent = '⋮';
+    menuBtn.onclick = (ev)=>{
+      ev.stopPropagation();
+      if (layerMenuIdx === i && layerMenu.classList.contains('open')) closeLayerMenu();
+      else openLayerMenu(i, menuBtn);
+    };
+    el.appendChild(menuBtn);
+
+    list.appendChild(el);
+  });
+  // keep an open menu pointing at the right row after a re-render
+  if (layerMenuIdx >= 0 && layerMenuIdx < layers.length) {
+    const a = list.children[layerMenuIdx] && list.children[layerMenuIdx].querySelector('.layer-menu-btn');
+    if (a && layerMenu.classList.contains('open')) positionLayerMenu(a);
+  } else if (layerMenuIdx >= 0) closeLayerMenu();
+}
+
+// ---------------------------------------------------------------- layer options menu
+const layerMenu = (() => {
+  const d = document.createElement('div');
+  d.id = 'layerMenu';
+  document.body.appendChild(d);
+  return d;
+})();
+let layerMenuIdx = -1;
+
+function closeLayerMenu(){ layerMenu.classList.remove('open'); layerMenuIdx = -1; }
+
+function positionLayerMenu(anchor){
+  const r = anchor.getBoundingClientRect();
+  const mw = layerMenu.offsetWidth, mh = layerMenu.offsetHeight;
+  let x = r.right - mw; if (x < 6) x = 6;
+  let y = r.bottom + 4;
+  if (y + mh > window.innerHeight - 6) y = r.top - mh - 4;
+  layerMenu.style.left = x + 'px';
+  layerMenu.style.top = Math.max(6, y) + 'px';
+}
+
+function openLayerMenu(i, anchor){
+  const l = layers[i];
+  if (!l) return;
+  layerMenuIdx = i;
+  layerMenu.innerHTML = '';
+
+  const item = (label, fn, danger) => {
+    const b = document.createElement('button');
+    b.className = 'mi';
+    b.textContent = label;
+    if (danger) b.style.color = 'var(--bad, #ff6b6b)';
+    b.onclick = (ev)=>{ ev.stopPropagation(); closeLayerMenu(); fn(); };
+    layerMenu.appendChild(b);
+  };
+
+  item(l.visible ? '🙈 Hide layer' : '👁 Show layer', ()=>toggleVisibility(i));
+  item('✎ Rename', ()=>renameLayer(i));
+  item('📋 Duplicate', ()=>duplicateLayer(i));
+
+  const sep = document.createElement('div'); sep.className = 'sep'; layerMenu.appendChild(sep);
+
+  const op = document.createElement('div'); op.className = 'op';
+  const lab = document.createElement('span'); lab.textContent = 'Opacity';
+  const rng = document.createElement('input');
+  rng.type = 'range'; rng.min = '0'; rng.max = '100'; rng.value = Math.round(l.opacity * 100);
+  const val = document.createElement('span'); val.textContent = Math.round(l.opacity * 100) + '%';
+  rng.onclick = (ev)=>ev.stopPropagation();
+  rng.onpointerdown = ()=>pushPaintUndo();
+  rng.oninput = (ev)=>{ val.textContent = ev.target.value + '%'; setOpacity(i, parseInt(ev.target.value) / 100); };
+  op.append(lab, rng, val);
+  layerMenu.appendChild(op);
+
+  const sep2 = document.createElement('div'); sep2.className = 'sep'; layerMenu.appendChild(sep2);
+  item('🗑 Delete layer', ()=>deleteLayer(i), true);
+
+  layerMenu.classList.add('open');
+  positionLayerMenu(anchor);
+}
+
+document.addEventListener('mousedown', (e)=>{
+  if (!layerMenu.classList.contains('open')) return;
+  if (layerMenu.contains(e.target) || (e.target.closest && e.target.closest('.layer-menu-btn'))) return;
+  closeLayerMenu();
+});
+document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closeLayerMenu(); });
+window.addEventListener('resize', closeLayerMenu);
+
+function setActive(i){
+  active = i;
+  updateUI();
+  composite();
+}
+
+function addLayer(name=null, silent=false){
+  if(!silent) pushPaintUndo();
+  const c = newLayerCanvas(paint_cv.width, paint_cv.height);
+  layers.push({name:name||('Layer '+(layers.length+1)), canvas:c, visible:true, opacity:1});
+  active = layers.length-1;
+  dirty = true;
+  updateUI(); composite();
+  if(!silent) toast('Layer added');
+}
+
+function deleteLayer(idx=null){
+  if(idx===null) idx = active;
+  if(layers.length<=1){ toast('Cannot delete last layer'); return; }
+  pushPaintUndo();
+  layers.splice(idx,1);
+  if(active>=layers.length) active = layers.length-1;
+  if(active===null) active = 0;
+  dirty = true;
+  updateUI(); composite();
+  toast('Layer deleted');
+}
+
+function duplicateLayer(idx){
+  const l = layers[idx];
+  if(!l) return;
+  pushPaintUndo();
+  const c = newLayerCanvas(paint_cv.width, paint_cv.height);
+  c.getContext('2d').drawImage(l.canvas, 0, 0);
+  const copy = {name:l.name+' copy', canvas:c, visible:l.visible, opacity:l.opacity};
+  layers.splice(idx+1, 0, copy);
+  active = idx+1;
+  dirty = true;
+  updateUI(); composite();
+  toast('Layer duplicated');
+}
+
+function toggleVisibility(idx){
+  if(!layers[idx]) return;
+  pushPaintUndo();
+  layers[idx].visible = !layers[idx].visible;
+  dirty = true;
+  composite(); updateUI();
+}
+
+function setOpacity(idx, val){
+  layers[idx].opacity = val;
+  dirty = true;
+  composite(); updateUI();
+}
+
+function renameLayer(idx){
+  if(!layers[idx]) return;
+  const name = prompt('Rename layer:', layers[idx].name);
+  if(name!==null){
+    const nn = name.trim()||'Layer';
+    if(nn!==layers[idx].name) pushPaintUndo();
+    layers[idx].name = nn;
+    dirty = true;
+    updateUI();
+  }
+}
+
+function setColor(c){
+  color = c;
+  document.getElementById('paintColorPick').value = c;
+  updateUI(); composite();
+}
+
+function getCanvasPos(e){
+  // the canvas bitmap is the real sprite; CSS only scales it, so map screen px -> canvas px
+  const rect = paint_cv.getBoundingClientRect();
+  if (!rect.width || !rect.height) return {x:0, y:0};
+  const x = (e.clientX - rect.left) * (paint_cv.width / rect.width);
+  const y = (e.clientY - rect.top) * (paint_cv.height / rect.height);
+  return {x:Math.floor(x), y:Math.floor(y)};
+}
+
+function paint(x,y){
+  if(active===null) return;
+  const g = layers[active].canvas.getContext('2d');
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  if(tool==='pencil'){
+    g.strokeStyle = color;
+    g.lineWidth = brushSize;
+    if(lastPos){
+      g.beginPath(); g.moveTo(lastPos.x,lastPos.y); g.lineTo(x,y); g.stroke();
+    } else {
+      g.beginPath(); g.arc(x,y,brushSize/2,0,Math.PI*2); g.fill();
+    }
+  } else if(tool==='eraser'){
+    g.globalCompositeOperation = 'destination-out';
+    g.strokeStyle = '#000';
+    g.lineWidth = brushSize;
+    if(lastPos){
+      g.beginPath(); g.moveTo(lastPos.x,lastPos.y); g.lineTo(x,y); g.stroke();
+    } else {
+      g.clearRect(x-brushSize/2, y-brushSize/2, brushSize, brushSize);
+    }
+    g.globalCompositeOperation = 'source-over';
+  } else if(tool==='fill'){
+    floodFill(g, x, y, color);
+  } else if(tool==='picker'){
+    const px = g.getImageData(x,y,1,1).data;
+    setColor('#'+px[0].toString(16).padStart(2,'0')+px[1].toString(16).padStart(2,'0')+px[2].toString(16).padStart(2,'0'));
+  }
+  dirty = true;
+  composite();
+  if (tool !== 'picker') scheduleAutoPush();
+}
+
+function floodFill(g, sx, sy, newColor){
+  const w = g.canvas.width, h = g.canvas.height;
+  const id = g.getImageData(0,0,w,h);
+  const data = id.data;
+  const get = (x,y)=>(y*w+x)*4;
+  const target = [data[get(sx,sy)], data[get(sx,sy)+1], data[get(sx,sy)+2], data[get(sx,sy)+3]];
+  const nc = hexToRgb(newColor);
+  if(colorsEqual(target,nc)) return;
+  const stack=[{x:sx,y:sy}];
+  while(stack.length){
+    const p = stack.pop();
+    const idx = get(p.x,p.y);
+    if(!colorsEqual([data[idx],data[idx+1],data[idx+2],data[idx+3]],target)) continue;
+    data[idx]=nc.r; data[idx+1]=nc.g; data[idx+2]=nc.b;
+    for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=p.x+d[0], ny=p.y+d[1];
+      if(nx>=0&&nx<w&&ny>=0&&ny<h) stack.push({x:nx,y:ny});
+    }
+  }
+  g.putImageData(id,0,0);
+}
+
+function hexToRgb(h){
+  const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+  return {r,g,b,a:255};
+}
+function colorsEqual(a,b){ return a[0]===b.r&&a[1]===b.g&&a[2]===b.b&&a[3]===b.a; }
+
+// Tab switching within paint editor
+function switchPaintTab(tab){
+  viewTab = tab;
+  if (tab === 'export' && animPreviewOn) stopRigAnimPreview();
+  // Update tab buttons
+  ['paint','preview','export'].forEach(t=>{
+    const btn = document.getElementById('paintTab'+t.charAt(0).toUpperCase()+t.slice(1));
+    const active = t === tab;
+    if(btn) btn.classList.toggle('on', active);
+  });
+  
+  // Update visibility of main areas
+  const paintArea = document.getElementById('viewport');
+  const previewArea = document.getElementById('previewWrap').parentElement;
+  
+  if(tab === 'paint'){
+    paintArea.style.display = 'block';
+    previewArea.style.display = 'block';   // keep the live preview on the right while painting
+    syncCanvasScale();
+    updatePreview();
+    document.getElementById('paintCv').focus();
+  } else if(tab === 'preview'){
+    paintArea.style.display = 'none';
+    previewArea.style.display = 'block';
+    updatePreview();
+  } else if(tab === 'export'){
+    paintArea.style.display = 'block';
+    previewArea.style.display = 'block';
+    syncCanvasScale();
+  }
+}
+
+paint_cv.addEventListener('mousedown', e=>{
+  if(e.button!==0||active===null) return;
+  pushPaintUndo();                 // one snapshot per stroke
+  isDown = true;
+  lastPos = getCanvasPos(e);
+  paint(lastPos.x, lastPos.y);
+  paint_wrap.classList.add('painting');
+});
+window.addEventListener('mouseup', e=>{
+  if(!isDown) return;
+  isDown = false;
+  lastPos = null;
+  paint_wrap.classList.remove('painting');
+});
+paint_cv.addEventListener('mousemove', e=>{
+  if(!isDown) return;
+  const pos = getCanvasPos(e);
+  paint(pos.x, pos.y);
+  lastPos = pos;
+});
+paint_cv.addEventListener('mousemove', e=>{
+  const pos = getCanvasPos(e);
+  paint_coord.textContent = pos.x+', '+pos.y;
+});
+paint_wrap.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const delta = -e.deltaY * 0.001;
+  autoFit = false;
+  zoom = Math.min(Math.max(zoom*(1+delta), 0.1), 32);
+  syncCanvasScale();
+}, {passive:false});
+
+document.getElementById('paintToolSel').onchange = e=>{ tool = e.target.value; };
+document.getElementById('paintBrushSize').oninput = e=>{
+  brushSize = parseInt(e.target.value);
+  document.getElementById('paintBrushSizeVal').textContent = brushSize+'px';
+};
+document.getElementById('paintColorPick').oninput = e=>setColor(e.target.value);
+document.getElementById('paintBlendMode').onchange = e=>{
+  paint_ctx.globalCompositeOperation = e.target.value;
+  paint_pctx.globalCompositeOperation = e.target.value;
+  composite();
+};
+document.getElementById('paintLayerOpacity').oninput = e=>{
+  const val = parseInt(e.target.value)/100;
+  document.getElementById('paintLayerOpacityVal').textContent = Math.round(val*100)+'%';
+  if(active!==null) setOpacity(active, val);
+};
+
+document.getElementById('paintBtnNew').onclick = ()=>{
+  if(confirm('New sprite will clear all layers. Continue?')){
+    pushPaintUndo();
+    layers = []; active = null; zoom = 1; pan = {x:0,y:0};
+    paint_cv.width = 256; paint_cv.height = 256;
+    autoFit = true;
+    updateUI(); composite();
+    toast('New sprite');
+  }
+};
+document.getElementById('paintBtnOpen').onclick = ()=>document.getElementById('paintFileOpen').click();
+document.getElementById('paintFileOpen').onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const img = await loadImage(f);
+  pushPaintUndo();
+  paint_cv.width = img.width; paint_cv.height = img.height;
+  layers = [{name:f.name.replace(/\.[^/.]+$/,''), canvas:img, visible:true, opacity:1}];
+  active = 0;
+  zoom = 1; pan = {x:0,y:0};
+  autoFit = true;
+  dirty = true;
+  updateUI(); composite();
+  toast('Opened '+f.name);
+};
+document.getElementById('paintBtnSave').onclick = ()=>{
+  const link = document.createElement('a');
+  link.download = 'sprite.png';
+  link.href = paint_cv.toDataURL('image/png');
+  link.click();
+  toast('Exported sprite.png');
+};
+document.getElementById('paintBtnAddLayer').onclick = addLayer;
+document.getElementById('paintBtnDelLayer').onclick = ()=>deleteLayer(null);
+document.getElementById('paintToolZoomIn').onclick = ()=>{ autoFit=false; zoom=Math.min(zoom+0.25,32); syncCanvasScale(); };
+document.getElementById('paintToolZoomOut').onclick = ()=>{ autoFit=false; zoom=Math.max(zoom-0.25,0.1); syncCanvasScale(); };
+document.getElementById('paintToolFit').onclick = ()=>{ resetPaintView(); };
+document.getElementById('paintPreviewScale').oninput = e=>{
+  document.getElementById('paintPreviewScaleVal').textContent = e.target.value+'x';
+  updatePreview();
+};
+
+// undo / redo
+document.getElementById('paintBtnUndo').onclick = undoPaint;
+document.getElementById('paintBtnRedo').onclick = redoPaint;
+document.addEventListener('keydown', (e)=>{
+  if (document.body.dataset.mode !== 'paint') return;
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoPaint(); }
+  else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redoPaint(); }
+});
+document.getElementById('paintLayerOpacity').addEventListener('pointerdown', ()=>pushPaintUndo());
+
+// animated rig preview
+document.getElementById('paintBtnAnimPlay').onclick = toggleRigAnimPreview;
+document.getElementById('paintBtnAnimPrev').onclick = ()=>stepAnimPreview(-1);
+document.getElementById('paintBtnAnimNext').onclick = ()=>stepAnimPreview(1);
+document.getElementById('paintAnimClip').onchange = e=>setAnimPreviewClip(e.target.value);
+document.getElementById('paintBtnFlipH').onclick = ()=>{
+  if(active===null) return;
+  pushPaintUndo();
+  const g = layers[active].canvas.getContext('2d');
+  const id = g.getImageData(0,0,paint_cv.width,paint_cv.height);
+  g.clearRect(0,0,paint_cv.width,paint_cv.height);
+  for(let y=0;y<paint_cv.height;y++) for(let x=0;x<paint_cv.width;x++){
+    const src = (y*paint_cv.width+x)*4;
+    const dst = (y*paint_cv.width+(paint_cv.width-1-x))*4;
+    id.data[dst]=id.data[src]; id.data[dst+1]=id.data[src+1]; id.data[dst+2]=id.data[src+2]; id.data[dst+3]=id.data[src+3];
+  }
+  g.putImageData(id,0,0);
+  dirty = true; composite(); scheduleAutoPush(); toast('Flipped horizontal');
+};
+document.getElementById('paintBtnFlipV').onclick = ()=>{
+  if(active===null) return;
+  pushPaintUndo();
+  const g = layers[active].canvas.getContext('2d');
+  const id = g.getImageData(0,0,paint_cv.width,paint_cv.height);
+  g.clearRect(0,0,paint_cv.width,paint_cv.height);
+  for(let y=0;y<paint_cv.height;y++) for(let x=0;x<paint_cv.width;x++){
+    const src = (y*paint_cv.width+x)*4;
+    const dst = ((paint_cv.height-1-y)*paint_cv.width+x)*4;
+    id.data[dst]=id.data[src]; id.data[dst+1]=id.data[src+1]; id.data[dst+2]=id.data[src+2]; id.data[dst+3]=id.data[src+3];
+  }
+  g.putImageData(id,0,0);
+  dirty = true; composite(); scheduleAutoPush(); toast('Flipped vertical');
+};
+document.getElementById('paintBtnRotate').onclick = ()=>{
+  if(active===null) return;
+  pushPaintUndo();
+  const c = layers[active].canvas;
+  const tmp = document.createElement('canvas');
+  tmp.width = c.height; tmp.height = c.width;
+  const tg = tmp.getContext('2d');
+  tg.translate(c.height/2, c.width/2);
+  tg.rotate(Math.PI/2);
+  tg.drawImage(c, -c.width/2, -c.height/2);
+  layers[active].canvas = tmp;
+  paint_cv.width = tmp.width; paint_cv.height = tmp.height;
+  autoFit = true;
+  dirty = true; composite(); scheduleAutoPush(); toast('Rotated 90°');
+};
+
+function loadImage(file){
+  return new Promise((res,rej)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      c.getContext('2d').drawImage(img,0,0);
+      res(c);
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// Tab button handlers
+document.getElementById('paintTabPaint').onclick = ()=>{ previewMode = 'paint'; switchPaintTab('paint'); };
+document.getElementById('paintTabPreview').onclick = ()=>{ previewMode = 'paint'; switchPaintTab('preview'); };
+document.getElementById('paintTabExport').onclick = ()=>{ previewMode = 'paint'; switchPaintTab('export'); };
+
+addLayer(null, true);
+restorePaintContext();
+populateAnimClips();
+updateUI(); composite();
+
+
+
+// ============================================================================
+// Rig <-> Paint bridge
+// The rig editor lives in its own closure, so everything here goes through the
+// small API it publishes on window.__rigEditor (layerById / layersForPaint /
+// setLayerPixels / snapshot / redraw / toastMsg).
+// ============================================================================
+const rigAPI = () => window.__rigEditor || null;
+
+function rigBridgeStatus(msg) {
+  const el = document.getElementById('rigIntegrationStatus');
+  if (el) el.textContent = msg || '';
+}
+
+function isBlankCanvas(c) {
+  try {
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
+    return true;
+  } catch (e) { return false; }
+}
+
+function paintCanvasIsBlank() {
+  return layers.length === 0 || (layers.length === 1 && !layers[0].rigLayerId && isBlankCanvas(layers[0].canvas));
+}
+
+// The paint canvas is the sprite canvas: it must match the rig document or
+// nothing lines up when pushing back. Only resize while there is nothing worth keeping.
+function fitPaintToRig(doc) {
+  if (paint_cv.width === doc.width && paint_cv.height === doc.height) return true;
+  if (!paintCanvasIsBlank()) {
+    toast('Paint canvas is ' + paint_cv.width + 'x' + paint_cv.height + ' but the rig is ' + doc.width + 'x' + doc.height + '. Press New first, then import again.', 8000);
+    return false;
+  }
+  paint_cv.width = doc.width;
+  paint_cv.height = doc.height;
+  layers = []; active = null; zoom = 1; pan = { x: 0, y: 0 };
+  autoFit = true;
+  return true;
+}
+
+function makePaintLayer(l) {
+  const c = newLayerCanvas(paint_cv.width, paint_cv.height);
+  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(l.rgba), l.w, l.h), l.x, l.y);
+  return { name: l.name || 'Rig Layer', canvas: c, visible: true, opacity: 1,
+    rigLayerId: l.id, rigX: l.x, rigY: l.y, rigW: l.w, rigH: l.h };
+}
+
+// Import one rig layer (double-click in the rig layer list) or all of them.
+function importRigLayer(layerId) {
+  const R = rigAPI(), doc = R && R.doc;
+  if (!doc) { toast('Open a rig first'); return; }
+  const l = R.layerById(layerId);
+  if (!l) { toast('Layer not found in the rig'); return; }
+  if (!fitPaintToRig(doc)) return;
+  if (paintCanvasIsBlank()) { layers = []; active = null; }
+  pushPaintUndo();
+  const idx = layers.findIndex(p => p.rigLayerId === layerId);
+  const pl = makePaintLayer(l);
+  if (idx >= 0) layers[idx] = pl; else layers.push(pl);
+  active = idx >= 0 ? idx : layers.length - 1;
+  dirty = true;
+  populateAnimClips();
+  updateUI(); composite();
+  rigBridgeStatus('Imported "' + pl.name + '" (' + l.w + 'x' + l.h + ')');
+  toast('Imported rig layer: ' + pl.name);
+}
+
+function importAllRigAssets() {
+  const R = rigAPI(), doc = R && R.doc;
+  if (!doc) { toast('Open a rig first'); return; }
+  const flat = R.layersForPaint();
+  if (!flat.length) { toast('The rig has no layers to import'); return; }
+  if (!fitPaintToRig(doc)) return;
+  if (paintCanvasIsBlank()) { layers = []; active = null; }
+  pushPaintUndo();
+  let n = 0;
+  for (const l of flat) {
+    const idx = layers.findIndex(p => p.rigLayerId === l.id);
+    const pl = makePaintLayer(l);
+    if (idx >= 0) layers[idx] = pl; else layers.push(pl);
+    n++;
+  }
+  active = layers.length - 1;
+  dirty = true;
+  populateAnimClips();
+  updateUI(); composite();
+  rigBridgeStatus('Imported ' + n + ' rig layer(s) at ' + paint_cv.width + 'x' + paint_cv.height);
+  toast('Imported ' + n + ' rig layer(s)');
+}
+
+function pushPaintToRig() {
+  const R = window.__rigEditor, doc = R && R.doc;
+  if (!doc) { toast('Open a rig first'); return; }
+  if (paint_cv.width !== doc.width || paint_cv.height !== doc.height) {
+    toast('Paint canvas (' + paint_cv.width + 'x' + paint_cv.height + ') does not match the rig (' + doc.width + 'x' + doc.height + '). Import the rig assets first.', 8000);
+    return;
+  }
+  if (!layers.some(p => p.rigLayerId)) { toast('Nothing to push: import the rig assets first'); return; }
+  const n = autoPushNow();
+  toast(n ? 'Pushed ' + n + ' layer(s) to the rig' : 'Could not push: layer sizes do not match', n ? 2500 : 7000);
+}
+
+// Show the rig itself on the paint Preview tab.
+function renderRigPreview() {
+  const R = rigAPI();
+  if (!R || !R.doc) { toast('Open a rig first'); return; }
+  if (animPreviewOn) stopRigAnimPreview();
+  lastAnimShot = null; lastAnimCrop = null;
+  rigShot = R.snapshot();
+  previewMode = 'rig';
+  switchPaintTab('preview');
+  updatePreview();
+  rigBridgeStatus('Previewing the rig');
+}
+
+function initRigIntegration() {
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on('paintBtnImportRig', importAllRigAssets);
+  on('paintBtnPushRig', pushPaintToRig);
+  on('paintBtnRigPreview', renderRigPreview);
+}
+
+initRigIntegration();
 
 </script>
 </body>

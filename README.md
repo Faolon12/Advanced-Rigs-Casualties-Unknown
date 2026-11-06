@@ -68,3 +68,7 @@ Luna Advanced Rig Systems is a fan-made mod and tool. It is **not made by or aff
 
 * **The editor's Test tab is a simulation.** Its movement, wall jumps, states, eyes, mouth and injury rules are re-created from *Casualties: Unknown*'s code by **Orson**, to preview characters outside the game. It is not the game and won't match it exactly (the game's own animations and movement numbers aren't included).
 * **Nothing from the game is included.** The game template (the character's sprites, every wearable, the health screen art and the animations) is written by the mod from the player's own copy of the game, and loaded into the editor from there. *Casualties: Unknown*, its code and its art belong to Orson.
+
+## Commit Signing
+
+Commits on this branch are SSH-signed for verification.
