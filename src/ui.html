@@ -189,10 +189,11 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 .row input[type=range]{flex:1}
 .toolbar{display:flex;gap:4px;flex-wrap:wrap}
 .toolbar button{flex:1;min-width:56px}
-.paint-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.paint-tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
 .paint-tools button{min-width:0;padding:7px 3px;font-size:11px}
 .paint-tools button .tool-icon{display:block;font-size:17px;line-height:1.2}
 .paint-tools button[aria-pressed=true]{border-color:var(--acc2);box-shadow:inset 0 0 0 1px var(--acc2);background:var(--panel2)}
+#paintSelectionOverlay{position:absolute;display:none;pointer-events:none;image-rendering:pixelated}
 .color-swatch{width:25px;height:25px;padding:0;border:1px solid var(--line);border-radius:5px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
 .color-swatch:hover,.color-swatch.active{border-color:var(--text);box-shadow:0 0 0 2px var(--acc2)}
 .color-pick-wrap{position:relative;width:42px;height:34px;flex:0 0 42px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel2)}
@@ -367,7 +368,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
   </ul>
   <details>
     <summary>Sprite Paint tips</summary>
-    <p class="muted">The Rig Editor autosaves your character locally; Sprite Paint also autosaves its layered session. Reopen the editor and choose <i>Restore Paint</i> if you need to recover a closed Paint session. In Sprite Paint, double-click a paint layer to fade the others to 5%; use <i>Hide similar layers when isolating</i> to hide matching names (for example, Head / Head 2 or Front / Back) completely. Double-click again restores opacities. The active layer's opacity control stays with the layer list while you scroll through many layers. Pixel brush and Pixel eraser make crisp square marks (set their size with <i>Size</i>); optionally toggle <i>Vary color tone</i> and choose Low, Medium, High or Extreme to make marks lighter or darker without shifting their positions or changing their hue. When editing a head image asset, use <i>Head variants</i> to copy the current art to mouth and injury alternatives, add a quick scratch, wound or bruise, or restore selected variants to the game's defaults. The read-only preview can be zoomed with the wheel and moved by dragging; its layer and opacity controls only change the preview. Double-click a rig layer to edit it; use <i>Other image assets</i> to open game sprites, tools, wearables, health-screen art and swaps at native size. Paint changes sync back to the rig.</p>
+    <p class="muted">The Rig Editor autosaves your character locally; Sprite Paint also autosaves its layered session. Reopen the editor and choose <i>Restore Paint</i> if you need to recover a closed Paint session. In Sprite Paint, double-click a paint layer to fade the others to 5%; use <i>Hide similar layers when isolating</i> to hide matching names (for example, Head / Head 2 or Front / Back) completely. Double-click again restores opacities. The active layer's opacity control stays with the layer list while you scroll through many layers. Use <i>Select</i> to drag a rectangular pixel selection, then drag inside it to move pixels. Choose the destination layer before pasting: copy/cut, select the target layer, then paste. The paste stays floating so you can drag it or use arrow keys to position it; press Enter or <i>Place</i> to commit, or Escape to cancel. Ctrl+arrows nudges by 1 px, Shift+arrows moves 10 px, and Ctrl+A selects all. Ctrl+C/X/V copy, cut and paste. Painting, erasing and fill are constrained to the selection. Pixel brush and Pixel eraser make crisp square marks (set their size with <i>Size</i>); optionally toggle <i>Vary color tone</i> and choose Low, Medium, High or Extreme to make marks lighter or darker without shifting their positions or changing their hue. When editing a head image asset, use <i>Head variants</i> to copy the current art to mouth and injury alternatives, add a quick scratch, wound or bruise, or restore selected variants to the game's defaults. The read-only preview can be zoomed with the wheel and moved by dragging; its layer and opacity controls only change the preview. Double-click a rig layer to edit it; use <i>Other image assets</i> to open game sprites, tools, wearables, health-screen art and swaps at native size. Paint changes sync back to the rig.</p>
   </details>
   <h3>Disclaimer</h3>
   <p class="muted" style="margin-top:0">Luna Advanced Rig Systems is a fan-made mod and tool, not made by or affiliated with the developer of Casualties: Unknown. The <b>Test</b> tab is a <b>simulation</b>: its movement, states, eyes, mouth and injury rules are re-created from Casualties: Unknown's code by <b>Orson</b>, so you can preview a character outside the game. It is not the game and won't match it exactly. Nothing from the game is included in the editor: the game template (sprites, wearables, animations) is made by the mod from your own copy of the game. Casualties: Unknown, its code and its art belong to Orson.</p>
@@ -409,7 +410,18 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <button type="button" data-paint-tool="pixel-eraser" aria-pressed="false" title="Square pixel eraser"><span class="tool-icon">□</span>Pixel erase</button>
 <button type="button" data-paint-tool="fill" aria-pressed="false" title="Fill connected area"><span class="tool-icon">▨</span>Fill</button>
 <button type="button" data-paint-tool="picker" aria-pressed="false" title="Pick a color from the canvas"><span class="tool-icon">◉</span>Picker</button>
+<button type="button" data-paint-tool="select" aria-pressed="false" title="Select a rectangular pixel area"><span class="tool-icon">▧</span>Select</button>
 </div>
+<div class="toolbar" style="margin-top:7px">
+<button id="paintSelectionCopy" title="Copy selection (Ctrl+C)" disabled>Copy</button>
+<button id="paintSelectionCut" title="Cut selection (Ctrl+X)" disabled>Cut</button>
+<button id="paintSelectionPaste" title="Paste into the active layer (Ctrl+V)" disabled>Paste</button>
+</div>
+<div class="toolbar" style="margin-top:4px">
+<button id="paintSelectionConfirm" title="Place pasted pixels (Enter)" disabled>Place</button>
+<button id="paintSelectionCancel" title="Cancel floating paste (Esc)" disabled>Cancel paste</button>
+</div>
+<div class="muted" style="font-size:10px;margin:4px 0 8px">Drag to select or reposition a paste; Enter places it, Esc cancels. Arrow keys nudge selected or pasted pixels; Ctrl+arrows nudges 1 px, Shift+arrows 10 px. Ctrl+A selects all.</div>
 <div class="row"><label>Size</label>
 <input id="paintBrushSize" type="range" min="1" max="32" value="4">
 <span id="paintBrushSizeVal">4px</span></div>
@@ -500,7 +512,8 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 
 <div id="viewport">
 <div id="paintCanvasWrap">
-<canvas id="paintCv" width="256" height="256" title="Right-click to pick the visible color"></canvas>
+<canvas id="paintCv" width="256" height="256" tabindex="0" title="Right-click to pick the visible color; focus here for keyboard shortcuts"></canvas>
+<canvas id="paintSelectionOverlay" aria-hidden="true"></canvas>
 <div class="crosshair" id="crosshair"></div>
 </div>
 <div class="coord" id="paintCoord">0, 0</div>

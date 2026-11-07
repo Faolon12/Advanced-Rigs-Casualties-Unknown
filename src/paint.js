@@ -2,7 +2,7 @@
 
 /*============================================================
   Sprite Paint Editor — self-contained
-  Tools: pencil, opaque pixel brush, eraser, fill, color picker
+  Tools: pencil, opaque pixel brush, eraser, fill, color picker, selection
   Layers: add/delete/select, rename, duplicate, visibility, opacity, move
   Preview: live composite of all layers with effects
   Export: PNG download
@@ -15,6 +15,8 @@ const paint_ctx = paint_cv.getContext('2d', {willReadFrequently:true});
 const paint_preview = document.getElementById('paintPreview');
 const paint_pctx = paint_preview.getContext('2d', {willReadFrequently:true});
 const paint_wrap = document.getElementById('paintCanvasWrap');
+const paint_selection_overlay = document.getElementById('paintSelectionOverlay');
+const paint_selection_ctx = paint_selection_overlay.getContext('2d');
 const paint_coord = document.getElementById('paintCoord');
 const rigAPI = () => window.__rigEditor || null;
 
@@ -32,6 +34,10 @@ let tool = 'pencil';
 let brushSize = 4;
 let pixelBrushNoise = false;
 let pixelBrushNoiseStrength = 4;
+let selectionRect = null;
+let selectionDrag = null;
+let selectionClipboard = null;
+let pendingPaste = null;
 let color = '#e0475b';
 let dirty = false;
 let viewTab = 'paint'; // 'paint' | 'preview' | 'export'
@@ -100,6 +106,7 @@ let paintAutosaveTimer = null;
 let paintAutosaveVersion = 0;
 let paintAutosaveQueue = Promise.resolve();
 let paintAutosaveWarningShown = false;
+let recoveredPaintWaitingForRig = false;
 
 function savePaintContext(){
   // canvases can't survive JSON: keep the live objects, they are never torn down
@@ -304,7 +311,9 @@ async function restorePaintAutosave(){
     renderColorPalettes();
     updateUI();
     composite();
+    recoveredPaintWaitingForRig = layers.some(layer => layer.rigLayerId || layer.assetWorkspaceId);
     setPaintAutosaveReady();
+    syncRecoveredPaintAfterRigRestore();
     toast('Recovered Paint session');
   } catch (e) {
     console.error('Could not restore the Paint recovery draft', e);
@@ -425,6 +434,74 @@ function syncCanvasScale(){
   paint_cv.style.height = Math.max(1, Math.round(paint_cv.height * zoom)) + 'px';
   const z = document.getElementById('paintInfoZoom');
   if (z) z.textContent = Math.round(zoom * 100) + '%';
+  renderSelectionOverlay();
+}
+
+function updateSelectionControls(){
+  const hasSelection = !!selectionRect && active !== null;
+  document.getElementById('paintSelectionCopy').disabled = !hasSelection;
+  document.getElementById('paintSelectionCut').disabled = !hasSelection;
+  document.getElementById('paintSelectionPaste').disabled = !selectionClipboard || active === null;
+  document.getElementById('paintSelectionConfirm').disabled = !pendingPaste;
+  document.getElementById('paintSelectionCancel').disabled = !pendingPaste;
+}
+
+function renderSelectionOverlay(preview=null){
+  if (!paint_selection_overlay) return;
+  if (paint_selection_overlay.width !== paint_cv.width || paint_selection_overlay.height !== paint_cv.height) {
+    paint_selection_overlay.width = paint_cv.width;
+    paint_selection_overlay.height = paint_cv.height;
+  }
+  paint_selection_overlay.style.width = paint_cv.style.width || paint_cv.width + 'px';
+  paint_selection_overlay.style.height = paint_cv.style.height || paint_cv.height + 'px';
+  const canvasRect = paint_cv.getBoundingClientRect();
+  const wrapRect = paint_wrap.getBoundingClientRect();
+  paint_selection_overlay.style.left = canvasRect.left - wrapRect.left + 'px';
+  paint_selection_overlay.style.top = canvasRect.top - wrapRect.top + 'px';
+  paint_selection_ctx.clearRect(0, 0, paint_selection_overlay.width, paint_selection_overlay.height);
+  const activePreview = preview || (pendingPaste ? {
+    rect: { x: pendingPaste.x, y: pendingPaste.y, w: pendingPaste.canvas.width, h: pendingPaste.canvas.height },
+    image: pendingPaste.canvas, x: pendingPaste.x, y: pendingPaste.y
+  } : null);
+  const shown = activePreview && activePreview.rect ? activePreview.rect : selectionRect;
+  if (activePreview && activePreview.image) {
+    paint_selection_ctx.drawImage(activePreview.image, activePreview.x, activePreview.y);
+  }
+  if (shown && shown.w > 0 && shown.h > 0) {
+    paint_selection_ctx.save();
+    paint_selection_ctx.lineWidth = 1;
+    paint_selection_ctx.setLineDash([1, 1]);
+    paint_selection_ctx.strokeStyle = '#fff';
+    paint_selection_ctx.strokeRect(shown.x + 0.5, shown.y + 0.5, Math.max(0, shown.w - 1), Math.max(0, shown.h - 1));
+    paint_selection_ctx.lineDashOffset = 1;
+    paint_selection_ctx.strokeStyle = '#111';
+    paint_selection_ctx.strokeRect(shown.x + 0.5, shown.y + 0.5, Math.max(0, shown.w - 1), Math.max(0, shown.h - 1));
+    paint_selection_ctx.restore();
+  }
+  paint_selection_overlay.style.display = shown || (preview && preview.image) ? 'block' : 'none';
+  updateSelectionControls();
+}
+
+function focusPaintLayer(i){
+  const layer = layers[i];
+  const viewport = document.getElementById('viewport');
+  if (!layer || !layer.rigLayerId || !viewport) return;
+  const R = rigAPI(), rigLayer = R && R.layerById(layer.rigLayerId);
+  if (!rigLayer) return;
+  const bounds = { x: rigLayer.x, y: rigLayer.y, w: rigLayer.w, h: rigLayer.h };
+  const availableWidth = Math.max(1, viewport.clientWidth - 56);
+  const availableHeight = Math.max(1, viewport.clientHeight - 56);
+  autoFit = false;
+  zoom = Math.max(0.1, Math.min(32, availableWidth / bounds.w, availableHeight / bounds.h));
+  syncCanvasScale();
+  requestAnimationFrame(()=>{
+    const maxX = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    const maxY = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    const centerX = 12 + (bounds.x + bounds.w / 2) * zoom;
+    const centerY = 12 + (bounds.y + bounds.h / 2) * zoom;
+    viewport.scrollLeft = Math.min(maxX, Math.max(0, centerX - viewport.clientWidth / 2));
+    viewport.scrollTop = Math.min(maxY, Math.max(0, centerY - viewport.clientHeight / 2));
+  });
 }
 
 function resetPaintView(){ autoFit = true; syncCanvasScale(); }
@@ -449,7 +526,8 @@ function clonePaintLayers(src){
 
 function paintState(){
   return { layers: clonePaintLayers(layers), active, w: paint_cv.width, h: paint_cv.height,
-    workspaceId: activeWorkspaceId, layerIsolationOpacities: layerIsolationOpacities && [...layerIsolationOpacities], isolatedLayer };
+    workspaceId: activeWorkspaceId, layerIsolationOpacities: layerIsolationOpacities && [...layerIsolationOpacities], isolatedLayer,
+    selectionRect: selectionRect && { ...selectionRect } };
 }
 
 function pushPaintUndo(){
@@ -470,6 +548,7 @@ function applyPaintState(s){
     : Math.min(s.active, layers.length - 1);
   layerIsolationOpacities = s.layerIsolationOpacities ? [...s.layerIsolationOpacities] : null;
   isolatedLayer = layerIsolationOpacities && s.isolatedLayer < layers.length ? s.isolatedLayer : null;
+  selectionRect = s.selectionRect ? { ...s.selectionRect } : null;
   dirty = true;
   updateUI(); composite();
   restoringPaint = false;
@@ -517,6 +596,14 @@ function scheduleAutoPush(){
   clearTimeout(autoPushTimer);
   autoPushTimer = setTimeout(() => autoPushNow(workspaceId), 250);
 }
+
+function syncRecoveredPaintAfterRigRestore(){
+  if (!recoveredPaintWaitingForRig || !rigAPI()?.doc) return;
+  recoveredPaintWaitingForRig = false;
+  scheduleAutoPush();
+}
+
+window.addEventListener('rig-recovered', syncRecoveredPaintAfterRigRestore);
 
 function opaqueBounds(canvas){
   const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
@@ -896,8 +983,10 @@ window.addEventListener('resize', closeLayerMenu);
 
 function setActive(i){
   if (!layers[i]) return;
+  if (pendingPaste && pendingPaste.target !== layers[i]) cancelPendingPaste();
   const workspaceId = layers[i].assetWorkspaceId || null;
   if (workspaceId !== activeWorkspaceId) restoreLayerIsolation();
+  if (i !== active) selectionRect = null;
   active = i;
   activeWorkspaceId = workspaceId;
   const R = rigAPI(), doc = R && R.doc;
@@ -957,6 +1046,8 @@ function applyLayerIsolation(){
 
 function isolateLayer(i){
   if (!layers[i]) return;
+  const layerAside = document.querySelector('#panelPaint main>aside:not(.right)');
+  const layerScrollTop = layerAside ? layerAside.scrollTop : 0;
   pushPaintUndo();
   if (layerIsolationOpacities && isolatedLayer === i) {
     restoreLayerIsolation();
@@ -969,6 +1060,7 @@ function isolateLayer(i){
   dirty = true;
   if (previewMode === 'rig') refreshRigPreview();
   updateUI();
+  if (layerAside) layerAside.scrollTop = layerScrollTop;
   composite();
   toast(layerIsolationOpacities ? 'Layer isolated; double-click again to restore other opacities' : 'Layer opacities restored');
 }
@@ -976,6 +1068,7 @@ function isolateLayer(i){
 function addLayer(name=null, silent=false){
   if(!silent) pushPaintUndo();
   restoreLayerIsolation();
+  selectionRect = null;
   const c = newLayerCanvas(paint_cv.width, paint_cv.height);
   layers.push({name:name||('Layer '+(layers.length+1)), canvas:c, visible:true, opacity:1, blendMode:'normal',
     ...(activeWorkspaceId ? { assetWorkspaceId: activeWorkspaceId } : {})});
@@ -994,6 +1087,7 @@ function deleteLayer(idx=null){
   if(workspaceCount<=1){ toast('Cannot delete the last layer in this image'); return; }
   pushPaintUndo();
   restoreLayerIsolation();
+  selectionRect = null;
   layers.splice(idx,1);
   if(active>=layers.length) active = layers.length-1;
   if(active===null) active = 0;
@@ -1076,7 +1170,7 @@ function setColor(c, remember=true){
 }
 
 function setPaintTool(nextTool, resetPixelSize=true){
-  if (!['pencil','pixel','pixel-eraser','eraser','fill','picker'].includes(nextTool)) return;
+  if (!['pencil','pixel','pixel-eraser','eraser','fill','picker','select'].includes(nextTool)) return;
   tool = nextTool;
   document.querySelectorAll('#paintToolButtons [data-paint-tool]').forEach(button => {
     const selected = button.dataset.paintTool === tool;
@@ -1099,6 +1193,182 @@ function getCanvasPos(e){
   const x = (e.clientX - rect.left) * (paint_cv.width / rect.width);
   const y = (e.clientY - rect.top) * (paint_cv.height / rect.height);
   return {x:Math.floor(x), y:Math.floor(y)};
+}
+
+function rectFromPoints(a, b){
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+  return { x, y, w: Math.abs(a.x - b.x) + 1, h: Math.abs(a.y - b.y) + 1 };
+}
+
+function selectionPatch(rect){
+  if (!rect || active === null) return null;
+  const canvas = newLayerCanvas(rect.w, rect.h);
+  canvas.getContext('2d').drawImage(layers[active].canvas, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+  return canvas;
+}
+
+function copySelection(cut=false){
+  if (!selectionRect || active === null) return;
+  const patch = selectionPatch(selectionRect);
+  if (!patch) return;
+  selectionClipboard = { canvas: patch, x: selectionRect.x, y: selectionRect.y };
+  if (cut) {
+    pushPaintUndo();
+    layers[active].canvas.getContext('2d').clearRect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
+    dirty = true;
+    composite();
+    scheduleAutoPush();
+  }
+  updateSelectionControls();
+  toast(cut ? 'Selection cut' : 'Selection copied');
+}
+
+function pasteSelection(){
+  if (!selectionClipboard || active === null) return;
+  const template = layers[active];
+  const maxX = Math.max(0, template.canvas.width - selectionClipboard.canvas.width);
+  const maxY = Math.max(0, template.canvas.height - selectionClipboard.canvas.height);
+  const x = Math.max(0, Math.min(maxX, selectionClipboard.x));
+  const y = Math.max(0, Math.min(maxY, selectionClipboard.y));
+  pendingPaste = { canvas: selectionClipboard.canvas, x, y, target: template };
+  selectionRect = null;
+  setPaintTool('select', false);
+  renderSelectionOverlay();
+  paint_cv.focus();
+  toast('Move the pasted pixels, then press Enter to place them');
+}
+
+function movePendingPaste(dx, dy){
+  if (!pendingPaste || pendingPaste.target !== layers[active]) return false;
+  return movePendingPasteTo(pendingPaste.x + dx, pendingPaste.y + dy);
+}
+
+function movePendingPasteTo(x, y){
+  if (!pendingPaste || pendingPaste.target !== layers[active]) return false;
+  const maxX = Math.max(0, pendingPaste.target.canvas.width - pendingPaste.canvas.width);
+  const maxY = Math.max(0, pendingPaste.target.canvas.height - pendingPaste.canvas.height);
+  x = Math.max(0, Math.min(maxX, x));
+  y = Math.max(0, Math.min(maxY, y));
+  if (x === pendingPaste.x && y === pendingPaste.y) return false;
+  pendingPaste.x = x;
+  pendingPaste.y = y;
+  renderSelectionOverlay();
+  return true;
+}
+
+function commitPendingPaste(){
+  if (!pendingPaste || pendingPaste.target !== layers[active]) return false;
+  const paste = pendingPaste;
+  pushPaintUndo();
+  paste.target.canvas.getContext('2d').drawImage(paste.canvas, paste.x, paste.y);
+  selectionRect = { x: paste.x, y: paste.y,
+    w: Math.min(paste.canvas.width, paste.target.canvas.width - paste.x),
+    h: Math.min(paste.canvas.height, paste.target.canvas.height - paste.y) };
+  pendingPaste = null;
+  markSelectionExpansion(selectionRect);
+  dirty = true;
+  composite();
+  scheduleAutoPush();
+  renderSelectionOverlay();
+  toast('Pasted into "' + layers[active].name + '"');
+  return true;
+}
+
+function cancelPendingPaste(){
+  if (!pendingPaste) return false;
+  pendingPaste = null;
+  renderSelectionOverlay();
+  toast('Paste cancelled');
+  return true;
+}
+
+function nudgeSelection(dx, dy){
+  if (!selectionRect || active === null || (!dx && !dy)) return false;
+  const rect = selectionRect;
+  const moveX = Math.max(-rect.x, Math.min(paint_cv.width - rect.x - rect.w, dx));
+  const moveY = Math.max(-rect.y, Math.min(paint_cv.height - rect.y - rect.h, dy));
+  if (!moveX && !moveY) return false;
+  const patch = selectionPatch(rect);
+  if (!patch) return false;
+  pushPaintUndo();
+  const ctx = layers[active].canvas.getContext('2d');
+  ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
+  ctx.drawImage(patch, rect.x + moveX, rect.y + moveY);
+  selectionRect = { ...rect, x: rect.x + moveX, y: rect.y + moveY };
+  markSelectionExpansion(selectionRect);
+  dirty = true;
+  composite();
+  renderSelectionOverlay();
+  scheduleAutoPush();
+  return true;
+}
+
+function markSelectionExpansion(rect){
+  const layer = active === null ? null : layers[active];
+  if (layer && layer.rigLayerId && (rect.x < layer.rigX || rect.y < layer.rigY ||
+      rect.x + rect.w > layer.rigX + layer.rigW || rect.y + rect.h > layer.rigY + layer.rigH)) {
+    layer.needsExpand = true;
+  }
+}
+
+function selectionMouseDown(pos){
+  if (pos.x < 0 || pos.y < 0 || pos.x >= paint_cv.width || pos.y >= paint_cv.height) return;
+  paint_cv.focus();
+  if (pendingPaste) {
+    selectionDrag = { mode: 'paste', start: pos, x: pendingPaste.x, y: pendingPaste.y };
+    return;
+  }
+  const current = selectionRect;
+  const inside = current && pos.x >= current.x && pos.y >= current.y &&
+    pos.x < current.x + current.w && pos.y < current.y + current.h;
+  selectionDrag = inside
+    ? { mode: 'move', start: pos, rect: current, image: selectionPatch(current) }
+    : { mode: 'select', start: pos, rect: rectFromPoints(pos, pos) };
+  if (selectionDrag.mode === 'select') renderSelectionOverlay({ rect: selectionDrag.rect });
+}
+
+function selectionMouseMove(pos){
+  if (!selectionDrag) return;
+  pos = { x: Math.max(0, Math.min(paint_cv.width - 1, pos.x)),
+    y: Math.max(0, Math.min(paint_cv.height - 1, pos.y)) };
+  if (selectionDrag.mode === 'select') {
+    selectionDrag.rect = rectFromPoints(selectionDrag.start, pos);
+    renderSelectionOverlay({ rect: selectionDrag.rect });
+    return;
+  }
+  if (selectionDrag.mode === 'paste') {
+    const dx = pos.x - selectionDrag.start.x, dy = pos.y - selectionDrag.start.y;
+    movePendingPasteTo(selectionDrag.x + dx, selectionDrag.y + dy);
+    return;
+  }
+  const dx = Math.max(-selectionDrag.rect.x, Math.min(paint_cv.width - selectionDrag.rect.x - selectionDrag.rect.w,
+    pos.x - selectionDrag.start.x));
+  const dy = Math.max(-selectionDrag.rect.y, Math.min(paint_cv.height - selectionDrag.rect.y - selectionDrag.rect.h,
+    pos.y - selectionDrag.start.y));
+  selectionDrag.dx = dx;
+  selectionDrag.dy = dy;
+  const rect = { ...selectionDrag.rect, x: selectionDrag.rect.x + dx, y: selectionDrag.rect.y + dy };
+  renderSelectionOverlay({ rect, image: selectionDrag.image, x: rect.x, y: rect.y });
+}
+
+function finishSelectionDrag(){
+  if (!selectionDrag) return;
+  const drag = selectionDrag;
+  selectionDrag = null;
+  if (drag.mode === 'select') selectionRect = drag.rect;
+  else if (drag.mode === 'paste') return;
+  else if ((drag.dx || drag.dy) && active !== null) {
+    pushPaintUndo();
+    const ctx = layers[active].canvas.getContext('2d');
+    ctx.clearRect(drag.rect.x, drag.rect.y, drag.rect.w, drag.rect.h);
+    ctx.drawImage(drag.image, drag.rect.x + drag.dx, drag.rect.y + drag.dy);
+    selectionRect = { ...drag.rect, x: drag.rect.x + drag.dx, y: drag.rect.y + drag.dy };
+    markSelectionExpansion(selectionRect);
+    dirty = true;
+    composite();
+    scheduleAutoPush();
+  }
+  renderSelectionOverlay();
 }
 
 function pickCanvasColor(x, y){
@@ -1134,6 +1404,13 @@ function paintPixelLine(g, from, to, erase=false, noisy=false){
 function paint(x,y){
   if(active===null) return;
   const g = layers[active].canvas.getContext('2d');
+  const clipSelection = selectionRect && tool !== 'fill' && tool !== 'picker';
+  if (clipSelection) {
+    g.save();
+    g.beginPath();
+    g.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
+    g.clip();
+  }
   g.lineCap = 'round'; g.lineJoin = 'round';
   if(tool==='pencil'){
     g.strokeStyle = color;
@@ -1159,11 +1436,12 @@ function paint(x,y){
     }
     g.globalCompositeOperation = 'source-over';
   } else if(tool==='fill'){
-    floodFill(g, x, y, color);
+    floodFill(g, x, y, color, selectionRect);
   } else if(tool==='picker'){
     const px = g.getImageData(x,y,1,1).data;
     setColor('#'+px[0].toString(16).padStart(2,'0')+px[1].toString(16).padStart(2,'0')+px[2].toString(16).padStart(2,'0'));
   }
+  if (clipSelection) g.restore();
   if (active !== null && layers[active].rigLayerId) {
     const p = layers[active];
     if (tool === 'fill' || ((tool === 'pencil' || tool === 'pixel') && (x - brushSize / 2 < p.rigX ||
@@ -1175,8 +1453,9 @@ function paint(x,y){
   if (tool !== 'picker') scheduleAutoPush();
 }
 
-function floodFill(g, sx, sy, newColor){
+function floodFill(g, sx, sy, newColor, bounds=null){
   const w = g.canvas.width, h = g.canvas.height;
+  if (bounds && (sx < bounds.x || sy < bounds.y || sx >= bounds.x + bounds.w || sy >= bounds.y + bounds.h)) return;
   const id = g.getImageData(0,0,w,h);
   const data = id.data;
   const get = (x,y)=>(y*w+x)*4;
@@ -1192,7 +1471,8 @@ function floodFill(g, sx, sy, newColor){
     data[idx+3]=nc.a;
     for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){
       const nx=p.x+d[0], ny=p.y+d[1];
-      if(nx>=0&&nx<w&&ny>=0&&ny<h) stack.push({x:nx,y:ny});
+      if(nx>=0&&nx<w&&ny>=0&&ny<h&&(!bounds||
+          (nx>=bounds.x&&nx<bounds.x+bounds.w&&ny>=bounds.y&&ny<bounds.y+bounds.h))) stack.push({x:nx,y:ny});
     }
   }
   g.putImageData(id,0,0);
@@ -1244,6 +1524,13 @@ paint_cv.addEventListener('mousedown', e=>{
     return;
   }
   if(e.button!==0||active===null) return;
+  if (tool === 'select') {
+    e.preventDefault();
+    isDown = true;
+    selectionMouseDown(getCanvasPos(e));
+    paint_wrap.classList.add('painting');
+    return;
+  }
   pushPaintUndo();                 // one snapshot per stroke
   isDown = true;
   lastPos = getCanvasPos(e);
@@ -1255,11 +1542,16 @@ window.addEventListener('mouseup', e=>{
   if(!isDown) return;
   isDown = false;
   lastPos = null;
+  finishSelectionDrag();
   paint_wrap.classList.remove('painting');
 });
 paint_cv.addEventListener('mousemove', e=>{
   if(!isDown) return;
   const pos = getCanvasPos(e);
+  if (selectionDrag) {
+    selectionMouseMove(pos);
+    return;
+  }
   paint(pos.x, pos.y);
   lastPos = pos;
 });
@@ -1278,6 +1570,11 @@ paint_wrap.addEventListener('wheel', e=>{
 document.querySelectorAll('#paintToolButtons [data-paint-tool]').forEach(button => {
   button.onclick = () => setPaintTool(button.dataset.paintTool);
 });
+document.getElementById('paintSelectionCopy').onclick = ()=>copySelection(false);
+document.getElementById('paintSelectionCut').onclick = ()=>copySelection(true);
+document.getElementById('paintSelectionPaste').onclick = pasteSelection;
+document.getElementById('paintSelectionConfirm').onclick = commitPendingPaste;
+document.getElementById('paintSelectionCancel').onclick = cancelPendingPaste;
 document.getElementById('paintLayerFilter').oninput = ()=>renderLayers();
 document.getElementById('paintHideSimilarLayers').onchange = ()=>{
   if (!layerIsolationOpacities) return;
@@ -1338,6 +1635,7 @@ document.getElementById('paintFileOpen').onchange = async e=>{
   const img = await loadImage(f);
   pushPaintUndo();
   restoreLayerIsolation();
+  selectionRect = null;
   paint_cv.width = img.width; paint_cv.height = img.height;
   layers = [{name:f.name.replace(/\.[^/.]+$/,''), canvas:img, visible:true, opacity:1}];
   active = 0; activeWorkspaceId = null;
@@ -1431,14 +1729,59 @@ paint_preview.addEventListener('wheel', e=>{
 // undo / redo
 document.getElementById('paintBtnUndo').onclick = undoPaint;
 document.getElementById('paintBtnRedo').onclick = redoPaint;
-document.addEventListener('keydown', (e)=>{
-  if (document.body.dataset.mode !== 'paint') return;
-  if (!(e.ctrlKey || e.metaKey)) return;
+window.addEventListener('keydown', (e)=>{
+  if (document.body.dataset.mode !== 'paint' || viewTab !== 'paint') return;
   const tag = (e.target.tagName || '').toLowerCase();
-  if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+  if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.target.isContentEditable) return;
   const k = e.key.toLowerCase();
-  if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoPaint(); }
-  else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redoPaint(); }
+  const directions = {
+    ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]
+  };
+  if (directions[e.key] && active !== null &&
+      ((pendingPaste && pendingPaste.target === layers[active]) || (selectionRect && (e.ctrlKey || e.metaKey || e.shiftKey)))) {
+    e.preventDefault();
+    const [dx, dy] = directions[e.key];
+    const distance = e.shiftKey && !(e.ctrlKey || e.metaKey) ? 10 : 1;
+    if (pendingPaste) movePendingPaste(dx * distance, dy * distance);
+    else nudgeSelection(dx * distance, dy * distance);
+    return;
+  }
+  if (pendingPaste && e.key === 'Enter') {
+    e.preventDefault();
+    commitPendingPaste();
+    return;
+  }
+  if (pendingPaste && e.key === 'Escape') {
+    e.preventDefault();
+    cancelPendingPaste();
+    return;
+  }
+  if (e.ctrlKey || e.metaKey) {
+    if (k === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      if (!cancelPendingPaste()) undoPaint();
+    }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redoPaint(); }
+    else if (k === 'a' && active !== null) {
+      e.preventDefault();
+      selectionRect = { x: 0, y: 0, w: paint_cv.width, h: paint_cv.height };
+      setPaintTool('select', false);
+      renderSelectionOverlay();
+    } else if (k === 'c' && selectionRect) { e.preventDefault(); copySelection(false); }
+    else if (k === 'x' && selectionRect) { e.preventDefault(); copySelection(true); }
+    else if (k === 'v' && selectionClipboard && active !== null) { e.preventDefault(); pasteSelection(); }
+    return;
+  }
+  if (e.key === 'Escape' && selectionRect) {
+    selectionRect = null;
+    renderSelectionOverlay();
+  } else if (selectionRect && active !== null &&
+      ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+    e.preventDefault();
+    const distance = e.shiftKey ? 10 : 1;
+    nudgeSelection(e.key === 'ArrowLeft' ? -distance : e.key === 'ArrowRight' ? distance : 0,
+      e.key === 'ArrowUp' ? -distance : e.key === 'ArrowDown' ? distance : 0);
+  }
 });
 document.getElementById('paintLayerOpacity').addEventListener('pointerdown', ()=>pushPaintUndo());
 document.getElementById('paintActiveLayerOpacity').addEventListener('pointerdown', ()=>pushPaintUndo());
@@ -1606,6 +1949,7 @@ function importRigLayer(layerId) {
   const l = R.layerById(layerId);
   if (!l) { toast('Layer not found in the rig'); return; }
   if (!fitPaintToRig(doc)) return;
+  selectionRect = null;
   if (paintCanvasIsBlank()) { layers = []; active = null; }
   pushPaintUndo();
   restoreLayerIsolation();
@@ -1618,7 +1962,7 @@ function importRigLayer(layerId) {
   dirty = true;
   populateAnimClips();
   useWholeRigPreview();
-  updateUI(); composite();
+  updateUI(); focusPaintLayer(active); composite();
   rigBridgeStatus('Imported "' + pl.name + '" (' + l.w + 'x' + l.h + ')');
   toast('Imported rig layer: ' + pl.name);
 }
@@ -1629,6 +1973,7 @@ function importAllRigAssets() {
   const flat = R.layersForPaint();
   if (!flat.length) { toast('The rig has no layers to import'); return; }
   if (!fitPaintToRig(doc)) return;
+  selectionRect = null;
   if (paintCanvasIsBlank()) { layers = []; active = null; }
   pushPaintUndo();
   restoreLayerIsolation();
@@ -1646,7 +1991,7 @@ function importAllRigAssets() {
   dirty = true;
   populateAnimClips();
   useWholeRigPreview();
-  updateUI(); composite();
+  updateUI(); focusPaintLayer(active); composite();
   rigBridgeStatus('Imported ' + n + ' rig layer(s) at ' + paint_cv.width + 'x' + paint_cv.height);
   toast('Imported ' + n + ' rig layer(s)');
 }
@@ -1768,6 +2113,7 @@ function importImageAsset(){
     toast('Could not open "' + asset.name + '": its image data is invalid', 6000);
     return;
   }
+  selectionRect = null;
   restoreLayerIsolation();
   let existing = -1;
   for (let i = 0; i < layers.length; i++) if (layers[i].assetWorkspaceId === asset.id) existing = i;

@@ -120,6 +120,7 @@ async function restoreAutosave() {
     if (!text) throw new Error(storageError ? 'Could not read the browser recovery draft: ' + storageError.message : 'No recovery draft was found');
     lastAuto = useIndexedDb ? text : '';
     setDoc(RIG.deserialize(text));
+    window.dispatchEvent(new Event('rig-recovered'));
     toast('Back where you left off: ' + doc.name);
   } catch (e) { toast('Could not restore: ' + e.message, 7000); }
 }
