@@ -367,7 +367,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
   </ul>
   <details>
     <summary>Sprite Paint tips</summary>
-    <p class="muted">The Rig Editor autosaves your character locally; Sprite Paint also autosaves its layered session. Reopen the editor and choose <i>Restore Paint</i> if you need to recover a closed Paint session. In Sprite Paint, double-click a paint layer to fade the others to 5%; use <i>Hide similar layers when isolating</i> to hide matching names (for example, Head / Head 2 or Front / Back) completely. Double-click again restores opacities. The active layer's opacity control stays with the layer list while you scroll through many layers. Pixel brush and Pixel eraser make crisp square marks (set their size with <i>Size</i>); the optional Noisy pixel brush slightly varies mark colors without shifting their positions. When editing a head image asset, use <i>Head variants</i> to copy the current art to mouth and injury alternatives, add a quick scratch, wound or bruise, or restore selected variants to the game's defaults. The read-only preview can be zoomed with the wheel and moved by dragging; its layer and opacity controls only change the preview. Double-click a rig layer to edit it; use <i>Other image assets</i> to open game sprites, tools, wearables, health-screen art and swaps at native size. Paint changes sync back to the rig.</p>
+    <p class="muted">The Rig Editor autosaves your character locally; Sprite Paint also autosaves its layered session. Reopen the editor and choose <i>Restore Paint</i> if you need to recover a closed Paint session. In Sprite Paint, double-click a paint layer to fade the others to 5%; use <i>Hide similar layers when isolating</i> to hide matching names (for example, Head / Head 2 or Front / Back) completely. Double-click again restores opacities. The active layer's opacity control stays with the layer list while you scroll through many layers. Pixel brush and Pixel eraser make crisp square marks (set their size with <i>Size</i>); optionally toggle <i>Vary color tone</i> and choose Low, Medium, High or Extreme to make marks lighter or darker without shifting their positions or changing their hue. When editing a head image asset, use <i>Head variants</i> to copy the current art to mouth and injury alternatives, add a quick scratch, wound or bruise, or restore selected variants to the game's defaults. The read-only preview can be zoomed with the wheel and moved by dragging; its layer and opacity controls only change the preview. Double-click a rig layer to edit it; use <i>Other image assets</i> to open game sprites, tools, wearables, health-screen art and swaps at native size. Paint changes sync back to the rig.</p>
   </details>
   <h3>Disclaimer</h3>
   <p class="muted" style="margin-top:0">Luna Advanced Rig Systems is a fan-made mod and tool, not made by or affiliated with the developer of Casualties: Unknown. The <b>Test</b> tab is a <b>simulation</b>: its movement, states, eyes, mouth and injury rules are re-created from Casualties: Unknown's code by <b>Orson</b>, so you can preview a character outside the game. It is not the game and won't match it exactly. Nothing from the game is included in the editor: the game template (sprites, wearables, animations) is made by the mod from your own copy of the game. Casualties: Unknown, its code and its art belong to Orson.</p>
@@ -413,7 +413,13 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <div class="row"><label>Size</label>
 <input id="paintBrushSize" type="range" min="1" max="32" value="4">
 <span id="paintBrushSizeVal">4px</span></div>
-<label class="muted" style="display:flex;align-items:center;gap:6px;font-size:11px;margin:0 0 8px 96px"><input id="paintPixelNoise" type="checkbox" disabled> Noisy pixel brush <span title="Adds a subtle random color variation to pixel-brush marks without moving them">ⓘ</span></label>
+<div style="display:flex;align-items:center;gap:6px;margin:0 0 8px 96px">
+<label class="muted" style="display:flex;align-items:center;gap:6px;font-size:11px"><input id="paintPixelNoise" type="checkbox" disabled> Vary color tone</label>
+<select id="paintPixelNoiseStrength" aria-label="Pixel brush tone variation strength" title="Adjust how much lighter or darker each pixel mark can be" disabled style="font-size:10px;padding:2px 4px">
+<option value="4">Low</option><option value="8">Medium</option><option value="12">High</option><option value="20">Extreme</option>
+</select>
+<span class="muted" title="Varies color only; mark positions do not move" style="font-size:10px">ⓘ</span>
+</div>
 <div class="row" style="align-items:center">
 <label>Color</label>
 <div class="color-pick-wrap" title="Choose a custom color"><input id="paintColorPick" type="color" value="#e0475b" aria-label="Choose paint color"></div>
@@ -466,7 +472,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <button id="paintBtnRigPreview" title="Show the rig on the Preview tab">Rig preview</button>
 </div>
 <div id="rigIntegrationStatus" style="font-size:10px;color:var(--dim);margin-top:4px;line-height:1.3"></div>
-<div style="font-size:10px;color:var(--dim);margin-top:4px">Double-click a rig layer to paint it. Edits sync back; new Paint layers are added to the rig as unassigned layers.</div>
+<div style="font-size:10px;color:var(--dim);margin-top:4px">Double-click a rig layer to paint it. New Paint layers named Ear / Ears are added as moving parts attached to the head; other names are guessed or can be assigned in the Rig editor.</div>
 </div>
 <h2>Other image assets</h2>
 <div class="section">

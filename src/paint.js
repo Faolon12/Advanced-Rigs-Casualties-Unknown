@@ -31,6 +31,7 @@ let lastPos = null;
 let tool = 'pencil';
 let brushSize = 4;
 let pixelBrushNoise = false;
+let pixelBrushNoiseStrength = 4;
 let color = '#e0475b';
 let dirty = false;
 let viewTab = 'paint'; // 'paint' | 'preview' | 'export'
@@ -182,7 +183,7 @@ async function createPaintAutosave(){
     layerIsolationOpacities: layerIsolationOpacities && [...layerIsolationOpacities],
     isolatedLayer,
     settings: {
-      tool, brushSize, color, pixelBrushNoise, zoom, autoFit,
+      tool, brushSize, color, pixelBrushNoise, pixelBrushNoiseStrength, zoom, autoFit,
       pan: { x: pan.x, y: pan.y },
       previewPan: { x: previewPan.x, y: previewPan.y },
       viewTab: viewTab === 'export' ? 'paint' : viewTab,
@@ -276,6 +277,7 @@ async function restorePaintAutosave(){
     brushSize = Number.isInteger(settings.brushSize) ? Math.min(32, Math.max(1, settings.brushSize)) : 4;
     color = /^#[0-9a-f]{6}$/i.test(settings.color || '') ? settings.color : '#e0475b';
     pixelBrushNoise = !!settings.pixelBrushNoise;
+    pixelBrushNoiseStrength = ({ 3: 4, 6: 8, 9: 12, 4: 4, 8: 8, 12: 12, 20: 20 })[settings.pixelBrushNoiseStrength] || 4;
     zoom = Number.isFinite(settings.zoom) ? settings.zoom : 1;
     autoFit = settings.autoFit !== false;
     pan = settings.pan && Number.isFinite(settings.pan.x) && Number.isFinite(settings.pan.y)
@@ -290,6 +292,7 @@ async function restorePaintAutosave(){
     document.getElementById('paintColorPick').value = color;
     document.getElementById('paintColorValue').textContent = color.toUpperCase();
     document.getElementById('paintPixelNoise').checked = pixelBrushNoise;
+    document.getElementById('paintPixelNoiseStrength').value = String(pixelBrushNoiseStrength);
     document.getElementById('paintPreviewScale').value = settings.previewScale || '1';
     document.getElementById('paintPreviewOnTop').checked = settings.previewOnTop !== false;
     document.getElementById('paintPreviewOpacity').value = settings.previewOpacity || '100';
@@ -531,21 +534,32 @@ function autoPushNow(workspaceId=activeWorkspaceId){
   const g = rigPushTargets(workspaceId);
   if (!g) return { pushed: 0, failed: 0, added: 0 };
   let pushed = 0, failed = 0, added = 0;
+  const failures = [];
+  const fail = (name, reason) => {
+    failed++;
+    failures.push(name + ': ' + reason);
+  };
   for (const p of g.targets) {
+    if (p.rigLayerId && !g.R.layerById(p.rigLayerId)) p.rigLayerId = null;
     if (!p.rigLayerId) {
+      if (!p.canvas) { fail(p.name, 'Paint layer has no canvas'); continue; }
       let bounds;
       try { bounds = opaqueBounds(p.canvas); }
-      catch (e) { failed++; continue; }
+      catch (e) { fail(p.name, 'could not read Paint pixels (' + e.message + ')'); continue; }
       if (!bounds) continue;
       if (bounds.x + bounds.w > g.doc.width || bounds.y + bounds.h > g.doc.height) {
-        failed++;
+        fail(p.name, 'painted bounds ' + bounds.x + ',' + bounds.y + ' ' + bounds.w + '×' + bounds.h +
+          ' exceed rig canvas ' + g.doc.width + '×' + g.doc.height);
         continue;
       }
       let data;
       try { data = p.canvas.getContext('2d').getImageData(bounds.x, bounds.y, bounds.w, bounds.h).data; }
-      catch (e) { failed++; continue; }
+      catch (e) { fail(p.name, 'could not read Paint pixels (' + e.message + ')'); continue; }
       const linked = g.R.addPaintLayer(p.name, bounds.x, bounds.y, bounds.w, bounds.h, data);
-      if (!linked) { failed++; continue; }
+      if (!linked) {
+        fail(p.name, 'rig rejected bounds ' + bounds.x + ',' + bounds.y + ' ' + bounds.w + '×' + bounds.h);
+        continue;
+      }
       p.rigLayerId = linked.id;
       p.rigX = linked.x; p.rigY = linked.y; p.rigW = linked.w; p.rigH = linked.h;
       pushed++; added++;
@@ -553,8 +567,9 @@ function autoPushNow(workspaceId=activeWorkspaceId){
       continue;
     }
     const l = g.R.layerById(p.rigLayerId);
-    if (!l || !p.canvas) { failed++; continue; }
+    if (!p.canvas) { fail(p.name, 'Paint layer has no canvas'); continue; }
     let sx = Math.round(l.x), sy = Math.round(l.y), sw = l.w, sh = l.h;
+    const clearNeedsExpand = !!p.needsExpand;
     if (p.needsExpand) {
       try {
         const bounds = opaqueBounds(p.canvas);
@@ -564,17 +579,22 @@ function autoPushNow(workspaceId=activeWorkspaceId){
           sx = Math.min(sx, bounds.x); sy = Math.min(sy, bounds.y);
           sw = right - sx; sh = bottom - sy;
         }
-        p.needsExpand = false;
-      } catch (e) { failed++; continue; }
+      } catch (e) { fail(p.name, 'could not read expanded Paint bounds (' + e.message + ')'); continue; }
     }
     let data;
     try { data = p.canvas.getContext('2d').getImageData(sx, sy, sw, sh).data; }
-    catch (e) { failed++; continue; }
+    catch (e) { fail(p.name, 'could not read Paint pixels at ' + sx + ',' + sy + ' (' + e.message + ')'); continue; }
     const bounds = sx === l.x && sy === l.y && sw === l.w && sh === l.h ? null : { x: sx, y: sy, w: sw, h: sh };
     if (g.R.setLayerPixels(l.id, data, bounds)) {
       p.rigX = sx; p.rigY = sy; p.rigW = sw; p.rigH = sh;
+      if (clearNeedsExpand) p.needsExpand = false;
       pushed++;
-    } else failed++;
+    } else {
+      const outside = sx < 0 || sy < 0 || sx + sw > g.doc.width || sy + sh > g.doc.height;
+      fail(p.name, outside
+        ? 'sync bounds ' + sx + ',' + sy + ' ' + sw + '×' + sh + ' exceed rig canvas ' + g.doc.width + '×' + g.doc.height
+        : 'rig rejected pixels for bounds ' + sx + ',' + sy + ' ' + sw + '×' + sh);
+    }
   }
   if (g.assetLayers.length) {
     const base = g.assetLayers[0];
@@ -588,14 +608,19 @@ function autoPushNow(workspaceId=activeWorkspaceId){
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    if (g.R.setImageAssetPixels(g.assetWorkspaceId, canvas.width, canvas.height, pixels)) pushed++;
-    else failed++;
+    let pixels;
+    try { pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data; }
+    catch (e) { fail(base.name, 'could not read image asset pixels (' + e.message + ')'); }
+    if (pixels) {
+      if (g.R.setImageAssetPixels(g.assetWorkspaceId, canvas.width, canvas.height, pixels)) pushed++;
+      else fail(base.name, 'rig rejected image asset size ' + canvas.width + '×' + canvas.height);
+    }
   }
   if (pushed) g.R.redraw();
   if (pushed || failed) {
+    const details = failures.slice(0, 3).join('; ') + (failures.length > 3 ? '; +' + (failures.length - 3) + ' more' : '');
     rigBridgeStatus((added ? 'Added ' + added + ' new rig layer' + (added === 1 ? '' : 's') + '; synced ' : 'Auto-synced ') +
-      pushed + ' image' + (pushed === 1 ? '' : 's') + (failed ? '  (' + failed + ' failed; check the rig canvas size)' : ''));
+      pushed + ' image' + (pushed === 1 ? '' : 's') + (failed ? ' (' + failed + ' failed: ' + details + ')' : ''));
   }
   if (previewMode === 'rig' && !animPreviewOn) {
     refreshRigPreview();
@@ -1023,8 +1048,14 @@ function renameLayer(idx){
     const nn = name.trim()||'Layer';
     if(nn!==layers[idx].name) pushPaintUndo();
     layers[idx].name = nn;
+    const R = rigAPI();
+    const result = layers[idx].rigLayerId && R && R.renamePaintLayer
+      ? R.renamePaintLayer(layers[idx].rigLayerId, nn) : null;
     dirty = true;
+    if (previewMode === 'rig') refreshRigPreview();
     updateUI();
+    if (result && result.chainName) toast('Added "' + nn + '" as a moving part attached to the head');
+    else if (result && result.role !== 'ignore') toast('Renamed and assigned "' + nn + '" in the rig');
   }
 }
 
@@ -1053,6 +1084,7 @@ function setPaintTool(nextTool, resetPixelSize=true){
     button.setAttribute('aria-pressed', String(selected));
   });
   document.getElementById('paintPixelNoise').disabled = tool !== 'pixel';
+  document.getElementById('paintPixelNoiseStrength').disabled = tool !== 'pixel' || !pixelBrushNoise;
   if (resetPixelSize && (tool === 'pixel' || tool === 'pixel-eraser')) {
     brushSize = 1;
     document.getElementById('paintBrushSize').value = '1';
@@ -1077,10 +1109,10 @@ function pickCanvasColor(x, y){
     .map(channel=>channel.toString(16).padStart(2, '0')).join(''));
 }
 
-function varyPixelBrushColor(hex){
-  const amount = 14;
+function varyPixelBrushColor(hex, amount){
+  const tone = 1 + (Math.random() * 2 - 1) * amount / 100;
   const channels = [1, 3, 5].map(offset=>Math.max(0, Math.min(255,
-    parseInt(hex.slice(offset, offset + 2), 16) + Math.round((Math.random() * 2 - 1) * amount))));
+    Math.round(parseInt(hex.slice(offset, offset + 2), 16) * tone))));
   return '#' + channels.map(channel=>channel.toString(16).padStart(2, '0')).join('');
 }
 
@@ -1093,7 +1125,7 @@ function paintPixelLine(g, from, to, erase=false, noisy=false){
   for (let i = 0; i <= steps; i++) {
     const x = Math.round(from.x + dx * i / steps);
     const y = Math.round(from.y + dy * i / steps);
-    g.fillStyle = erase ? '#000' : noisy ? varyPixelBrushColor(color) : color;
+    g.fillStyle = erase ? '#000' : noisy ? varyPixelBrushColor(color, pixelBrushNoiseStrength) : color;
     g.fillRect(x - leftOffset, y - leftOffset, brushSize, brushSize);
   }
   g.globalCompositeOperation = 'source-over';
@@ -1259,6 +1291,14 @@ document.getElementById('paintBrushSize').oninput = e=>{
 };
 document.getElementById('paintPixelNoise').onchange = e=>{
   pixelBrushNoise = e.target.checked;
+  document.getElementById('paintPixelNoiseStrength').disabled = tool !== 'pixel' || !pixelBrushNoise;
+  dirty = true;
+  schedulePaintAutosave();
+};
+document.getElementById('paintPixelNoiseStrength').onchange = e=>{
+  pixelBrushNoiseStrength = [4, 8, 12, 20].includes(Number(e.target.value)) ? Number(e.target.value) : 4;
+  dirty = true;
+  schedulePaintAutosave();
 };
 document.getElementById('paintColorPick').oninput = e=>setColor(e.target.value, false);
 document.getElementById('paintColorPick').onchange = e=>setColor(e.target.value, true);

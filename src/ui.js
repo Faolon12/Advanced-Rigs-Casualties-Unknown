@@ -2690,6 +2690,12 @@ function bridgeSetPixels(id, rgba, bounds) {
   imgCache.delete(l);              // the cached canvas is now stale
   return true;
 }
+function revealRigLayerInList() {
+  lyQuery = '';
+  lyKind = '';
+  $('#lySearch').value = '';
+  $('#lyFilter').value = '';
+}
 function bridgeAddPaintLayer(name, x, y, w, h, rgba) {
   if (!doc || !Number.isInteger(x) || !Number.isInteger(y) ||
       !Number.isInteger(w) || !Number.isInteger(h) || x < 0 || y < 0 ||
@@ -2699,10 +2705,29 @@ function bridgeAddPaintLayer(name, x, y, w, h, rgba) {
   const layer = { id: RIG.newId(), name: name || 'Paint layer', x, y, w, h,
     rgba: new Uint8Array(rgba), order: doc.layers.length, hidden: false, role: { type: 'ignore' } };
   doc.layers.push(layer);
+  const chain = RIG.assignOne(doc, layer);
+  if (chain) RIG.autoBones(doc, chain);
+  revealRigLayerInList();
   selLayer = layer.id;
   selSet = new Set([layer.id]);
   refresh();
-  return { id: layer.id, x, y, w, h };
+  return { id: layer.id, x, y, w, h, role: layer.role.type,
+    chainName: chain ? chain.name : null };
+}
+function bridgeRenamePaintLayer(id, name) {
+  const layer = bridgeLayer(id);
+  if (!layer) return null;
+  pushUndo();
+  layer.name = name;
+  let chain = null;
+  if (layer.role.type === 'ignore') {
+    chain = RIG.assignOne(doc, layer);
+    if (chain) RIG.autoBones(doc, chain);
+  }
+  if (chain || layer.role.type !== 'ignore') revealRigLayerInList();
+  refresh();
+  startTestIfOpen();
+  return { role: layer.role.type, chainName: chain ? chain.name : null };
 }
 function bridgeImageAssets() {
   if (!doc) return [];
@@ -2931,7 +2956,7 @@ function bridgeAnimCrop() {
   return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
 }
 window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
-  layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, addPaintLayer: bridgeAddPaintLayer,
+  layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, addPaintLayer: bridgeAddPaintLayer, renamePaintLayer: bridgeRenamePaintLayer,
   imageAssetsForPaint: bridgeImageAssets, setImageAssetPixels: bridgeSetImageAssetPixels,
   headVariantsForPaint: bridgeHeadVariantsForPaint, applyHeadVariants: bridgeApplyHeadVariants, snapshot: bridgeSnapshot,
   animClips: bridgeAnimClips, startAnim: bridgeStartAnim, stopAnim: bridgeStopAnim, setAnimClip: bridgeSetAnimClip, animCrop: bridgeAnimCrop,
