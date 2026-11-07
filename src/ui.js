@@ -1270,7 +1270,8 @@ function drawChecker(W, H) {
 }
 
 function syncPpu() { RIG.PPU = (doc && doc.ppu) || 8; }
-function draw() {
+function draw(options = {}) {
+  const preview = options.preview === true;
   syncPpu();
   const d = window.devicePixelRatio || 1; ctx.setTransform(d, 0, 0, d, 0, 0);
   const W = cv.width / d, H = cv.height / d;
@@ -1308,8 +1309,8 @@ function draw() {
     const p = toScreen(l);
     const isArt = l.role.type === 'state' || l.role.type === 'injury' || l.role.type === 'frame' || (l.role.type === 'eye' && l.role.state !== shownEye()) || (l.role.type === 'gear' && !gearShown(l));
     ctx.globalAlpha = l.role.type === 'ignore' ? (manualMode ? 0.7 : 0.25) : (isArt ? 0.0 : 1);
-    if (isArt && (l.id === selLayer || selSet.has(l.id))) ctx.globalAlpha = 1;
-    if (xray) { ctx.globalAlpha = selSet.has(l.id) || l.id === selLayer ? 1 : (isArt ? 0 : 0.18);
+    if (!preview && isArt && (l.id === selLayer || selSet.has(l.id))) ctx.globalAlpha = 1;
+    if (!preview && xray) { ctx.globalAlpha = selSet.has(l.id) || l.id === selLayer ? 1 : (isArt ? 0 : 0.18);
       if (!isArt || selSet.has(l.id)) { const sa = ctx.globalAlpha; ctx.globalAlpha = 0.6; ctx.strokeStyle = l.role.type === 'ignore' ? '#e0a020' : l.role.type === 'chain' ? '#3fbf7f' : '#5aa0ff'; ctx.lineWidth = 1; ctx.strokeRect(p.x + 0.5, p.y + 0.5, l.w * view.zoom - 1, l.h * view.zoom - 1); ctx.globalAlpha = sa; } }
     if (ctx.globalAlpha <= 0) continue;
     if (l.spriteRot && (l.role.type === 'part' || l.role.type === 'gear')) { // drawn the way the game's sprite is: turned with the part
@@ -1319,7 +1320,7 @@ function draw() {
   }
   ctx.globalAlpha = 1;
   // game skeleton ghost
-  if (showSkel) {
+  if (!preview && showSkel) {
     ctx.lineWidth = 1;
     for (const part of RIG.PARTS) {
       const J = RIG.J(doc, part), k8 = RIG.PPU / 8, sz = RIG.VANILLA_SIZE[part].map(v => v * k8), s = toScreen(J);
@@ -1333,13 +1334,14 @@ function draw() {
     const o = toScreen(doc.align); ctx.fillStyle = 'rgba(120,200,255,.9)'; ctx.beginPath(); ctx.arc(o.x, o.y, 3, 0, 7); ctx.fill();
   }
   // selected layer outline
-  const sl = selLayer && RIG.layer(doc, selLayer);
-  if (selSet.size > 1) for (const id of selSet) { const o = RIG.layer(doc, id); if (!o || o === sl) continue; const p = toScreen(o); ctx.strokeStyle = 'rgba(143,91,255,.8)'; ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.strokeRect(p.x - .5, p.y - .5, o.w * view.zoom + 1, o.h * view.zoom + 1); ctx.setLineDash([]); }
-  if (sl) { const p = toScreen(sl); ctx.strokeStyle = '#8f5bff'; ctx.lineWidth = 1.5; ctx.strokeRect(p.x - .5, p.y - .5, sl.w * view.zoom + 1, sl.h * view.zoom + 1); }
-  const sc = selChain && RIG.chain(doc, selChain);
-  if (sc && !sl) { ctx.strokeStyle = 'rgba(143,91,255,.55)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); for (const s of sc.segs) { const l = RIG.layer(doc, s.layer); if (!l) continue; const p = toScreen(l); ctx.strokeRect(p.x - .5, p.y - .5, l.w * view.zoom + 1, l.h * view.zoom + 1); } ctx.setLineDash([]); }
-  // bones
-  for (const ch of doc.chains) drawBones(ch, ch.id === selChain);
+  if (!preview) {
+    const sl = selLayer && RIG.layer(doc, selLayer);
+    if (selSet.size > 1) for (const id of selSet) { const o = RIG.layer(doc, id); if (!o || o === sl) continue; const p = toScreen(o); ctx.strokeStyle = 'rgba(143,91,255,.8)'; ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.strokeRect(p.x - .5, p.y - .5, o.w * view.zoom + 1, o.h * view.zoom + 1); ctx.setLineDash([]); }
+    if (sl) { const p = toScreen(sl); ctx.strokeStyle = '#8f5bff'; ctx.lineWidth = 1.5; ctx.strokeRect(p.x - .5, p.y - .5, sl.w * view.zoom + 1, sl.h * view.zoom + 1); }
+    const sc = selChain && RIG.chain(doc, selChain);
+    if (sc && !sl) { ctx.strokeStyle = 'rgba(143,91,255,.55)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); for (const s of sc.segs) { const l = RIG.layer(doc, s.layer); if (!l) continue; const p = toScreen(l); ctx.strokeRect(p.x - .5, p.y - .5, l.w * view.zoom + 1, l.h * view.zoom + 1); } ctx.setLineDash([]); }
+    for (const ch of doc.chains) drawBones(ch, ch.id === selChain);
+  }
 }
 
 function gearShown(l) { const sl = selLayer && RIG.layer(doc, selLayer); const wp = $('#wearPrev'); return (sl && sl.role.type === 'gear' && sl.role.item === l.role.item) || (wp && wp.value && wp.value === l.role.item); }
@@ -2676,7 +2678,16 @@ $('#eyePrev').innerHTML = '<option value="">Eyes: automatic</option>' + RIG.EYE_
 // ---------------------------------------------------------------- start
 resize(); renderInspector(); hint('Open your character to begin. New here? Click <b>How to</b>. <span style="opacity:.7">Fan-made, not affiliated with Casualties: Unknown. The Test tab is a simulation based on Orson\'s game code.</span>');
 // ---- bridge API used by the sprite paint editor (it lives outside this closure)
-function bridgeLayers() { return doc ? doc.layers.filter(l => l.rgba) : []; }
+function bridgeLayers() {
+  if (!doc) return [];
+  const cutLayers = new Set(doc.chains.filter(ch => ch.source).flatMap(ch => ch.segs.map(seg => seg.layer)));
+  return doc.layers.filter(l => l.rgba && !cutLayers.has(l.id)).map(l => {
+    const sourceChain = doc.chains.find(ch => ch.source === l.id);
+    return sourceChain
+      ? Object.assign({}, l, { paintReplacedLayerIds: sourceChain.segs.map(seg => seg.layer).filter(id => id !== l.id) })
+      : l;
+  });
+}
 function bridgeLayer(id) { return doc ? RIG.layer(doc, id) : null; }
 function bridgeSetPixels(id, rgba, bounds) {
   const l = bridgeLayer(id); if (!l) return false;
@@ -2686,9 +2697,18 @@ function bridgeSetPixels(id, rgba, bounds) {
       next.w < 1 || next.h < 1 || next.x < 0 || next.y < 0 ||
       next.x + next.w > doc.width || next.y + next.h > doc.height ||
       !rgba || rgba.length !== next.w * next.h * 4) return false;
+  const cutChain = l.cutSource && doc.chains.find(ch => ch.id === l.cutSource && ch.source === l.id);
+  if (l.cutSource && !cutChain) return false;
   l.rgba = new Uint8Array(rgba);
   l.x = next.x; l.y = next.y; l.w = next.w; l.h = next.h;
   imgCache.delete(l);              // the cached canvas is now stale
+  if (cutChain) {
+    if (!RIG.recut(doc, cutChain)) return false;
+    for (const seg of cutChain.segs) {
+      const piece = RIG.layer(doc, seg.layer);
+      if (piece) imgCache.delete(piece);
+    }
+  }
   return true;
 }
 function revealRigLayerInList() {
@@ -2899,7 +2919,7 @@ function bridgeSnapshot(excludeLayerId) {
   try {
     bridgeExcludedLayerId = excludeLayerId || null;
     fitView();
-    resize(); draw();
+    resize(); draw({ preview: true });
     const c = document.createElement('canvas');
     c.width = doc.width; c.height = doc.height;
     const d = window.devicePixelRatio || 1;

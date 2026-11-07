@@ -584,7 +584,10 @@ let autoPushTimer = null;
 function rigPushTargets(workspaceId=activeWorkspaceId){
   const R = window.__rigEditor, doc = R && R.doc;
   if (!doc) return null;
-  const targets = workspaceId ? [] : layers.filter(p => p.rigLayerId || !p.assetWorkspaceId);
+  const cutLayerIds = new Set(doc.chains.filter(chain => chain.source)
+    .flatMap(chain => chain.segs.map(seg => seg.layer)));
+  const targets = workspaceId ? [] : layers.filter(p =>
+    !p.assetWorkspaceId && (!p.rigLayerId || !cutLayerIds.has(p.rigLayerId)));
   const assetLayers = workspaceId ? layers.filter(p => p.assetWorkspaceId === workspaceId && p.assetBase) : [];
   return targets.length || assetLayers.length ? { R, doc, targets, assetLayers, assetWorkspaceId: workspaceId } : null;
 }
@@ -1921,7 +1924,8 @@ function makePaintLayer(l) {
   const c = newLayerCanvas(paint_cv.width, paint_cv.height);
   c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(l.rgba), l.w, l.h), l.x, l.y);
   return { name: l.name || 'Rig Layer', canvas: c, visible: !l.hidden, opacity: 1,
-    rigLayerId: l.id, rigX: l.x, rigY: l.y, rigW: l.w, rigH: l.h };
+    rigLayerId: l.id, rigX: l.x, rigY: l.y, rigW: l.w, rigH: l.h,
+    ...(l.paintReplacedLayerIds ? { rigReplacedLayerIds: [...l.paintReplacedLayerIds] } : {}) };
 }
 
 function useWholeRigPreview() {
@@ -1946,7 +1950,9 @@ function useWholeRigPreview() {
 function importRigLayer(layerId) {
   const R = rigAPI(), doc = R && R.doc;
   if (!doc) { toast('Open a rig first'); return; }
-  const l = R.layerById(layerId);
+  const sourceChain = doc.chains.find(chain => chain.source && chain.segs.some(seg => seg.layer === layerId));
+  const sourceId = sourceChain ? sourceChain.source : layerId;
+  const l = R.layersForPaint().find(layer => layer.id === sourceId) || R.layerById(sourceId);
   if (!l) { toast('Layer not found in the rig'); return; }
   if (!fitPaintToRig(doc)) return;
   selectionRect = null;
@@ -1954,10 +1960,17 @@ function importRigLayer(layerId) {
   pushPaintUndo();
   restoreLayerIsolation();
   activeWorkspaceId = null;
-  const idx = layers.findIndex(p => p.rigLayerId === layerId);
+  const replacedIds = new Set(l.paintReplacedLayerIds || []);
+  const activeLayer = active === null ? null : layers[active];
+  if (replacedIds.size) {
+    layers = layers.filter(layer => !replacedIds.has(layer.rigLayerId));
+    active = activeLayer ? layers.indexOf(activeLayer) : null;
+    if (active < 0) active = null;
+  }
   const pl = makePaintLayer(l);
-  if (idx >= 0) layers[idx] = pl; else layers.push(pl);
-  active = idx >= 0 ? idx : layers.length - 1;
+  const existingIndex = layers.findIndex(p => p.rigLayerId === l.id);
+  if (existingIndex >= 0) layers[existingIndex] = pl; else layers.push(pl);
+  active = existingIndex >= 0 ? existingIndex : layers.length - 1;
   setActive(active);
   dirty = true;
   populateAnimClips();
@@ -1977,6 +1990,13 @@ function importAllRigAssets() {
   if (paintCanvasIsBlank()) { layers = []; active = null; }
   pushPaintUndo();
   restoreLayerIsolation();
+  const replacedIds = new Set(flat.flatMap(layer => layer.paintReplacedLayerIds || []));
+  if (replacedIds.size) {
+    const activeLayer = active === null ? null : layers[active];
+    layers = layers.filter(layer => !replacedIds.has(layer.rigLayerId));
+    active = activeLayer ? layers.indexOf(activeLayer) : null;
+    if (active < 0) active = null;
+  }
   let n = 0;
   let lastRigIndex = -1;
   for (const l of flat) {
