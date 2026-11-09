@@ -2240,7 +2240,7 @@ function bindSounds() {
   $('#sndFile').onchange = async (e) => {
     const fs = [...e.target.files]; e.target.value = ''; if (!fs.length || !target) { renderInspector(); return; }
     const list = doc.sounds[target] = doc.sounds[target] || [];
-    for (const f of fs) list.push({ file: f.name, data: new Uint8Array(await f.arrayBuffer()) });
+    for (const f of fs) list.push({ file: f.name, data: RIG.shrinkSound(f.name, new Uint8Array(await f.arrayBuffer())) });
     renderInspector();
   };
   const box = $('#insp');
