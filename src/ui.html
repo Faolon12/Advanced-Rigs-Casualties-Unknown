@@ -68,6 +68,7 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 
 /* ===== Casualties theme: a lab terminal from the facility. Swap with the theme button (top right). ===== */
+#recPop,#wearPop{position:fixed;z-index:60;width:320px;max-height:70vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.5)}#wearPop .wl{display:flex;align-items:center;gap:6px;padding:2px 4px;border-radius:4px;cursor:pointer}#wearPop .wl:hover{background:var(--panel2)}#wearPop .wl img{width:22px;height:22px;object-fit:contain;image-rendering:pixelated}#wearPop .wh{color:var(--dim);margin:8px 0 2px;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
 [data-theme=casualties]{--bg:#07080a;--panel:#0d0f12;--panel2:#13161a;--line:#1f2a24;--text:#d9e3d6;--dim:#7c8a7f;--acc:#c3272f;--acc2:#3fae6a;--ok:#6fe08a;--warn:#e7b04a;--glow:rgba(195,39,47,.35)}
 [data-theme=casualties] body{font-family:"Cascadia Mono","Consolas","DejaVu Sans Mono",ui-monospace,monospace;font-size:12.5px;
   background:radial-gradient(1200px 600px at 50% -10%,rgba(63,174,106,.07),transparent 60%),var(--bg)}
@@ -302,6 +303,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
         <select id="gearPose" title="Pose to check the fit in"></select>
         <button id="gearPlay" title="Play the pose's animation">▶ Play</button>
         <button id="gearTurn" title="Face the other way">Turn</button>
+        <button id="wearBtn2" title="Also wear other things, to check how they layer with the item you're editing and your clothes">👕 Also wearing: nothing</button>
         <span class="muted">drag the item on the body · arrow keys nudge 1 px</span>
       </span>
       <span id="healthTools" style="display:none"><span class="muted">Drag parts to place them · click one to give it your own art</span></span>
@@ -310,7 +312,8 @@ canvas#paintPreview{cursor:grab;touch-action:none}
         <button id="btnTurn" title="Face the other way">Turn</button>
         <select id="headState" title="Head art: automatic follows talking (hold T); or force a mouth / jaw state"><option value="">Head: automatic</option></select>
         <select id="eyePrev" title="Eyes: automatic follows the state like the game (blinking, fear, falling, asleep…), or force one"></select>
-        <select id="wearPrev" title="Wear an item in the test (your version if you made one, the game's otherwise)"><option value="">Wearing: nothing</option></select>
+        <button id="recBtn" title="Record the character as an animated GIF, to show it off">⏺ GIF</button>
+        <button id="wearBtn" title="Put on wearables to see how they look on your character (your version if you made one, the game's otherwise)">👕 Wearing: nothing</button>
       </span>
       <span class="sep"></span>
       <button id="zoomOut">−</button><button id="zoomIn">+</button>
@@ -524,7 +527,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <aside class="right">
 <h2>Preview</h2>
 <div class="section">
-<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move. Preview controls do not edit the sprite." style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
+<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move. Preview controls do not edit the sprite." style="display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
 <canvas id="paintPreview" width="256" height="256" style="max-width:100%;max-height:100%"></canvas>
 </div>
 <div class="row" style="margin-top:8px"><label>Scale</label>

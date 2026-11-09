@@ -480,7 +480,7 @@ RIG.autoAssign = function (doc) {
 RIG.looksAssembled = function (doc) {
   RIG.autoAlign(doc);
   const errs = [];
-  for (const l of doc.layers) if (l.role.type === 'part' && /F$|Head|Torso/.test(l.role.part)) { const c = RIG.center(l), r = RIG.restPx(l.role.part); errs.push(Math.hypot(c.x - r.x - doc.align.x, c.y - r.y - doc.align.y)); }
+  for (const l of doc.layers) if (l.role.type === 'part' && !l.overlay && /F$|Head|Torso/.test(l.role.part)) { const c = RIG.center(l), r = RIG.restPx(l.role.part); errs.push(Math.hypot(c.x - r.x - doc.align.x, c.y - r.y - doc.align.y)); }
   if (errs.length < 4) return false;
   errs.sort((a, b) => a - b); const med = errs[errs.length >> 1];
   return med < 12;
@@ -488,7 +488,7 @@ RIG.looksAssembled = function (doc) {
 // how many times bigger than the game's own sprites the art is drawn (1, 2, 3...)
 RIG.detectScale = function (doc) {
   const P = 8, rest = (p) => { const r = RIG.REST[p]; return { x: r[0] * P, y: -r[1] * P }; };
-  const parts = doc.layers.filter(l => l.role.type === 'part' && /F$|Head|Torso/.test(l.role.part));
+  const parts = doc.layers.filter(l => l.role.type === 'part' && !l.overlay && /F$|Head|Torso/.test(l.role.part));
   const ratios = [];
   for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
     const a = RIG.center(parts[i]), b = RIG.center(parts[j]), ra = rest(parts[i].role.part), rb = rest(parts[j].role.part);
@@ -509,7 +509,7 @@ RIG.guessByPosition = function (doc) {
   const k = RIG.PPU / 8;
   const free = () => doc.layers.filter(l => l.role.type === 'ignore' && !l.hidden && !l.cutSource);
   const match = () => { // best overall pairing of unknown layers with free body parts: by spot, size and shape
-    const taken = new Set(doc.layers.filter(l => l.role.type === 'part').map(l => l.role.part));
+    const taken = new Set(doc.layers.filter(l => l.role.type === 'part' && !l.overlay).map(l => l.role.part));
     const pairs = [];
     for (const l of free()) { const c = RIG.center(l);
       for (const p of RIG.PARTS) { if (taken.has(p)) continue; const J = RIG.J(doc, p), sz = RIG.VANILLA_SIZE[p];
@@ -555,7 +555,7 @@ RIG.addFarCopies = function (doc) {
   for (const l of [...doc.layers]) {
     const st = RIG.STOCK[l.name]; if (!st || !st.both || l.role.type !== 'part') continue;
     const far = st.part + 'B';
-    if (doc.layers.some(o => o.role.type === 'part' && o.role.part === far)) continue;
+    if (doc.layers.some(o => o.role.type === 'part' && !o.overlay && o.role.part === far)) continue;
     l.role = { type: 'part', part: st.part + 'F' };
     const copy = { id: RIG.newId(), name: l.name + ' (far)', x: l.x, y: l.y, w: l.w, h: l.h, rgba: new Uint8ClampedArray(l.rgba), order: l.order - 0.5, hidden: false, role: { type: 'part', part: far } };
     if (l.spriteRot !== undefined) copy.spriteRot = l.spriteRot;
@@ -603,10 +603,10 @@ RIG.addChain = function (doc, name, attachTo, layerIds, preset) {
 RIG.autoAlign = function (doc) {
   const use = ['Head', 'UpTorso', 'DownTorso', 'UpArmF', 'DownArmF', 'HandF', 'ThighF', 'CrusF', 'FootF'];
   let sx = 0, sy = 0, n = 0;
-  for (const l of doc.layers) if (l.role.type === 'part' && use.includes(l.role.part)) {
+  for (const l of doc.layers) if (l.role.type === 'part' && !l.overlay && use.includes(l.role.part)) {
     const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++;
   }
-  if (!n) for (const l of doc.layers) if (l.role.type === 'part') { const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++; }
+  if (!n) for (const l of doc.layers) if (l.role.type === 'part' && !l.overlay) { const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++; }
   if (n) { doc.align = { x: Math.round(sx / n * 2) / 2, y: Math.round(sy / n * 2) / 2 }; return; }
   // no layer is a known body part yet: line the skeleton up with the drawing's outline (head at the top, feet under the legs)
   const vis = doc.layers.filter(l => !l.hidden && !l.cutSource && l.role.type !== 'frame' && l.role.type !== 'eye' && l.role.type !== 'state');
@@ -760,14 +760,14 @@ RIG.assignOne = function (doc, l) {
   if (c.kind === 'eye') { l.role = { type: 'eye', state: c.state }; doc.hideObjects = doc.hideObjects.filter(o => o !== 'Eyes'); return null; }
   if (c.kind === 'headState') { const h = doc.layers.find(o => o.role.type === 'part' && o.role.part === 'Head'); l.role = h ? { type: 'state', of: h.id, state: c.state } : { type: 'ignore' }; return null; }
   if (c.stock && c.kind === 'limb') {
-    const usedF = doc.layers.some(o => o !== l && o.role.type === 'part' && o.role.part === c.base + 'F');
-    const takeP = (part) => { for (const o of doc.layers) if (o !== l && o.role.type === 'part' && o.role.part === part) o.role = { type: 'ignore' }; l.role = { type: 'part', part }; };
+    const usedF = doc.layers.some(o => o !== l && o.role.type === 'part' && !o.overlay && o.role.part === c.base + 'F');
+    const takeP = (part) => { for (const o of doc.layers) if (o !== l && o.role.type === 'part' && !o.overlay && o.role.part === part) o.role = { type: 'ignore' }; l.role = { type: 'part', part }; };
     takeP(c.base + (usedF && /\(far\)/.test(l.name) ? 'B' : 'F')); return null;
   }
-  const takePart = (part) => { for (const o of doc.layers) if (o !== l && o.role.type === 'part' && o.role.part === part) o.role = { type: 'ignore' }; l.role = { type: 'part', part }; };
+  const takePart = (part) => { for (const o of doc.layers) if (o !== l && o.role.type === 'part' && !o.overlay && o.role.part === part) o.role = { type: 'ignore' }; l.role = { type: 'part', part }; };
   if (c.kind === 'part') { takePart(c.base); return null; }
   if (c.kind === 'limb') {
-    const used = (sd) => doc.layers.some(o => o !== l && o.role.type === 'part' && o.role.part === c.base + sd);
+    const used = (sd) => doc.layers.some(o => o !== l && o.role.type === 'part' && !o.overlay && o.role.part === c.base + sd);
     takePart(c.base + (c.side || (!used('F') ? 'F' : !used('B') ? 'B' : 'F'))); return null;
   }
   if (c.kind === 'tail') {
@@ -990,7 +990,7 @@ RIG.fileName = function (doc, l) {
 
 // absolute draw order for a layer, keeping the drawing's stacking as far as the game's fixed part order allows
 function absOrder(doc, l) {
-  if (l.role.type === 'part') return RIG.ORDER[l.role.part];
+  if (l.role.type === 'part') return RIG.ORDER[l.role.part] + (l.overlay ? 1 : 0);
   // above every game part that is below it in the drawing
   let below = null;
   for (const o of doc.layers) if (o.order < l.order && o.role.type === 'part') below = below === null ? RIG.ORDER[o.role.part] : Math.max(below, RIG.ORDER[o.role.part]);
@@ -1065,7 +1065,7 @@ RIG.shrinkSound = function (name, data) {
 RIG.layerOrders = function (doc) {
   const drawn = doc.layers.filter(l => !l.cutSource && (l.role.type === 'part' || l.role.type === 'chain'));
   const g = drawn.map(l => {
-    if (l.role.type === 'part') return RIG.ORDER[l.role.part];
+    if (l.role.type === 'part') return RIG.ORDER[l.role.part] + (l.overlay ? 1 : 0);
     const ch = RIG.chain(doc, l.role.chain); return ch ? (RIG.ORDER[ch.attachTo] || 0) : 0;
   });
   const w = drawn.map(l => l.role.type === 'part' ? 10 : 1);
@@ -1111,8 +1111,9 @@ RIG.buildRig = function (doc) {
     if (arts.length) { seg.injuryArt = {}; for (const a of arts) seg.injuryArt[a.role.state] = { file: add(a), x: a.x, y: a.y }; }
     const states = doc.layers.filter(s => s.role.type === 'state' && s.role.of === l.id);
     if (states.length) { seg.states = {}; for (const s of states) seg.states[s.role.state] = { file: add(s), x: s.x, y: s.y }; }
-    const pc = { name: l.name, attachTo: part, anchor: J, hideTarget: true, physics: false, sortingOrderOffset: ord.get(l.id) - RIG.ORDER[part], segments: [seg] };
-    if (l.blendWith && l.blendWith !== part) { pc.blendWith = l.blendWith; pc.blendWeight = +(l.blendWeight !== undefined ? l.blendWeight : 0.5).toFixed(3); pc.hideTarget = !doc.layers.some(o => o !== l && o.role.type === 'part' && o.role.part === part && !o.blendWith) ? true : false; }
+    const pc = { name: l.name, attachTo: part, anchor: J, hideTarget: !l.overlay, physics: false, sortingOrderOffset: ord.get(l.id) - RIG.ORDER[part], segments: [seg] };
+    if (l.overlay) { pc.overlay = true; pc.hideTarget = false; if (l.aboveGear) pc.aboveGear = true; }
+    if (!l.overlay && l.blendWith && l.blendWith !== part) { pc.blendWith = l.blendWith; pc.blendWeight = +(l.blendWeight !== undefined ? l.blendWeight : 0.5).toFixed(3); pc.hideTarget = !doc.layers.some(o => o !== l && o.role.type === 'part' && !o.overlay && o.role.part === part && !o.blendWith) ? true : false; }
     chains.push(pc);
   }
   for (const ch of doc.chains) {
@@ -1224,8 +1225,8 @@ RIG.docFromRig = function (rig, images) {
   const pending = [];
   for (const c of rig.chains || []) {
     const base = RIG.ORDER[c.attachTo] !== undefined ? RIG.ORDER[c.attachTo] : 0;
-    if (c.hideTarget && c.physics === false && RIG.PARTS.includes(c.attachTo) && c.segments.length === 1) {
-      const s = c.segments[0]; const l = mk(s.file, s.x, s.y); l.role = { type: 'part', part: c.attachTo }; l._abs = base + (c.sortingOrderOffset || 0);
+    if ((c.hideTarget || c.overlay) && c.physics === false && RIG.PARTS.includes(c.attachTo) && c.segments.length === 1) {
+      const s = c.segments[0]; const l = mk(s.file, s.x, s.y); l.role = { type: 'part', part: c.attachTo }; if (c.overlay) { l.overlay = true; if (c.aboveGear) l.aboveGear = true; } l._abs = base + (c.sortingOrderOffset || 0);
       if (s.restAngle !== undefined && Math.abs(s.restAngle + RIG.REST[c.attachTo][2]) > 0.01) l.spriteRot = +(RIG.REST[c.attachTo][2] + s.restAngle).toFixed(3);
       if (c.blendWith) { l.blendWith = c.blendWith; l.blendWeight = c.blendWeight !== undefined ? c.blendWeight : 0.5; }
       if (c.name) l.name = c.name;
@@ -1583,7 +1584,7 @@ RIG.Runtime = class {
         let px = s.def.x, py = s.def.y; // art for a state may sit at its own spot on the canvas
         for (const src of [s.def.injuryArt, s.def.states]) if (src) for (const st in src) { const v = src[st]; if (v && typeof v === 'object' && v.file === file) { px = v.x; py = v.y; } }
         if (chosen && typeof chosen === 'object') { px = chosen.x; py = chosen.y; }
-        out.push({ file, m: ms[k].m, joint: s.def.joint, x: px, y: py, order: base + (s.def.order !== undefined ? s.def.order : k), chainAttach: c.def.attachTo, isPart: !!c.def.hideTarget });
+        out.push({ file, m: ms[k].m, joint: s.def.joint, x: px, y: py, order: base + (s.def.order !== undefined ? s.def.order : k), chainAttach: c.def.attachTo, isPart: !!c.def.hideTarget, aboveGear: !!c.def.aboveGear });
       });
     }
     out.sort((a, b) => a.order - b.order);

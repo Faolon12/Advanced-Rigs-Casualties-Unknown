@@ -8,6 +8,9 @@ Turn a layered drawing into a fully custom character, with moving tails, ears, h
 ## Features
 
 - **Sprite Paint (new, by Silvasta):** draw and repaint sprites right in the editor. **🖌 Sprite Paint** in the top bar, or **double-click any layer** to paint it.
+- **Clothes & overlays (new):** tick **Over the limb** on any part layer to draw it *over* the body instead of replacing it (clothes, sleeves, armbands, patches). Tick **Above worn gear** too and nothing worn in game (a hoodie, jacket, gloves…) covers it.
+- **Try on wearables (new):** **👕 Wearing** in the Test tab puts on any mix of the game's wearables (one per slot, like the game), and **👕 Also wearing** in the Gear tab shows the item you're redrawing together with other gear and your clothes.
+- **Sprite Paint** follows the editor's theme.
   - **Tools:** pencil, crisp pixel brush (with optional tone variation), eraser, pixel eraser, fill, colour picker (or right-click), rectangle select with copy / cut / paste / nudge, flip and rotate. Also a palette, recent colours, layers with opacity, blend modes and isolation, and undo / redo.
   - **Straight to the rig:** paint a rig layer and it updates on the character as you go, even when you paint past its old edges. New paint layers are added to the rig (named *Ear*, *Tail*… they're set up as moving parts).
   - **Game sprites too:** *Other image assets* opens any game sprite, wearable, health-screen art or skin swap at its real size. What you paint becomes the rig's own version of it. *Head variants* copies your head art onto the other head states.
