@@ -78,6 +78,7 @@ h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)
 details summary{cursor:pointer;color:var(--dim);margin:6px 0}
 
 /* ===== Casualties theme: a lab terminal from the facility. Swap with the theme button (top right). ===== */
+#recPop,#wearPop{position:fixed;z-index:60;width:320px;max-height:70vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.5)}#wearPop .wl{display:flex;align-items:center;gap:6px;padding:2px 4px;border-radius:4px;cursor:pointer}#wearPop .wl:hover{background:var(--panel2)}#wearPop .wl img{width:22px;height:22px;object-fit:contain;image-rendering:pixelated}#wearPop .wh{color:var(--dim);margin:8px 0 2px;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
 [data-theme=casualties]{--bg:#07080a;--panel:#0d0f12;--panel2:#13161a;--line:#1f2a24;--text:#d9e3d6;--dim:#7c8a7f;--acc:#c3272f;--acc2:#3fae6a;--ok:#6fe08a;--warn:#e7b04a;--glow:rgba(195,39,47,.35)}
 [data-theme=casualties] body{font-family:"Cascadia Mono","Consolas","DejaVu Sans Mono",ui-monospace,monospace;font-size:12.5px;
   background:radial-gradient(1200px 600px at 50% -10%,rgba(63,174,106,.07),transparent 60%),var(--bg)}
@@ -211,6 +212,7 @@ aside.right{overflow-x:hidden}
         <select id="gearPose" title="Pose to check the fit in"></select>
         <button id="gearPlay" title="Play the pose's animation">▶ Play</button>
         <button id="gearTurn" title="Face the other way">Turn</button>
+        <button id="wearBtn2" title="Also wear other things, to check how they layer with the item you're editing and your clothes">👕 Also wearing: nothing</button>
         <span class="muted">drag the item on the body · arrow keys nudge 1 px</span>
       </span>
       <span id="healthTools" style="display:none"><span class="muted">Drag parts to place them · click one to give it your own art</span></span>
@@ -219,7 +221,8 @@ aside.right{overflow-x:hidden}
         <button id="btnTurn" title="Face the other way">Turn</button>
         <select id="headState" title="Head art: automatic follows talking (hold T); or force a mouth / jaw state"><option value="">Head: automatic</option></select>
         <select id="eyePrev" title="Eyes: automatic follows the state like the game (blinking, fear, falling, asleep…), or force one"></select>
-        <select id="wearPrev" title="Wear an item in the test (your version if you made one, the game's otherwise)"><option value="">Wearing: nothing</option></select>
+        <button id="recBtn" title="Record the character as an animated GIF, to show it off">⏺ GIF</button>
+        <button id="wearBtn" title="Put on wearables to see how they look on your character (your version if you made one, the game's otherwise)">👕 Wearing: nothing</button>
       </span>
       <span class="sep"></span>
       <button id="zoomOut">−</button><button id="zoomIn">+</button>
@@ -766,7 +769,7 @@ RIG.autoAssign = function (doc) {
 RIG.looksAssembled = function (doc) {
   RIG.autoAlign(doc);
   const errs = [];
-  for (const l of doc.layers) if (l.role.type === 'part' && /F$|Head|Torso/.test(l.role.part)) { const c = RIG.center(l), r = RIG.restPx(l.role.part); errs.push(Math.hypot(c.x - r.x - doc.align.x, c.y - r.y - doc.align.y)); }
+  for (const l of doc.layers) if (l.role.type === 'part' && !l.overlay && /F$|Head|Torso/.test(l.role.part)) { const c = RIG.center(l), r = RIG.restPx(l.role.part); errs.push(Math.hypot(c.x - r.x - doc.align.x, c.y - r.y - doc.align.y)); }
   if (errs.length < 4) return false;
   errs.sort((a, b) => a - b); const med = errs[errs.length >> 1];
   return med < 12;
@@ -774,7 +777,7 @@ RIG.looksAssembled = function (doc) {
 // how many times bigger than the game's own sprites the art is drawn (1, 2, 3...)
 RIG.detectScale = function (doc) {
   const P = 8, rest = (p) => { const r = RIG.REST[p]; return { x: r[0] * P, y: -r[1] * P }; };
-  const parts = doc.layers.filter(l => l.role.type === 'part' && /F$|Head|Torso/.test(l.role.part));
+  const parts = doc.layers.filter(l => l.role.type === 'part' && !l.overlay && /F$|Head|Torso/.test(l.role.part));
   const ratios = [];
   for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
     const a = RIG.center(parts[i]), b = RIG.center(parts[j]), ra = rest(parts[i].role.part), rb = rest(parts[j].role.part);
@@ -795,7 +798,7 @@ RIG.guessByPosition = function (doc) {
   const k = RIG.PPU / 8;
   const free = () => doc.layers.filter(l => l.role.type === 'ignore' && !l.hidden && !l.cutSource);
   const match = () => { // best overall pairing of unknown layers with free body parts: by spot, size and shape
-    const taken = new Set(doc.layers.filter(l => l.role.type === 'part').map(l => l.role.part));
+    const taken = new Set(doc.layers.filter(l => l.role.type === 'part' && !l.overlay).map(l => l.role.part));
     const pairs = [];
     for (const l of free()) { const c = RIG.center(l);
       for (const p of RIG.PARTS) { if (taken.has(p)) continue; const J = RIG.J(doc, p), sz = RIG.VANILLA_SIZE[p];
@@ -841,7 +844,7 @@ RIG.addFarCopies = function (doc) {
   for (const l of [...doc.layers]) {
     const st = RIG.STOCK[l.name]; if (!st || !st.both || l.role.type !== 'part') continue;
     const far = st.part + 'B';
-    if (doc.layers.some(o => o.role.type === 'part' && o.role.part === far)) continue;
+    if (doc.layers.some(o => o.role.type === 'part' && !o.overlay && o.role.part === far)) continue;
     l.role = { type: 'part', part: st.part + 'F' };
     const copy = { id: RIG.newId(), name: l.name + ' (far)', x: l.x, y: l.y, w: l.w, h: l.h, rgba: new Uint8ClampedArray(l.rgba), order: l.order - 0.5, hidden: false, role: { type: 'part', part: far } };
     if (l.spriteRot !== undefined) copy.spriteRot = l.spriteRot;
@@ -889,10 +892,10 @@ RIG.addChain = function (doc, name, attachTo, layerIds, preset) {
 RIG.autoAlign = function (doc) {
   const use = ['Head', 'UpTorso', 'DownTorso', 'UpArmF', 'DownArmF', 'HandF', 'ThighF', 'CrusF', 'FootF'];
   let sx = 0, sy = 0, n = 0;
-  for (const l of doc.layers) if (l.role.type === 'part' && use.includes(l.role.part)) {
+  for (const l of doc.layers) if (l.role.type === 'part' && !l.overlay && use.includes(l.role.part)) {
     const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++;
   }
-  if (!n) for (const l of doc.layers) if (l.role.type === 'part') { const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++; }
+  if (!n) for (const l of doc.layers) if (l.role.type === 'part' && !l.overlay) { const c = RIG.center(l), r = RIG.restPx(l.role.part); sx += c.x - r.x; sy += c.y - r.y; n++; }
   if (n) { doc.align = { x: Math.round(sx / n * 2) / 2, y: Math.round(sy / n * 2) / 2 }; return; }
   // no layer is a known body part yet: line the skeleton up with the drawing's outline (head at the top, feet under the legs)
   const vis = doc.layers.filter(l => !l.hidden && !l.cutSource && l.role.type !== 'frame' && l.role.type !== 'eye' && l.role.type !== 'state');
@@ -1046,14 +1049,14 @@ RIG.assignOne = function (doc, l) {
   if (c.kind === 'eye') { l.role = { type: 'eye', state: c.state }; doc.hideObjects = doc.hideObjects.filter(o => o !== 'Eyes'); return null; }
   if (c.kind === 'headState') { const h = doc.layers.find(o => o.role.type === 'part' && o.role.part === 'Head'); l.role = h ? { type: 'state', of: h.id, state: c.state } : { type: 'ignore' }; return null; }
   if (c.stock && c.kind === 'limb') {
-    const usedF = doc.layers.some(o => o !== l && o.role.type === 'part' && o.role.part === c.base + 'F');
-    const takeP = (part) => { for (const o of doc.layers) if (o !== l && o.role.type === 'part' && o.role.part === part) o.role = { type: 'ignore' }; l.role = { type: 'part', part }; };
+    const usedF = doc.layers.some(o => o !== l && o.role.type === 'part' && !o.overlay && o.role.part === c.base + 'F');
+    const takeP = (part) => { for (const o of doc.layers) if (o !== l && o.role.type === 'part' && !o.overlay && o.role.part === part) o.role = { type: 'ignore' }; l.role = { type: 'part', part }; };
     takeP(c.base + (usedF && /\(far\)/.test(l.name) ? 'B' : 'F')); return null;
   }
-  const takePart = (part) => { for (const o of doc.layers) if (o !== l && o.role.type === 'part' && o.role.part === part) o.role = { type: 'ignore' }; l.role = { type: 'part', part }; };
+  const takePart = (part) => { for (const o of doc.layers) if (o !== l && o.role.type === 'part' && !o.overlay && o.role.part === part) o.role = { type: 'ignore' }; l.role = { type: 'part', part }; };
   if (c.kind === 'part') { takePart(c.base); return null; }
   if (c.kind === 'limb') {
-    const used = (sd) => doc.layers.some(o => o !== l && o.role.type === 'part' && o.role.part === c.base + sd);
+    const used = (sd) => doc.layers.some(o => o !== l && o.role.type === 'part' && !o.overlay && o.role.part === c.base + sd);
     takePart(c.base + (c.side || (!used('F') ? 'F' : !used('B') ? 'B' : 'F'))); return null;
   }
   if (c.kind === 'tail') {
@@ -1276,7 +1279,7 @@ RIG.fileName = function (doc, l) {
 
 // absolute draw order for a layer, keeping the drawing's stacking as far as the game's fixed part order allows
 function absOrder(doc, l) {
-  if (l.role.type === 'part') return RIG.ORDER[l.role.part];
+  if (l.role.type === 'part') return RIG.ORDER[l.role.part] + (l.overlay ? 1 : 0);
   // above every game part that is below it in the drawing
   let below = null;
   for (const o of doc.layers) if (o.order < l.order && o.role.type === 'part') below = below === null ? RIG.ORDER[o.role.part] : Math.max(below, RIG.ORDER[o.role.part]);
@@ -1351,7 +1354,7 @@ RIG.shrinkSound = function (name, data) {
 RIG.layerOrders = function (doc) {
   const drawn = doc.layers.filter(l => !l.cutSource && (l.role.type === 'part' || l.role.type === 'chain'));
   const g = drawn.map(l => {
-    if (l.role.type === 'part') return RIG.ORDER[l.role.part];
+    if (l.role.type === 'part') return RIG.ORDER[l.role.part] + (l.overlay ? 1 : 0);
     const ch = RIG.chain(doc, l.role.chain); return ch ? (RIG.ORDER[ch.attachTo] || 0) : 0;
   });
   const w = drawn.map(l => l.role.type === 'part' ? 10 : 1);
@@ -1397,8 +1400,9 @@ RIG.buildRig = function (doc) {
     if (arts.length) { seg.injuryArt = {}; for (const a of arts) seg.injuryArt[a.role.state] = { file: add(a), x: a.x, y: a.y }; }
     const states = doc.layers.filter(s => s.role.type === 'state' && s.role.of === l.id);
     if (states.length) { seg.states = {}; for (const s of states) seg.states[s.role.state] = { file: add(s), x: s.x, y: s.y }; }
-    const pc = { name: l.name, attachTo: part, anchor: J, hideTarget: true, physics: false, sortingOrderOffset: ord.get(l.id) - RIG.ORDER[part], segments: [seg] };
-    if (l.blendWith && l.blendWith !== part) { pc.blendWith = l.blendWith; pc.blendWeight = +(l.blendWeight !== undefined ? l.blendWeight : 0.5).toFixed(3); pc.hideTarget = !doc.layers.some(o => o !== l && o.role.type === 'part' && o.role.part === part && !o.blendWith) ? true : false; }
+    const pc = { name: l.name, attachTo: part, anchor: J, hideTarget: !l.overlay, physics: false, sortingOrderOffset: ord.get(l.id) - RIG.ORDER[part], segments: [seg] };
+    if (l.overlay) { pc.overlay = true; pc.hideTarget = false; if (l.aboveGear) pc.aboveGear = true; }
+    if (!l.overlay && l.blendWith && l.blendWith !== part) { pc.blendWith = l.blendWith; pc.blendWeight = +(l.blendWeight !== undefined ? l.blendWeight : 0.5).toFixed(3); pc.hideTarget = !doc.layers.some(o => o !== l && o.role.type === 'part' && !o.overlay && o.role.part === part && !o.blendWith) ? true : false; }
     chains.push(pc);
   }
   for (const ch of doc.chains) {
@@ -1510,8 +1514,8 @@ RIG.docFromRig = function (rig, images) {
   const pending = [];
   for (const c of rig.chains || []) {
     const base = RIG.ORDER[c.attachTo] !== undefined ? RIG.ORDER[c.attachTo] : 0;
-    if (c.hideTarget && c.physics === false && RIG.PARTS.includes(c.attachTo) && c.segments.length === 1) {
-      const s = c.segments[0]; const l = mk(s.file, s.x, s.y); l.role = { type: 'part', part: c.attachTo }; l._abs = base + (c.sortingOrderOffset || 0);
+    if ((c.hideTarget || c.overlay) && c.physics === false && RIG.PARTS.includes(c.attachTo) && c.segments.length === 1) {
+      const s = c.segments[0]; const l = mk(s.file, s.x, s.y); l.role = { type: 'part', part: c.attachTo }; if (c.overlay) { l.overlay = true; if (c.aboveGear) l.aboveGear = true; } l._abs = base + (c.sortingOrderOffset || 0);
       if (s.restAngle !== undefined && Math.abs(s.restAngle + RIG.REST[c.attachTo][2]) > 0.01) l.spriteRot = +(RIG.REST[c.attachTo][2] + s.restAngle).toFixed(3);
       if (c.blendWith) { l.blendWith = c.blendWith; l.blendWeight = c.blendWeight !== undefined ? c.blendWeight : 0.5; }
       if (c.name) l.name = c.name;
@@ -1869,7 +1873,7 @@ RIG.Runtime = class {
         let px = s.def.x, py = s.def.y; // art for a state may sit at its own spot on the canvas
         for (const src of [s.def.injuryArt, s.def.states]) if (src) for (const st in src) { const v = src[st]; if (v && typeof v === 'object' && v.file === file) { px = v.x; py = v.y; } }
         if (chosen && typeof chosen === 'object') { px = chosen.x; py = chosen.y; }
-        out.push({ file, m: ms[k].m, joint: s.def.joint, x: px, y: py, order: base + (s.def.order !== undefined ? s.def.order : k), chainAttach: c.def.attachTo, isPart: !!c.def.hideTarget });
+        out.push({ file, m: ms[k].m, joint: s.def.joint, x: px, y: py, order: base + (s.def.order !== undefined ? s.def.order : k), chainAttach: c.def.attachTo, isPart: !!c.def.hideTarget, aboveGear: !!c.def.aboveGear });
       });
     }
     out.sort((a, b) => a.order - b.order);
@@ -2898,7 +2902,8 @@ function renderInspector() {
       <div class="row"><label>In front / behind</label><button id="stUp" title="Draw in front of the layer above it">▲ Forward</button><button id="stDown" title="Draw behind the layer below it">▼ Back</button></div>
       <div class="row"><label>Edit in your art app</label><button id="lyDl" title="Save as a PNG the size of the whole canvas, so it lines up when it comes back">⬇ Download PNG</button><button id="lyRep" title="Load your edited PNG into this layer">⬆ Replace…</button></div>
       <div class="row"><label></label><button id="lyDel" title="Remove this layer (Delete key). Ctrl+Z brings it back.">🗑 Delete layer</button></div>`;
-    if (l.role.type === 'part') h += `Rides on the game's <b>${RIG.PART_LABEL[l.role.part]}</b> and hides the game's own sprite for it. It moves, ragdolls and can be cut off exactly like the original part.
+    if (l.role.type === 'part' && l.overlay) h += `Worn over the game's <b>${RIG.PART_LABEL[l.role.part]}</b> (clothes, a sleeve, armband, patch…): the limb underneath stays visible. It moves, ragdolls and comes off with the limb.<div class="row" style="margin-top:8px"><label>Over the limb</label><input type="checkbox" id="ovOn" checked title="Untick to make this layer replace the limb instead"></div><div class="row"><label>Above worn gear</label><input type="checkbox" id="ovGear" ${l.aboveGear ? 'checked' : ''} title="Always drawn on top of anything worn on this part, so a hoodie or jacket won't cover it"></div><div class="muted">Try it with things on: 👕 Wearing in the Test tab.</div>`;
+    else if (l.role.type === 'part') h += `Rides on the game's <b>${RIG.PART_LABEL[l.role.part]}</b> and hides the game's own sprite for it.<div class="row" style="margin-top:8px"><label>Over the limb</label><input type="checkbox" id="ovOn" title="Tick for clothes, a sleeve, armband or patch: drawn on top and the limb stays visible"></div> It moves, ragdolls and can be cut off exactly like the original part.
       <div class="row" style="margin-top:8px"><label>Bends with</label><select id="bwPart" style="flex:1"><option value="">— only its own part —</option>${RIG.PARTS.filter(p => p !== l.role.part).map(p => `<option value="${p}" ${l.blendWith === p ? 'selected' : ''}>${RIG.PART_LABEL[p]}</option>`).join('')}</select></div>
       ${l.blendWith ? `<div class="row"><label>How much</label><input type="range" id="bwW" min="0" max="1" step="0.05" value="${l.blendWeight !== undefined ? l.blendWeight : 0.5}"><span class="v">${Math.round((l.blendWeight !== undefined ? l.blendWeight : 0.5) * 100)}%</span></div>` : ''}
       <div class="muted">For extra pieces between two of the game's parts: e.g. a 5-piece leg = thigh · knee piece (on the thigh, bending 50% with the shin) · shin · ankle piece (on the shin, 50% with the foot) · foot. Give several layers the same part to add pieces; hitboxes never change.</div>`;
@@ -2965,6 +2970,8 @@ function renderInspector() {
   const bc = $('#backChain'); if (bc && l) bc.onclick = () => { selChain = l.role.chain; selLayer = null; refresh(); };
   if (l && (l.role.type === 'part' || l.role.type === 'chain')) bindAnimInspector(l);
   if (l && (l.role.type === 'part' || l.role.type === 'ignore')) bindMoveBox(l);
+  { const ov = $('#ovOn'); if (ov && l) ov.onchange = () => { pushUndo(); if (ov.checked) l.overlay = true; else delete l.overlay; refresh(); startTestIfOpen(); }; }
+  { const og = $('#ovGear'); if (og && l) og.onchange = () => { pushUndo(); if (og.checked) l.aboveGear = true; else delete l.aboveGear; refresh(); startTestIfOpen(); }; }
   const bw = $('#bwPart'); if (bw && l) bw.onchange = () => { if (bw.value) { l.blendWith = bw.value; if (l.blendWeight === undefined) l.blendWeight = 0.5; } else delete l.blendWith; refresh(); startTestIfOpen(); };
   const bwW = $('#bwW'); if (bwW && l) { bwW.oninput = () => { l.blendWeight = +bwW.value; bwW.nextElementSibling.textContent = Math.round(l.blendWeight * 100) + '%'; }; bwW.onchange = () => startTestIfOpen(); }
   if (l) { const su = $('#stUp'), sd = $('#stDown'); if (su) su.onclick = () => restack(l, +1); if (sd) sd.onclick = () => restack(l, -1);
@@ -3143,17 +3150,155 @@ function bindGearBox() {
     if (!first) { toast('Already made (or this item has no sprite in the template)'); return; }
     doc.layers.forEach((o, i) => o.order = i);
     selLayer = first.id; selChain = null; refresh();
-    const wp = $('#wearPrev'); if (wp) wp.value = id;
+    toggleWear(id, true);
     toast('Added ' + g.id + ' on your character. Download PNG → repaint → Replace, or drag it to fit. Preview it in Test with "Wearing".', 7000);
   };
 }
-function fillWearList() {
-  const sel = $('#wearPrev'); if (!sel) return; const cur = sel.value;
-  const mine = new Set(doc ? doc.layers.filter(l => l.role.type === 'gear').map(l => l.role.item) : []);
-  sel.innerHTML = '<option value="">Wearing: nothing</option>' + gearList().map(g => `<option value="${g.id}">Wearing: ${mine.has(g.id) ? '✎ ' : ''}${esc(g.id)}</option>`).join('');
-  sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
-  sel.style.display = RIG.GAME ? '' : 'none';
+// ---- wearables tried on in the Test and Gear tabs (just a preview; nothing is saved in the rig)
+const WEAR = new Set();
+let wearFind = '';
+function wearIds() {
+  const list = gearList(), ok = new Set(list.map(g => g.id));
+  for (const id of [...WEAR]) if (!ok.has(id)) WEAR.delete(id);
+  if (tab !== 'gear') return [...WEAR];
+  // the item being edited, plus what else you're wearing (not two things in the same slot)
+  const cur = list.find(g => g.id === GS.item); const out = cur ? [cur.id] : [];
+  for (const id of WEAR) { const g = list.find(x => x.id === id); if (g && g.id !== GS.item && !(cur && cur.slot && g.slot === cur.slot)) out.push(id); }
+  return out;
 }
+function toggleWear(id, on) {
+  const list = gearList(), g = list.find(x => x.id === id); if (!g) return;
+  if (on) { if (g.slot) for (const o of list) if (o.id !== id && o.slot === g.slot) WEAR.delete(o.id); WEAR.add(id); } else WEAR.delete(id);
+  fillWearList(); startTestIfOpen();
+}
+function fillWearList() {
+  const n = WEAR.size, names = [...WEAR].slice(0, 2).join(', ') + (n > 2 ? ' +' + (n - 2) : '');
+  const b = $('#wearBtn'); if (b) { b.textContent = '👕 Wearing: ' + (n ? names : 'nothing'); b.style.display = RIG.GAME ? '' : 'none'; }
+  const b2 = $('#wearBtn2'); if (b2) { b2.textContent = '👕 Also wearing: ' + (n ? names : 'nothing'); b2.style.display = RIG.GAME ? '' : 'none'; }
+  const pop = $('#wearPop'); if (pop) renderWearPop(pop);
+}
+function renderWearPop(pop) {
+  const list = gearList(), f = wearFind.toLowerCase();
+  const mine = new Set(doc ? doc.layers.filter(l => l.role.type === 'gear').map(l => l.role.item) : []);
+  const by = {}; for (const g of list) { if (f && !g.id.toLowerCase().includes(f)) continue; (by[g.limb] = by[g.limb] || []).push(g); }
+  let h = `<div class="row" style="margin:0 0 6px"><input id="wearFind" type="text" placeholder="Search wearables…" value="${esc(wearFind)}" style="flex:1"><button id="wearNone" title="Take everything off">Take off all</button></div>`;
+  for (const limb of Object.keys(by).sort((a, b) => RIG.PARTS.indexOf(a) - RIG.PARTS.indexOf(b))) {
+    h += `<div class="wh">${esc(RIG.PART_LABEL[limb] || limb)}</div>`;
+    for (const g of by[limb]) h += `<label class="wl" title="${esc(g.id)}${g.slot ? ' · slot ' + esc(g.slot) : ''}"><input type="checkbox" data-wear="${esc(g.id)}" ${WEAR.has(g.id) ? 'checked' : ''}><img src="${gearThumb(g.sprite)}"><span>${mine.has(g.id) ? '✎ ' : ''}${esc(g.id)}</span></label>`;
+  }
+  if (!list.length) h += `<div class="muted">Load the game template to try on wearables.</div>`;
+  pop.innerHTML = h + `<div class="muted" style="margin-top:6px">✎ = you redrew it. One item per slot, like in the game. Clothes layers set to "above worn gear" stay on top.</div>`;
+  pop.querySelectorAll('[data-wear]').forEach(c => c.onchange = () => toggleWear(c.dataset.wear, c.checked));
+  const fi = pop.querySelector('#wearFind'); fi.oninput = () => { wearFind = fi.value; const at = fi.selectionStart; renderWearPop(pop); const n = pop.querySelector('#wearFind'); n.focus(); n.setSelectionRange(at, at); };
+  pop.querySelector('#wearNone').onclick = () => { WEAR.clear(); fillWearList(); startTestIfOpen(); };
+}
+function openWearPop(btn) {
+  let pop = $('#wearPop'); if (pop) { pop.remove(); return; }
+  if (!RIG.GAME) { toast('Load the game template first (click "no game template" at the top).'); return; }
+  pop = document.createElement('div'); pop.id = 'wearPop'; document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect(); pop.style.top = (r.bottom + 6) + 'px'; pop.style.left = Math.max(8, Math.min(window.innerWidth - 330, r.left)) + 'px';
+  renderWearPop(pop);
+  setTimeout(() => document.addEventListener('mousedown', function off(e) { const p = $('#wearPop'); if (!p) { document.removeEventListener('mousedown', off); return; } if (!p.contains(e.target) && e.target !== btn) { p.remove(); document.removeEventListener('mousedown', off); } }), 0);
+}
+$('#wearBtn').onclick = (e) => openWearPop(e.currentTarget);
+$('#wearBtn2').onclick = (e) => openWearPop(e.currentTarget);
+
+
+// ---- record the Test view as an animated GIF (for sharing: the community hub, Nexus, Discord…)
+const REC = { on: false, clear: false, frames: [], next: 0 };
+function gifEncode(frames, w, h, delayCs, transparent) {
+  // one palette for the whole animation: exact when there are ≤255 colours (pixel art), else the most used ones
+  const count = new Map();
+  for (const f of frames) for (let i = 0; i < f.length; i += 4) { if (transparent && f[i + 3] < 128) continue; const k = (f[i] << 16) | (f[i + 1] << 8) | f[i + 2]; count.set(k, (count.get(k) || 0) + 1); }
+  let cols = [...count.keys()];
+  if (cols.length > 255) cols = [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 255).map(e => e[0]);
+  const T0 = transparent ? 1 : 0; // index 0 = transparent
+  const pal = new Map(cols.map((c, i) => [c, i + T0]));
+  const near = new Map();
+  const idx = (k) => { let v = pal.get(k); if (v !== undefined) return v; v = near.get(k); if (v !== undefined) return v;
+    let best = 0, bd = Infinity; const r = k >> 16, g = (k >> 8) & 255, b = k & 255;
+    for (let i = 0; i < cols.length; i++) { const c = cols[i], dr = r - (c >> 16), dg = g - ((c >> 8) & 255), db = b - (c & 255), d = dr * dr * 2 + dg * dg * 4 + db * db * 3; if (d < bd) { bd = d; best = i; } }
+    near.set(k, best + T0); return best + T0; };
+  let bits = 1; while ((1 << bits) < cols.length + T0) bits++; bits = Math.max(2, bits);
+  const out = []; const w16 = (v) => out.push(v & 255, (v >> 8) & 255);
+  out.push(...'GIF89a'.split('').map(c => c.charCodeAt(0))); w16(w); w16(h); out.push(0xF0 | (bits - 1), 0, 0);
+  for (let i = 0; i < (1 << bits); i++) { const c = transparent && i === 0 ? 0 : (cols[i - T0] !== undefined ? cols[i - T0] : 0); out.push(c >> 16, (c >> 8) & 255, c & 255); }
+  out.push(0x21, 0xFF, 11, ...'NETSCAPE2.0'.split('').map(c => c.charCodeAt(0)), 3, 1, 0, 0, 0); // loop forever
+  for (const f of frames) {
+    out.push(0x21, 0xF9, 4, transparent ? 0x09 : 0x04, delayCs & 255, delayCs >> 8, 0, 0); // dispose: clear (transparent) / keep
+    out.push(0x2C); w16(0); w16(0); w16(w); w16(h); out.push(0);
+    const px = new Uint8Array(w * h);
+    for (let i = 0, j = 0; j < px.length; i += 4, j++) px[j] = transparent && f[i + 3] < 128 ? 0 : idx((f[i] << 16) | (f[i + 1] << 8) | f[i + 2]);
+    // LZW
+    const min = bits; out.push(min);
+    const clear = 1 << min, eoi = clear + 1; let size = min + 1, next = eoi + 1, dict = new Map();
+    const data = []; let cur = 0, nb = 0;
+    const emit = (code) => { cur |= code << nb; nb += size; while (nb >= 8) { data.push(cur & 255); cur >>>= 8; nb -= 8; } };
+    emit(clear); let prefix = px[0];
+    for (let i = 1; i < px.length; i++) {
+      const k = px[i], key = prefix * 4096 + k, hit = dict.get(key);
+      if (hit !== undefined) { prefix = hit; continue; }
+      emit(prefix);
+      if (next < 4096) { dict.set(key, next++); if (next > (1 << size) && size < 12) size++; }
+      else { emit(clear); dict = new Map(); size = min + 1; next = eoi + 1; }
+      prefix = k;
+    }
+    emit(prefix); emit(eoi); if (nb > 0) data.push(cur & 255);
+    for (let i = 0; i < data.length; i += 255) { const n = Math.min(255, data.length - i); out.push(n); for (let k = 0; k < n; k++) out.push(data[i + k]); }
+    out.push(0);
+  }
+  out.push(0x3B);
+  return new Uint8Array(out);
+}
+function recordGif(opts) {
+  if (!test || REC.on) return;
+  const secs = opts.secs || 3, art = opts.px || 4, fps = 15;
+  const keepZoom = test.zoom; test.zoom = 8 * art; // whole screen pixels per game pixel, so the GIF stays crisp
+  REC.on = true; REC.clear = !!opts.transparent; REC.frames = []; REC.next = performance.now() + 250; // settle a moment first
+  const d = window.devicePixelRatio || 1, total = Math.round(secs * fps);
+  const btn = $('#recBtn'); if (btn) { btn.disabled = true; btn.textContent = '⏺ Recording…'; }
+  const tick = (now) => {
+    if (!REC.on) return;
+    if (now >= REC.next && test.view) {
+      REC.next = Math.max(REC.next + 1000 / fps, now);
+      const V = test.view, z = V.z, cw = Math.round(8 * z), ch = Math.round(8.4 * z);
+      const cx = V.x0 + V.bx * z, top = V.groundY - 7.6 * z;
+      const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+      g.drawImage(cv, (cx - cw / 2) * d, top * d, cw * d, ch * d, 0, 0, cw, ch);
+      REC.frames.push({ w: cw, h: ch, data: g.getImageData(0, 0, cw, ch).data });
+      if (btn) btn.textContent = '⏺ ' + Math.round(REC.frames.length / total * 100) + '%';
+    }
+    if (REC.frames.length >= total) {
+      REC.on = false; test.zoom = keepZoom;
+      const w = REC.frames[0].w, h = REC.frames[0].h, fr = REC.frames.filter(f => f.w === w && f.h === h).map(f => f.data);
+      setTimeout(() => {
+        try {
+          const gif = gifEncode(fr, w, h, Math.round(100 / fps), !!opts.transparent);
+          const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([gif], { type: 'image/gif' }));
+          a.download = (doc.name || 'character') + '-' + ($('#actPrev').value || 'test') + '.gif'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+          toast('Saved a ' + w + '×' + h + ' GIF (' + fr.length + ' frames). Use it as the picture when you share your character.', 7000);
+        } catch (e) { console.error(e); toast('Could not make the GIF: ' + e.message, 6000); }
+        if (btn) { btn.disabled = false; btn.textContent = '⏺ GIF'; }
+      }, 0);
+      return;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function openRecPop(btn) {
+  let pop = $('#recPop'); if (pop) { pop.remove(); return; }
+  pop = document.createElement('div'); pop.id = 'recPop'; pop.className = 'popBox'; document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect(); pop.style.top = (r.bottom + 6) + 'px'; pop.style.left = Math.max(8, Math.min(window.innerWidth - 300, r.left)) + 'px';
+  pop.innerHTML = `<div class="muted" style="margin-bottom:6px">Records the character doing what's picked on the left (walk, run, idle…), wearing what you picked. Great as the picture for the community hub or Nexus.</div>
+    <div class="row"><label>Length</label><select id="recSecs"><option value="2">2 s</option><option value="3" selected>3 s</option><option value="5">5 s</option></select></div>
+    <div class="row"><label>Size</label><select id="recPx"><option value="2">small</option><option value="3">medium</option><option value="4" selected>big</option><option value="6">huge</option></select></div>
+    <div class="row"><label>Background</label><select id="recBg"><option value="">editor's</option><option value="1">see-through</option></select></div>
+    <div class="row"><label></label><button id="recGo" class="primary">⏺ Record</button></div>`;
+  pop.querySelector('#recGo').onclick = () => { const o = { secs: +$('#recSecs').value, px: +$('#recPx').value, transparent: !!$('#recBg').value }; pop.remove(); if ($('#actPrev').value === 'play') toast('Tip: pick an action like Walk or Run for a looping preview.', 5000); recordGif(o); };
+  setTimeout(() => document.addEventListener('mousedown', function off(e) { const p = $('#recPop'); if (!p) { document.removeEventListener('mousedown', off); return; } if (!p.contains(e.target) && e.target !== btn) { p.remove(); document.removeEventListener('mousedown', off); } }), 0);
+}
+$('#recBtn').onclick = (e) => openRecPop(e.currentTarget);
 
 // ---- delete a layer (anything: a part, a piece of a moving part, art, gear, an image added by mistake)
 function deleteLayer(l) { deleteLayers([l]); }
@@ -3343,7 +3488,7 @@ function draw(options = {}) {
   if (!doc) return;
   ctx.imageSmoothingEnabled = false;
   // skin sprites (sprite swaps) on parts that have no replacement layer
-  const replacedParts = new Set(doc.layers.filter(l => l.role.type === 'part').map(l => l.role.part));
+  const replacedParts = new Set(doc.layers.filter(l => l.role.type === 'part' && !l.overlay).map(l => l.role.part));
   const skinItems = [];
   for (const part of [...RIG.PARTS, 'tail']) {
     if (replacedParts.has(part) || (part === 'tail' && doc.hideVanillaTail)) continue;
@@ -3407,7 +3552,7 @@ function draw(options = {}) {
   }
 }
 
-function gearShown(l) { const sl = selLayer && RIG.layer(doc, selLayer); const wp = $('#wearPrev'); return (sl && sl.role.type === 'gear' && sl.role.item === l.role.item) || (wp && wp.value && wp.value === l.role.item); }
+function gearShown(l) { const sl = selLayer && RIG.layer(doc, selLayer); return (sl && sl.role.type === 'gear' && sl.role.item === l.role.item) || WEAR.has(l.role.item); }
 function shownEye() {
   const sl = selLayer && RIG.layer(doc, selLayer); if (sl && sl.role.type === 'eye') return sl.role.state;
   return doc.layers.some(o => o.role.type === 'eye' && o.role.state === 'experimentEyeOpen') ? 'experimentEyeOpen' : (doc.layers.find(o => o.role.type === 'eye') || { role: {} }).role.state;
@@ -4253,12 +4398,13 @@ function loop(now) {
   T.camY += ((follow ? Math.max(0, b.y - 1) : 0) - T.camY) * Math.min(1, dt * (A === 'fall' || A === 'wallslide' ? 10 : 4));
   const z = T.zoom;
   ctx.setTransform(d, 0, 0, d, 0, 0);
-  const PAL = CV(); ctx.fillStyle = PAL.bg; ctx.fillRect(0, 0, W, H);
+  const PAL = CV(); if (REC.on && REC.clear) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = PAL.bg; ctx.fillRect(0, 0, W, H); }
   if (gearMode) { T.camX = 0; T.camY = 0; }
   const groundY = (animMode ? Math.max(120, (H - 206) * 0.86) : gearMode ? H * 0.8 : H * 0.72) + T.camY * z; // screen y of world y = 0 (above the timeline in Animate)
   const x0 = W / 2 - T.camX * z;
   const sx = (x) => x0 + x * z, sy = (y) => groundY - y * z;
-  ctx.strokeStyle = PAL.grid; ctx.lineWidth = 1;
+  T.view = { x0, groundY, z, W, H, bx: b.x, by: b.y };
+  ctx.strokeStyle = REC.on ? 'transparent' : PAL.grid; ctx.lineWidth = 1;
   for (let gx = Math.floor((T.camX - W / 2 / z) / 2) * 2; gx < T.camX + W / 2 / z; gx += 2) { ctx.beginPath(); ctx.moveTo(sx(gx), 0); ctx.lineTo(sx(gx), H); ctx.stroke(); }
   for (let gy = Math.floor(T.camY / 2) * 2 - 14; gy < T.camY + 16; gy += 2) { const y = sy(gy); if (y < 0 || y > H) continue; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
   if (A === 'play' && !gearMode && !animMode) { // the level
@@ -4270,7 +4416,7 @@ function loop(now) {
     ctx.strokeStyle = PAL.groundLine; ctx.lineWidth = 1; for (const bx of LEVEL.boxes) ctx.strokeRect(sx(bx.x0) + .5, sy(bx.y1) + .5, (bx.x1 - bx.x0) * z, (bx.y1 - bx.y0) * z);
   } else {
     if (act === 'climb') { ctx.fillStyle = '#1a1c22'; ctx.fillRect(sx(b.x + 0.9 * b.facing) - (b.facing > 0 ? 0 : 0.6 * z), 0, 0.6 * z, Math.min(H, groundY)); }
-    if (groundY < H + 2) { ctx.fillStyle = PAL.ground; ctx.fillRect(0, groundY, W, H - groundY); ctx.strokeStyle = PAL.groundLine; ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke(); }
+    if (groundY < H + 2 && !(REC.on && REC.clear)) { ctx.fillStyle = PAL.ground; ctx.fillRect(0, groundY, W, H - groundY); ctx.strokeStyle = PAL.groundLine; ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke(); }
   }
   const footBottom = (useGame || animMode || gearMode) && gameMode() ? moveConsts(T).footBottom : 2.415 + 0.7;
   const S = [z, 0, 0, -z, x0, groundY - footBottom * z];
@@ -4293,12 +4439,21 @@ function loop(now) {
   const eyesHidden = T.rig.hideObjects.includes('Eyes');
   if (!eyesHidden && !hv.hidden.has('Head')) items.push({ eyes: true, order: (headItem ? headItem.order : RIG.ORDER.Head) + 0.5, m: frames.Head });
   // an item worn in the test: your version if you drew one, the game's otherwise, on its body part (like Body.WearItem)
-  const wearId = gearMode ? GS.item : ($('#wearPrev') ? $('#wearPrev').value : '');
-  const wearG = wearId && RIG.GAME ? (RIG.GAME.tpl.gear || []).find(g => g.id === wearId) : null;
-  if (wearG) {
+  // items worn in the test: your version if you drew one, the game's otherwise, on its body part (like Body.WearItem)
+  const wearTop = {};
+  if (RIG.GAME) {
     const partOrder = (part) => { const pc = T.rig.chains.find(c => c.hideTarget && c.attachTo === part); return (RIG.ORDER[part] || 0) + (pc ? pc.sortingOrderOffset || 0 : 0); };
-    for (const w of [{ limb: wearG.limb, sprite: wearG.sprite }, ...(wearG.extra || [])]) if (w.sprite && frames[w.limb] && !hv.hidden.has(w.limb)) items.push({ wear: w.sprite, order: partOrder(w.limb) + (wearG.drawOffset || 0) * 0.1 + 0.05, m: frames[w.limb], limb: w.limb });
+    for (const id of wearIds()) {
+      const wearG = (RIG.GAME.tpl.gear || []).find(g => g.id === id); if (!wearG) continue;
+      for (const w of [{ limb: wearG.limb, sprite: wearG.sprite }, ...(wearG.extra || [])]) if (w.sprite && frames[w.limb] && !hv.hidden.has(w.limb)) {
+        const order = partOrder(w.limb) + (wearG.drawOffset || 0) * 0.1 + 0.05;
+        items.push({ wear: w.sprite, order, m: frames[w.limb], limb: w.limb });
+        wearTop[w.limb] = Math.max(wearTop[w.limb] !== undefined ? wearTop[w.limb] : -Infinity, order);
+      }
+    }
   }
+  // clothes set to "above worn gear" stay on top of whatever is worn on their part (like the mod does in game)
+  for (const it of items) if (it.aboveGear && wearTop[it.chainAttach] !== undefined) it.order = Math.max(it.order, wearTop[it.chainAttach] + 0.01 + (it.order % 1 + 1) * 0.001);
   items.sort((a, b2) => a.order - b2.order);
   // the game's own sprites (from the game template) for anything the rig doesn't replace, drawn on their real pivots
   const tplDraw = (name) => {
@@ -5063,7 +5218,7 @@ function bridgeAnimCrop() {
   const w = 4.8 * z, h = 5.0 * z;
   return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
 }
-window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
+window.__rigEditor = { recordGif, gifEncode, get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
   // Sprite Paint (src/paint.js)
   layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, addPaintLayer: bridgeAddPaintLayer, renamePaintLayer: bridgeRenamePaintLayer,
   imageAssetsForPaint: bridgeImageAssets, setImageAssetPixels: bridgeSetImageAssetPixels,
@@ -5657,14 +5812,14 @@ window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersF
 // It talks to the rig through window.__rigEditor (ui.js): import layers or game sprites, paint, and they go straight back to the rig.
 (function () {
   'use strict';
-  const st = document.createElement('style'); st.textContent = `#panelPaint{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;background:var(--bg,#15161a);color:var(--text,#e6e6ea);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}#panelPaint.active{display:flex}#panelPaint *{box-sizing:border-box}#panelPaint main{flex:1;min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);gap:0}
+  const st = document.createElement('style'); st.textContent = `#panelPaint{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;background:var(--bg,#15161a);color:var(--text,#e6e6ea);font:inherit}#panelPaint.active{display:flex}#panelPaint *{box-sizing:border-box}#panelPaint main{flex:1;min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);gap:0}
 #panelPaint header{flex:none}
 #panelPaint #viewport{flex:1;min-height:0;min-width:0;overflow:auto}
 #panelPaint aside{flex:none}
 #panelPaint .right{flex:none}
 #panelPaint button,#panelPaint select,#panelPaint input{font:inherit;color:var(--text)}
 #panelPaint button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
-#panelPaint button:hover{border-color:#555a66}
+#panelPaint button:hover{border-color:var(--dim)}
 #panelPaint button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
 #panelPaint button.primary:hover{filter:brightness(1.1)}
 #panelPaint button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
@@ -5672,7 +5827,7 @@ window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersF
 #panelPaint button.secondary:hover{border-color:var(--text);color:var(--text)}
 #panelPaint button.danger{background:rgba(224,71,91,0.2);border-color:var(--acc);color:var(--acc)}
 #panelPaint button.danger:hover{background:var(--acc);color:#fff}
-#panelPaint select,#panelPaint input[type=text],#panelPaint input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+#panelPaint select,#panelPaint input[type=text],#panelPaint input[type=number],#panelPaint input[type=search]{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:4px 6px}
 #panelPaint input[type=color]{border:none;background:none;width:26px;height:26px;cursor:pointer}
 #panelPaint header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;row-gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);z-index:10}
 #panelPaint header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
@@ -5681,7 +5836,7 @@ window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersF
 #panelPaint main{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);min-height:0;gap:0;overflow:hidden}
 #panelPaint aside{background:var(--panel);overflow:auto;min-height:0;min-width:0;border-right:1px solid var(--line)}
 #panelPaint aside.right{border-left:1px solid var(--line);border-right:none}
-#panelPaint #viewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#panelPaint #viewport{position:relative;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
 #panelPaint #canvas-wrap{position:relative;display:inline-block;cursor:crosshair}
 #panelPaint canvas#cv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5)}
 #panelPaint canvas#preview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3)}
@@ -5708,18 +5863,18 @@ window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersF
 #panelPaint .paint-layer-opacity{position:sticky;top:0;z-index:4;padding:7px 12px 2px;background:var(--panel);border-bottom:1px solid var(--line)}
 #panelPaint .paint-layer-opacity .row{margin-bottom:5px}
 #panelPaint .paint-active-layer-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;margin-bottom:3px}
-#panelPaint .layer-item{display:flex;align-items:center;gap:6px;padding:4px 5px 4px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:#111216;min-width:0}
+#panelPaint .layer-item{display:flex;align-items:center;gap:6px;padding:4px 5px 4px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:var(--panel2);min-width:0}
 #panelPaint .layer-item.active{border-color:var(--acc2);background:var(--panel2)}
 #panelPaint .layer-item .layer-vis{width:14px;height:14px;border:1px solid var(--line);border-radius:3px;flex:0 0 14px}
 #panelPaint .layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;min-width:0}
 #panelPaint .layer-actions{display:flex;gap:3px;align-items:center}
 #panelPaint .layer-actions button{padding:2px 6px;font-size:11px;min-width:0}
 #panelPaint .layer-menu-btn{padding:0 7px;font-size:15px;line-height:1.5;min-width:0;flex:none;background:none;border:none;color:var(--dim);cursor:pointer;border-radius:4px}
-#panelPaint .layer-menu-btn:hover{background:#22242c;color:var(--text)}
+#panelPaint .layer-menu-btn:hover{background:var(--panel2);color:var(--text)}
 #panelPaint #layerMenu{position:fixed;z-index:80;display:none;min-width:186px;padding:5px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 26px rgba(0,0,0,.55)}
 #panelPaint #layerMenu.open{display:block}
 #panelPaint #layerMenu .mi{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:5px;background:none;color:var(--text);font-size:12px;text-align:left;cursor:pointer}
-#panelPaint #layerMenu .mi:hover{background:#22242c}
+#panelPaint #layerMenu .mi:hover{background:var(--panel2)}
 #panelPaint #layerMenu .sep{height:1px;margin:4px 2px;background:var(--line)}
 #panelPaint #layerMenu .op{display:flex;align-items:center;gap:6px;padding:4px 8px 3px;font-size:11px;color:var(--dim)}
 #panelPaint #layerMenu .op input[type=range]{flex:1;min-width:84px}
@@ -5731,13 +5886,29 @@ window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersF
 #panelPaint .empty{padding:30px;text-align:center;color:var(--dim)}
 #panelPaint .empty b{color:var(--text)}
 #panelPaint .input-small{width:70px}
-#panelPaint #paintViewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#panelPaint #paintViewport{position:relative;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
 #panelPaint #paintCanvasWrap{position:relative;display:flex;align-items:center;justify-content:center;padding:12px;min-width:100%;min-height:100%}
 #panelPaint canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);display:block;flex:none;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px}
 #panelPaint canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px;touch-action:none;cursor:grab}
 #panelPaint canvas#paintPreview.panning{cursor:grabbing}
 #panelPaint canvas#paintPreview{cursor:grab;touch-action:none}
 #panelPaint #paintCoord{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none}`; document.head.appendChild(st);
+  // Sprite Paint wears the editor's theme: every "[data-theme=…] x" rule of the main page also applies inside the panel
+  // (its own #panelPaint rules would otherwise win). Built from the page's stylesheets, so new themes just work.
+  try {
+    const out = [];
+    for (const sh of document.styleSheets) { if (sh.ownerNode === st) continue; let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+      for (const r of rules) { if (!r.selectorText || !/\[data-theme/.test(r.selectorText) || /#panelPaint/.test(r.selectorText)) continue;
+        const sel = r.selectorText.split(',').map(x => x.trim()).filter(x => !/body::(after|before)/.test(x)).map(x => {
+          const m = /^(\[data-theme[^\]]*\])\s*(.*)$/.exec(x); if (!m) return null;
+          if (!m[2]) return m[1] + ' #panelPaint';                               // the theme's colours
+          if (/^body\b/.test(m[2])) return m[1] + ' #panelPaint' + m[2].slice(4);   // its font and background
+          return m[1] + ' #panelPaint ' + m[2];
+        }).filter(Boolean);
+        const tx = /input\[type="?text"?\]/; sel.push(...sel.filter(x => tx.test(x)).map(x => x.replace(tx, 'input[type=search]')));
+        if (sel.length) out.push(sel.join(',') + '{' + r.style.cssText + '}'); } }
+    const th = document.createElement('style'); th.id = 'paintTheme'; th.textContent = out.join('\n'); document.head.appendChild(th);
+  } catch (e) { console.warn('Sprite Paint theme', e); }
   const holder = document.createElement('div');
   holder.innerHTML = `<div id="panelPaint" role="application" aria-label="Sprite Paint">
 <header>
@@ -5883,7 +6054,7 @@ window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersF
 <aside class="right">
 <h2>Preview</h2>
 <div class="section">
-<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move. Preview controls do not edit the sprite." style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
+<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move. Preview controls do not edit the sprite." style="display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
 <canvas id="paintPreview" width="256" height="256" style="max-width:100%;max-height:100%"></canvas>
 </div>
 <div class="row" style="margin-top:8px"><label>Scale</label>
@@ -5994,7 +6165,7 @@ let previewPointer = null;
 
 const paint_quickColors = [
   '#e0475b','#ff6b6b','#ff9f43','#ffd166','#f7f779','#4cc38a','#00b894','#00cec9',
-  '#54a0ff','#2e86de','#8f5bff','#c56cf0','#ffffff','#c8c8d0','#777780','#33363f','#111216','#000000'
+  '#54a0ff','#2e86de','#8f5bff','#c56cf0','#ffffff','#c8c8d0','#777780','#33363f','var(--panel2)','#000000'
 ];
 const paintRecentColors = (() => {
   try {
@@ -6689,7 +6860,7 @@ function populateAnimClips(){
 function drawAnimPreview(shot, crop){
   paint_pctx.setTransform(1, 0, 0, 1, 0, 0);
   paint_pctx.globalAlpha = 1;
-  paint_pctx.fillStyle = '#0a0a0f';
+  paint_pctx.fillStyle = 'var(--bg)';
   paint_pctx.fillRect(0, 0, paint_preview.width, paint_preview.height);
   if (!shot) return;
   const src = crop || { x: 0, y: 0, w: shot.width, h: shot.height };

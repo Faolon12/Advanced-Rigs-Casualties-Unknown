@@ -749,7 +749,8 @@ function renderInspector() {
       <div class="row"><label>In front / behind</label><button id="stUp" title="Draw in front of the layer above it">▲ Forward</button><button id="stDown" title="Draw behind the layer below it">▼ Back</button></div>
       <div class="row"><label>Edit in your art app</label><button id="lyDl" title="Save as a PNG the size of the whole canvas, so it lines up when it comes back">⬇ Download PNG</button><button id="lyRep" title="Load your edited PNG into this layer">⬆ Replace…</button></div>
       <div class="row"><label></label><button id="lyDel" title="Remove this layer (Delete key). Ctrl+Z brings it back.">🗑 Delete layer</button></div>`;
-    if (l.role.type === 'part') h += `Rides on the game's <b>${RIG.PART_LABEL[l.role.part]}</b> and hides the game's own sprite for it. It moves, ragdolls and can be cut off exactly like the original part.
+    if (l.role.type === 'part' && l.overlay) h += `Worn over the game's <b>${RIG.PART_LABEL[l.role.part]}</b> (clothes, a sleeve, armband, patch…): the limb underneath stays visible. It moves, ragdolls and comes off with the limb.<div class="row" style="margin-top:8px"><label>Over the limb</label><input type="checkbox" id="ovOn" checked title="Untick to make this layer replace the limb instead"></div><div class="row"><label>Above worn gear</label><input type="checkbox" id="ovGear" ${l.aboveGear ? 'checked' : ''} title="Always drawn on top of anything worn on this part, so a hoodie or jacket won't cover it"></div><div class="muted">Try it with things on: 👕 Wearing in the Test tab.</div>`;
+    else if (l.role.type === 'part') h += `Rides on the game's <b>${RIG.PART_LABEL[l.role.part]}</b> and hides the game's own sprite for it.<div class="row" style="margin-top:8px"><label>Over the limb</label><input type="checkbox" id="ovOn" title="Tick for clothes, a sleeve, armband or patch: drawn on top and the limb stays visible"></div> It moves, ragdolls and can be cut off exactly like the original part.
       <div class="row" style="margin-top:8px"><label>Bends with</label><select id="bwPart" style="flex:1"><option value="">— only its own part —</option>${RIG.PARTS.filter(p => p !== l.role.part).map(p => `<option value="${p}" ${l.blendWith === p ? 'selected' : ''}>${RIG.PART_LABEL[p]}</option>`).join('')}</select></div>
       ${l.blendWith ? `<div class="row"><label>How much</label><input type="range" id="bwW" min="0" max="1" step="0.05" value="${l.blendWeight !== undefined ? l.blendWeight : 0.5}"><span class="v">${Math.round((l.blendWeight !== undefined ? l.blendWeight : 0.5) * 100)}%</span></div>` : ''}
       <div class="muted">For extra pieces between two of the game's parts: e.g. a 5-piece leg = thigh · knee piece (on the thigh, bending 50% with the shin) · shin · ankle piece (on the shin, 50% with the foot) · foot. Give several layers the same part to add pieces; hitboxes never change.</div>`;
@@ -816,6 +817,8 @@ function renderInspector() {
   const bc = $('#backChain'); if (bc && l) bc.onclick = () => { selChain = l.role.chain; selLayer = null; refresh(); };
   if (l && (l.role.type === 'part' || l.role.type === 'chain')) bindAnimInspector(l);
   if (l && (l.role.type === 'part' || l.role.type === 'ignore')) bindMoveBox(l);
+  { const ov = $('#ovOn'); if (ov && l) ov.onchange = () => { pushUndo(); if (ov.checked) l.overlay = true; else delete l.overlay; refresh(); startTestIfOpen(); }; }
+  { const og = $('#ovGear'); if (og && l) og.onchange = () => { pushUndo(); if (og.checked) l.aboveGear = true; else delete l.aboveGear; refresh(); startTestIfOpen(); }; }
   const bw = $('#bwPart'); if (bw && l) bw.onchange = () => { if (bw.value) { l.blendWith = bw.value; if (l.blendWeight === undefined) l.blendWeight = 0.5; } else delete l.blendWith; refresh(); startTestIfOpen(); };
   const bwW = $('#bwW'); if (bwW && l) { bwW.oninput = () => { l.blendWeight = +bwW.value; bwW.nextElementSibling.textContent = Math.round(l.blendWeight * 100) + '%'; }; bwW.onchange = () => startTestIfOpen(); }
   if (l) { const su = $('#stUp'), sd = $('#stDown'); if (su) su.onclick = () => restack(l, +1); if (sd) sd.onclick = () => restack(l, -1);
@@ -994,17 +997,155 @@ function bindGearBox() {
     if (!first) { toast('Already made (or this item has no sprite in the template)'); return; }
     doc.layers.forEach((o, i) => o.order = i);
     selLayer = first.id; selChain = null; refresh();
-    const wp = $('#wearPrev'); if (wp) wp.value = id;
+    toggleWear(id, true);
     toast('Added ' + g.id + ' on your character. Download PNG → repaint → Replace, or drag it to fit. Preview it in Test with "Wearing".', 7000);
   };
 }
-function fillWearList() {
-  const sel = $('#wearPrev'); if (!sel) return; const cur = sel.value;
-  const mine = new Set(doc ? doc.layers.filter(l => l.role.type === 'gear').map(l => l.role.item) : []);
-  sel.innerHTML = '<option value="">Wearing: nothing</option>' + gearList().map(g => `<option value="${g.id}">Wearing: ${mine.has(g.id) ? '✎ ' : ''}${esc(g.id)}</option>`).join('');
-  sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
-  sel.style.display = RIG.GAME ? '' : 'none';
+// ---- wearables tried on in the Test and Gear tabs (just a preview; nothing is saved in the rig)
+const WEAR = new Set();
+let wearFind = '';
+function wearIds() {
+  const list = gearList(), ok = new Set(list.map(g => g.id));
+  for (const id of [...WEAR]) if (!ok.has(id)) WEAR.delete(id);
+  if (tab !== 'gear') return [...WEAR];
+  // the item being edited, plus what else you're wearing (not two things in the same slot)
+  const cur = list.find(g => g.id === GS.item); const out = cur ? [cur.id] : [];
+  for (const id of WEAR) { const g = list.find(x => x.id === id); if (g && g.id !== GS.item && !(cur && cur.slot && g.slot === cur.slot)) out.push(id); }
+  return out;
 }
+function toggleWear(id, on) {
+  const list = gearList(), g = list.find(x => x.id === id); if (!g) return;
+  if (on) { if (g.slot) for (const o of list) if (o.id !== id && o.slot === g.slot) WEAR.delete(o.id); WEAR.add(id); } else WEAR.delete(id);
+  fillWearList(); startTestIfOpen();
+}
+function fillWearList() {
+  const n = WEAR.size, names = [...WEAR].slice(0, 2).join(', ') + (n > 2 ? ' +' + (n - 2) : '');
+  const b = $('#wearBtn'); if (b) { b.textContent = '👕 Wearing: ' + (n ? names : 'nothing'); b.style.display = RIG.GAME ? '' : 'none'; }
+  const b2 = $('#wearBtn2'); if (b2) { b2.textContent = '👕 Also wearing: ' + (n ? names : 'nothing'); b2.style.display = RIG.GAME ? '' : 'none'; }
+  const pop = $('#wearPop'); if (pop) renderWearPop(pop);
+}
+function renderWearPop(pop) {
+  const list = gearList(), f = wearFind.toLowerCase();
+  const mine = new Set(doc ? doc.layers.filter(l => l.role.type === 'gear').map(l => l.role.item) : []);
+  const by = {}; for (const g of list) { if (f && !g.id.toLowerCase().includes(f)) continue; (by[g.limb] = by[g.limb] || []).push(g); }
+  let h = `<div class="row" style="margin:0 0 6px"><input id="wearFind" type="text" placeholder="Search wearables…" value="${esc(wearFind)}" style="flex:1"><button id="wearNone" title="Take everything off">Take off all</button></div>`;
+  for (const limb of Object.keys(by).sort((a, b) => RIG.PARTS.indexOf(a) - RIG.PARTS.indexOf(b))) {
+    h += `<div class="wh">${esc(RIG.PART_LABEL[limb] || limb)}</div>`;
+    for (const g of by[limb]) h += `<label class="wl" title="${esc(g.id)}${g.slot ? ' · slot ' + esc(g.slot) : ''}"><input type="checkbox" data-wear="${esc(g.id)}" ${WEAR.has(g.id) ? 'checked' : ''}><img src="${gearThumb(g.sprite)}"><span>${mine.has(g.id) ? '✎ ' : ''}${esc(g.id)}</span></label>`;
+  }
+  if (!list.length) h += `<div class="muted">Load the game template to try on wearables.</div>`;
+  pop.innerHTML = h + `<div class="muted" style="margin-top:6px">✎ = you redrew it. One item per slot, like in the game. Clothes layers set to "above worn gear" stay on top.</div>`;
+  pop.querySelectorAll('[data-wear]').forEach(c => c.onchange = () => toggleWear(c.dataset.wear, c.checked));
+  const fi = pop.querySelector('#wearFind'); fi.oninput = () => { wearFind = fi.value; const at = fi.selectionStart; renderWearPop(pop); const n = pop.querySelector('#wearFind'); n.focus(); n.setSelectionRange(at, at); };
+  pop.querySelector('#wearNone').onclick = () => { WEAR.clear(); fillWearList(); startTestIfOpen(); };
+}
+function openWearPop(btn) {
+  let pop = $('#wearPop'); if (pop) { pop.remove(); return; }
+  if (!RIG.GAME) { toast('Load the game template first (click "no game template" at the top).'); return; }
+  pop = document.createElement('div'); pop.id = 'wearPop'; document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect(); pop.style.top = (r.bottom + 6) + 'px'; pop.style.left = Math.max(8, Math.min(window.innerWidth - 330, r.left)) + 'px';
+  renderWearPop(pop);
+  setTimeout(() => document.addEventListener('mousedown', function off(e) { const p = $('#wearPop'); if (!p) { document.removeEventListener('mousedown', off); return; } if (!p.contains(e.target) && e.target !== btn) { p.remove(); document.removeEventListener('mousedown', off); } }), 0);
+}
+$('#wearBtn').onclick = (e) => openWearPop(e.currentTarget);
+$('#wearBtn2').onclick = (e) => openWearPop(e.currentTarget);
+
+
+// ---- record the Test view as an animated GIF (for sharing: the community hub, Nexus, Discord…)
+const REC = { on: false, clear: false, frames: [], next: 0 };
+function gifEncode(frames, w, h, delayCs, transparent) {
+  // one palette for the whole animation: exact when there are ≤255 colours (pixel art), else the most used ones
+  const count = new Map();
+  for (const f of frames) for (let i = 0; i < f.length; i += 4) { if (transparent && f[i + 3] < 128) continue; const k = (f[i] << 16) | (f[i + 1] << 8) | f[i + 2]; count.set(k, (count.get(k) || 0) + 1); }
+  let cols = [...count.keys()];
+  if (cols.length > 255) cols = [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 255).map(e => e[0]);
+  const T0 = transparent ? 1 : 0; // index 0 = transparent
+  const pal = new Map(cols.map((c, i) => [c, i + T0]));
+  const near = new Map();
+  const idx = (k) => { let v = pal.get(k); if (v !== undefined) return v; v = near.get(k); if (v !== undefined) return v;
+    let best = 0, bd = Infinity; const r = k >> 16, g = (k >> 8) & 255, b = k & 255;
+    for (let i = 0; i < cols.length; i++) { const c = cols[i], dr = r - (c >> 16), dg = g - ((c >> 8) & 255), db = b - (c & 255), d = dr * dr * 2 + dg * dg * 4 + db * db * 3; if (d < bd) { bd = d; best = i; } }
+    near.set(k, best + T0); return best + T0; };
+  let bits = 1; while ((1 << bits) < cols.length + T0) bits++; bits = Math.max(2, bits);
+  const out = []; const w16 = (v) => out.push(v & 255, (v >> 8) & 255);
+  out.push(...'GIF89a'.split('').map(c => c.charCodeAt(0))); w16(w); w16(h); out.push(0xF0 | (bits - 1), 0, 0);
+  for (let i = 0; i < (1 << bits); i++) { const c = transparent && i === 0 ? 0 : (cols[i - T0] !== undefined ? cols[i - T0] : 0); out.push(c >> 16, (c >> 8) & 255, c & 255); }
+  out.push(0x21, 0xFF, 11, ...'NETSCAPE2.0'.split('').map(c => c.charCodeAt(0)), 3, 1, 0, 0, 0); // loop forever
+  for (const f of frames) {
+    out.push(0x21, 0xF9, 4, transparent ? 0x09 : 0x04, delayCs & 255, delayCs >> 8, 0, 0); // dispose: clear (transparent) / keep
+    out.push(0x2C); w16(0); w16(0); w16(w); w16(h); out.push(0);
+    const px = new Uint8Array(w * h);
+    for (let i = 0, j = 0; j < px.length; i += 4, j++) px[j] = transparent && f[i + 3] < 128 ? 0 : idx((f[i] << 16) | (f[i + 1] << 8) | f[i + 2]);
+    // LZW
+    const min = bits; out.push(min);
+    const clear = 1 << min, eoi = clear + 1; let size = min + 1, next = eoi + 1, dict = new Map();
+    const data = []; let cur = 0, nb = 0;
+    const emit = (code) => { cur |= code << nb; nb += size; while (nb >= 8) { data.push(cur & 255); cur >>>= 8; nb -= 8; } };
+    emit(clear); let prefix = px[0];
+    for (let i = 1; i < px.length; i++) {
+      const k = px[i], key = prefix * 4096 + k, hit = dict.get(key);
+      if (hit !== undefined) { prefix = hit; continue; }
+      emit(prefix);
+      if (next < 4096) { dict.set(key, next++); if (next > (1 << size) && size < 12) size++; }
+      else { emit(clear); dict = new Map(); size = min + 1; next = eoi + 1; }
+      prefix = k;
+    }
+    emit(prefix); emit(eoi); if (nb > 0) data.push(cur & 255);
+    for (let i = 0; i < data.length; i += 255) { const n = Math.min(255, data.length - i); out.push(n); for (let k = 0; k < n; k++) out.push(data[i + k]); }
+    out.push(0);
+  }
+  out.push(0x3B);
+  return new Uint8Array(out);
+}
+function recordGif(opts) {
+  if (!test || REC.on) return;
+  const secs = opts.secs || 3, art = opts.px || 4, fps = 15;
+  const keepZoom = test.zoom; test.zoom = 8 * art; // whole screen pixels per game pixel, so the GIF stays crisp
+  REC.on = true; REC.clear = !!opts.transparent; REC.frames = []; REC.next = performance.now() + 250; // settle a moment first
+  const d = window.devicePixelRatio || 1, total = Math.round(secs * fps);
+  const btn = $('#recBtn'); if (btn) { btn.disabled = true; btn.textContent = '⏺ Recording…'; }
+  const tick = (now) => {
+    if (!REC.on) return;
+    if (now >= REC.next && test.view) {
+      REC.next = Math.max(REC.next + 1000 / fps, now);
+      const V = test.view, z = V.z, cw = Math.round(8 * z), ch = Math.round(8.4 * z);
+      const cx = V.x0 + V.bx * z, top = V.groundY - 7.6 * z;
+      const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+      g.drawImage(cv, (cx - cw / 2) * d, top * d, cw * d, ch * d, 0, 0, cw, ch);
+      REC.frames.push({ w: cw, h: ch, data: g.getImageData(0, 0, cw, ch).data });
+      if (btn) btn.textContent = '⏺ ' + Math.round(REC.frames.length / total * 100) + '%';
+    }
+    if (REC.frames.length >= total) {
+      REC.on = false; test.zoom = keepZoom;
+      const w = REC.frames[0].w, h = REC.frames[0].h, fr = REC.frames.filter(f => f.w === w && f.h === h).map(f => f.data);
+      setTimeout(() => {
+        try {
+          const gif = gifEncode(fr, w, h, Math.round(100 / fps), !!opts.transparent);
+          const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([gif], { type: 'image/gif' }));
+          a.download = (doc.name || 'character') + '-' + ($('#actPrev').value || 'test') + '.gif'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+          toast('Saved a ' + w + '×' + h + ' GIF (' + fr.length + ' frames). Use it as the picture when you share your character.', 7000);
+        } catch (e) { console.error(e); toast('Could not make the GIF: ' + e.message, 6000); }
+        if (btn) { btn.disabled = false; btn.textContent = '⏺ GIF'; }
+      }, 0);
+      return;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function openRecPop(btn) {
+  let pop = $('#recPop'); if (pop) { pop.remove(); return; }
+  pop = document.createElement('div'); pop.id = 'recPop'; pop.className = 'popBox'; document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect(); pop.style.top = (r.bottom + 6) + 'px'; pop.style.left = Math.max(8, Math.min(window.innerWidth - 300, r.left)) + 'px';
+  pop.innerHTML = `<div class="muted" style="margin-bottom:6px">Records the character doing what's picked on the left (walk, run, idle…), wearing what you picked. Great as the picture for the community hub or Nexus.</div>
+    <div class="row"><label>Length</label><select id="recSecs"><option value="2">2 s</option><option value="3" selected>3 s</option><option value="5">5 s</option></select></div>
+    <div class="row"><label>Size</label><select id="recPx"><option value="2">small</option><option value="3">medium</option><option value="4" selected>big</option><option value="6">huge</option></select></div>
+    <div class="row"><label>Background</label><select id="recBg"><option value="">editor's</option><option value="1">see-through</option></select></div>
+    <div class="row"><label></label><button id="recGo" class="primary">⏺ Record</button></div>`;
+  pop.querySelector('#recGo').onclick = () => { const o = { secs: +$('#recSecs').value, px: +$('#recPx').value, transparent: !!$('#recBg').value }; pop.remove(); if ($('#actPrev').value === 'play') toast('Tip: pick an action like Walk or Run for a looping preview.', 5000); recordGif(o); };
+  setTimeout(() => document.addEventListener('mousedown', function off(e) { const p = $('#recPop'); if (!p) { document.removeEventListener('mousedown', off); return; } if (!p.contains(e.target) && e.target !== btn) { p.remove(); document.removeEventListener('mousedown', off); } }), 0);
+}
+$('#recBtn').onclick = (e) => openRecPop(e.currentTarget);
 
 // ---- delete a layer (anything: a part, a piece of a moving part, art, gear, an image added by mistake)
 function deleteLayer(l) { deleteLayers([l]); }
@@ -1194,7 +1335,7 @@ function draw(options = {}) {
   if (!doc) return;
   ctx.imageSmoothingEnabled = false;
   // skin sprites (sprite swaps) on parts that have no replacement layer
-  const replacedParts = new Set(doc.layers.filter(l => l.role.type === 'part').map(l => l.role.part));
+  const replacedParts = new Set(doc.layers.filter(l => l.role.type === 'part' && !l.overlay).map(l => l.role.part));
   const skinItems = [];
   for (const part of [...RIG.PARTS, 'tail']) {
     if (replacedParts.has(part) || (part === 'tail' && doc.hideVanillaTail)) continue;
@@ -1258,7 +1399,7 @@ function draw(options = {}) {
   }
 }
 
-function gearShown(l) { const sl = selLayer && RIG.layer(doc, selLayer); const wp = $('#wearPrev'); return (sl && sl.role.type === 'gear' && sl.role.item === l.role.item) || (wp && wp.value && wp.value === l.role.item); }
+function gearShown(l) { const sl = selLayer && RIG.layer(doc, selLayer); return (sl && sl.role.type === 'gear' && sl.role.item === l.role.item) || WEAR.has(l.role.item); }
 function shownEye() {
   const sl = selLayer && RIG.layer(doc, selLayer); if (sl && sl.role.type === 'eye') return sl.role.state;
   return doc.layers.some(o => o.role.type === 'eye' && o.role.state === 'experimentEyeOpen') ? 'experimentEyeOpen' : (doc.layers.find(o => o.role.type === 'eye') || { role: {} }).role.state;
@@ -2104,12 +2245,13 @@ function loop(now) {
   T.camY += ((follow ? Math.max(0, b.y - 1) : 0) - T.camY) * Math.min(1, dt * (A === 'fall' || A === 'wallslide' ? 10 : 4));
   const z = T.zoom;
   ctx.setTransform(d, 0, 0, d, 0, 0);
-  const PAL = CV(); ctx.fillStyle = PAL.bg; ctx.fillRect(0, 0, W, H);
+  const PAL = CV(); if (REC.on && REC.clear) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = PAL.bg; ctx.fillRect(0, 0, W, H); }
   if (gearMode) { T.camX = 0; T.camY = 0; }
   const groundY = (animMode ? Math.max(120, (H - 206) * 0.86) : gearMode ? H * 0.8 : H * 0.72) + T.camY * z; // screen y of world y = 0 (above the timeline in Animate)
   const x0 = W / 2 - T.camX * z;
   const sx = (x) => x0 + x * z, sy = (y) => groundY - y * z;
-  ctx.strokeStyle = PAL.grid; ctx.lineWidth = 1;
+  T.view = { x0, groundY, z, W, H, bx: b.x, by: b.y };
+  ctx.strokeStyle = REC.on ? 'transparent' : PAL.grid; ctx.lineWidth = 1;
   for (let gx = Math.floor((T.camX - W / 2 / z) / 2) * 2; gx < T.camX + W / 2 / z; gx += 2) { ctx.beginPath(); ctx.moveTo(sx(gx), 0); ctx.lineTo(sx(gx), H); ctx.stroke(); }
   for (let gy = Math.floor(T.camY / 2) * 2 - 14; gy < T.camY + 16; gy += 2) { const y = sy(gy); if (y < 0 || y > H) continue; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
   if (A === 'play' && !gearMode && !animMode) { // the level
@@ -2121,7 +2263,7 @@ function loop(now) {
     ctx.strokeStyle = PAL.groundLine; ctx.lineWidth = 1; for (const bx of LEVEL.boxes) ctx.strokeRect(sx(bx.x0) + .5, sy(bx.y1) + .5, (bx.x1 - bx.x0) * z, (bx.y1 - bx.y0) * z);
   } else {
     if (act === 'climb') { ctx.fillStyle = '#1a1c22'; ctx.fillRect(sx(b.x + 0.9 * b.facing) - (b.facing > 0 ? 0 : 0.6 * z), 0, 0.6 * z, Math.min(H, groundY)); }
-    if (groundY < H + 2) { ctx.fillStyle = PAL.ground; ctx.fillRect(0, groundY, W, H - groundY); ctx.strokeStyle = PAL.groundLine; ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke(); }
+    if (groundY < H + 2 && !(REC.on && REC.clear)) { ctx.fillStyle = PAL.ground; ctx.fillRect(0, groundY, W, H - groundY); ctx.strokeStyle = PAL.groundLine; ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke(); }
   }
   const footBottom = (useGame || animMode || gearMode) && gameMode() ? moveConsts(T).footBottom : 2.415 + 0.7;
   const S = [z, 0, 0, -z, x0, groundY - footBottom * z];
@@ -2144,12 +2286,21 @@ function loop(now) {
   const eyesHidden = T.rig.hideObjects.includes('Eyes');
   if (!eyesHidden && !hv.hidden.has('Head')) items.push({ eyes: true, order: (headItem ? headItem.order : RIG.ORDER.Head) + 0.5, m: frames.Head });
   // an item worn in the test: your version if you drew one, the game's otherwise, on its body part (like Body.WearItem)
-  const wearId = gearMode ? GS.item : ($('#wearPrev') ? $('#wearPrev').value : '');
-  const wearG = wearId && RIG.GAME ? (RIG.GAME.tpl.gear || []).find(g => g.id === wearId) : null;
-  if (wearG) {
+  // items worn in the test: your version if you drew one, the game's otherwise, on its body part (like Body.WearItem)
+  const wearTop = {};
+  if (RIG.GAME) {
     const partOrder = (part) => { const pc = T.rig.chains.find(c => c.hideTarget && c.attachTo === part); return (RIG.ORDER[part] || 0) + (pc ? pc.sortingOrderOffset || 0 : 0); };
-    for (const w of [{ limb: wearG.limb, sprite: wearG.sprite }, ...(wearG.extra || [])]) if (w.sprite && frames[w.limb] && !hv.hidden.has(w.limb)) items.push({ wear: w.sprite, order: partOrder(w.limb) + (wearG.drawOffset || 0) * 0.1 + 0.05, m: frames[w.limb], limb: w.limb });
+    for (const id of wearIds()) {
+      const wearG = (RIG.GAME.tpl.gear || []).find(g => g.id === id); if (!wearG) continue;
+      for (const w of [{ limb: wearG.limb, sprite: wearG.sprite }, ...(wearG.extra || [])]) if (w.sprite && frames[w.limb] && !hv.hidden.has(w.limb)) {
+        const order = partOrder(w.limb) + (wearG.drawOffset || 0) * 0.1 + 0.05;
+        items.push({ wear: w.sprite, order, m: frames[w.limb], limb: w.limb });
+        wearTop[w.limb] = Math.max(wearTop[w.limb] !== undefined ? wearTop[w.limb] : -Infinity, order);
+      }
+    }
   }
+  // clothes set to "above worn gear" stay on top of whatever is worn on their part (like the mod does in game)
+  for (const it of items) if (it.aboveGear && wearTop[it.chainAttach] !== undefined) it.order = Math.max(it.order, wearTop[it.chainAttach] + 0.01 + (it.order % 1 + 1) * 0.001);
   items.sort((a, b2) => a.order - b2.order);
   // the game's own sprites (from the game template) for anything the rig doesn't replace, drawn on their real pivots
   const tplDraw = (name) => {
@@ -2914,7 +3065,7 @@ function bridgeAnimCrop() {
   const w = 4.8 * z, h = 5.0 * z;
   return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
 }
-window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
+window.__rigEditor = { recordGif, gifEncode, get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
   // Sprite Paint (src/paint.js)
   layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, addPaintLayer: bridgeAddPaintLayer, renamePaintLayer: bridgeRenamePaintLayer,
   imageAssetsForPaint: bridgeImageAssets, setImageAssetPixels: bridgeSetImageAssetPixels,

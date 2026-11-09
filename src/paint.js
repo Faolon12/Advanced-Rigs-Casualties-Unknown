@@ -3,14 +3,14 @@
 // It talks to the rig through window.__rigEditor (ui.js): import layers or game sprites, paint, and they go straight back to the rig.
 (function () {
   'use strict';
-  const st = document.createElement('style'); st.textContent = `#panelPaint{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;background:var(--bg,#15161a);color:var(--text,#e6e6ea);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}#panelPaint.active{display:flex}#panelPaint *{box-sizing:border-box}#panelPaint main{flex:1;min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);gap:0}
+  const st = document.createElement('style'); st.textContent = `#panelPaint{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;background:var(--bg,#15161a);color:var(--text,#e6e6ea);font:inherit}#panelPaint.active{display:flex}#panelPaint *{box-sizing:border-box}#panelPaint main{flex:1;min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);gap:0}
 #panelPaint header{flex:none}
 #panelPaint #viewport{flex:1;min-height:0;min-width:0;overflow:auto}
 #panelPaint aside{flex:none}
 #panelPaint .right{flex:none}
 #panelPaint button,#panelPaint select,#panelPaint input{font:inherit;color:var(--text)}
 #panelPaint button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
-#panelPaint button:hover{border-color:#555a66}
+#panelPaint button:hover{border-color:var(--dim)}
 #panelPaint button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
 #panelPaint button.primary:hover{filter:brightness(1.1)}
 #panelPaint button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
@@ -18,7 +18,7 @@
 #panelPaint button.secondary:hover{border-color:var(--text);color:var(--text)}
 #panelPaint button.danger{background:rgba(224,71,91,0.2);border-color:var(--acc);color:var(--acc)}
 #panelPaint button.danger:hover{background:var(--acc);color:#fff}
-#panelPaint select,#panelPaint input[type=text],#panelPaint input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+#panelPaint select,#panelPaint input[type=text],#panelPaint input[type=number],#panelPaint input[type=search]{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:4px 6px}
 #panelPaint input[type=color]{border:none;background:none;width:26px;height:26px;cursor:pointer}
 #panelPaint header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;row-gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);z-index:10}
 #panelPaint header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
@@ -27,7 +27,7 @@
 #panelPaint main{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);min-height:0;gap:0;overflow:hidden}
 #panelPaint aside{background:var(--panel);overflow:auto;min-height:0;min-width:0;border-right:1px solid var(--line)}
 #panelPaint aside.right{border-left:1px solid var(--line);border-right:none}
-#panelPaint #viewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#panelPaint #viewport{position:relative;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
 #panelPaint #canvas-wrap{position:relative;display:inline-block;cursor:crosshair}
 #panelPaint canvas#cv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5)}
 #panelPaint canvas#preview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3)}
@@ -54,18 +54,18 @@
 #panelPaint .paint-layer-opacity{position:sticky;top:0;z-index:4;padding:7px 12px 2px;background:var(--panel);border-bottom:1px solid var(--line)}
 #panelPaint .paint-layer-opacity .row{margin-bottom:5px}
 #panelPaint .paint-active-layer-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;margin-bottom:3px}
-#panelPaint .layer-item{display:flex;align-items:center;gap:6px;padding:4px 5px 4px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:#111216;min-width:0}
+#panelPaint .layer-item{display:flex;align-items:center;gap:6px;padding:4px 5px 4px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:var(--panel2);min-width:0}
 #panelPaint .layer-item.active{border-color:var(--acc2);background:var(--panel2)}
 #panelPaint .layer-item .layer-vis{width:14px;height:14px;border:1px solid var(--line);border-radius:3px;flex:0 0 14px}
 #panelPaint .layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;min-width:0}
 #panelPaint .layer-actions{display:flex;gap:3px;align-items:center}
 #panelPaint .layer-actions button{padding:2px 6px;font-size:11px;min-width:0}
 #panelPaint .layer-menu-btn{padding:0 7px;font-size:15px;line-height:1.5;min-width:0;flex:none;background:none;border:none;color:var(--dim);cursor:pointer;border-radius:4px}
-#panelPaint .layer-menu-btn:hover{background:#22242c;color:var(--text)}
+#panelPaint .layer-menu-btn:hover{background:var(--panel2);color:var(--text)}
 #panelPaint #layerMenu{position:fixed;z-index:80;display:none;min-width:186px;padding:5px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 26px rgba(0,0,0,.55)}
 #panelPaint #layerMenu.open{display:block}
 #panelPaint #layerMenu .mi{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:5px;background:none;color:var(--text);font-size:12px;text-align:left;cursor:pointer}
-#panelPaint #layerMenu .mi:hover{background:#22242c}
+#panelPaint #layerMenu .mi:hover{background:var(--panel2)}
 #panelPaint #layerMenu .sep{height:1px;margin:4px 2px;background:var(--line)}
 #panelPaint #layerMenu .op{display:flex;align-items:center;gap:6px;padding:4px 8px 3px;font-size:11px;color:var(--dim)}
 #panelPaint #layerMenu .op input[type=range]{flex:1;min-width:84px}
@@ -77,13 +77,29 @@
 #panelPaint .empty{padding:30px;text-align:center;color:var(--dim)}
 #panelPaint .empty b{color:var(--text)}
 #panelPaint .input-small{width:70px}
-#panelPaint #paintViewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#panelPaint #paintViewport{position:relative;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
 #panelPaint #paintCanvasWrap{position:relative;display:flex;align-items:center;justify-content:center;padding:12px;min-width:100%;min-height:100%}
 #panelPaint canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);display:block;flex:none;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px}
 #panelPaint canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px;touch-action:none;cursor:grab}
 #panelPaint canvas#paintPreview.panning{cursor:grabbing}
 #panelPaint canvas#paintPreview{cursor:grab;touch-action:none}
 #panelPaint #paintCoord{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none}`; document.head.appendChild(st);
+  // Sprite Paint wears the editor's theme: every "[data-theme=…] x" rule of the main page also applies inside the panel
+  // (its own #panelPaint rules would otherwise win). Built from the page's stylesheets, so new themes just work.
+  try {
+    const out = [];
+    for (const sh of document.styleSheets) { if (sh.ownerNode === st) continue; let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+      for (const r of rules) { if (!r.selectorText || !/\[data-theme/.test(r.selectorText) || /#panelPaint/.test(r.selectorText)) continue;
+        const sel = r.selectorText.split(',').map(x => x.trim()).filter(x => !/body::(after|before)/.test(x)).map(x => {
+          const m = /^(\[data-theme[^\]]*\])\s*(.*)$/.exec(x); if (!m) return null;
+          if (!m[2]) return m[1] + ' #panelPaint';                               // the theme's colours
+          if (/^body\b/.test(m[2])) return m[1] + ' #panelPaint' + m[2].slice(4);   // its font and background
+          return m[1] + ' #panelPaint ' + m[2];
+        }).filter(Boolean);
+        const tx = /input\[type="?text"?\]/; sel.push(...sel.filter(x => tx.test(x)).map(x => x.replace(tx, 'input[type=search]')));
+        if (sel.length) out.push(sel.join(',') + '{' + r.style.cssText + '}'); } }
+    const th = document.createElement('style'); th.id = 'paintTheme'; th.textContent = out.join('\n'); document.head.appendChild(th);
+  } catch (e) { console.warn('Sprite Paint theme', e); }
   const holder = document.createElement('div');
   holder.innerHTML = `<div id="panelPaint" role="application" aria-label="Sprite Paint">
 <header>
@@ -229,7 +245,7 @@
 <aside class="right">
 <h2>Preview</h2>
 <div class="section">
-<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move. Preview controls do not edit the sprite." style="display:flex;align-items:center;justify-content:center;background:#0a0a0f;border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
+<div id="previewWrap" aria-label="Read-only sprite preview" title="Read-only preview: scroll to zoom; drag to move. Preview controls do not edit the sprite." style="display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--line);border-radius:8px;height:220px;overflow:hidden">
 <canvas id="paintPreview" width="256" height="256" style="max-width:100%;max-height:100%"></canvas>
 </div>
 <div class="row" style="margin-top:8px"><label>Scale</label>
@@ -340,7 +356,7 @@ let previewPointer = null;
 
 const paint_quickColors = [
   '#e0475b','#ff6b6b','#ff9f43','#ffd166','#f7f779','#4cc38a','#00b894','#00cec9',
-  '#54a0ff','#2e86de','#8f5bff','#c56cf0','#ffffff','#c8c8d0','#777780','#33363f','#111216','#000000'
+  '#54a0ff','#2e86de','#8f5bff','#c56cf0','#ffffff','#c8c8d0','#777780','#33363f','var(--panel2)','#000000'
 ];
 const paintRecentColors = (() => {
   try {
@@ -1035,7 +1051,7 @@ function populateAnimClips(){
 function drawAnimPreview(shot, crop){
   paint_pctx.setTransform(1, 0, 0, 1, 0, 0);
   paint_pctx.globalAlpha = 1;
-  paint_pctx.fillStyle = '#0a0a0f';
+  paint_pctx.fillStyle = 'var(--bg)';
   paint_pctx.fillRect(0, 0, paint_preview.width, paint_preview.height);
   if (!shot) return;
   const src = crop || { x: 0, y: 0, w: shot.width, h: shot.height };
