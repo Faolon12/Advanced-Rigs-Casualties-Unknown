@@ -104,7 +104,7 @@
   holder.innerHTML = `<div id="panelPaint" role="application" aria-label="Sprite Paint">
 <header>
 <button id="paintBtnBack" title="Back to the rig editor (your painting stays here; it's already on the rig)">← Rig editor</button>
-<h1>Sprite Paint <span>Luna Advanced Rig Systems</span> <small style="color:var(--dim);font-weight:400;font-size:11px">by Silvasta</small></h1>
+<h1>Sprite Paint <span>Luna Advanced Rig Systems</span></h1>
 <div class="grow"></div>
 <button id="paintBtnNew" title="New sprite">New</button>
 <button id="paintBtnOpen" title="Load PNG">Open…</button>
@@ -123,6 +123,7 @@
 <button id="paintDiscardAutosave">Discard</button>
 </div>
 </div>
+<div id="paintCredit" class="muted" style="font-size:10px;padding:4px 12px 0">made by SilvastaDaProot</div>
 <div id="paintAutosaveStatus" class="muted" style="font-size:10px;padding:4px 12px" aria-live="polite"></div>
 <h2>Tools</h2>
 <div class="section">
