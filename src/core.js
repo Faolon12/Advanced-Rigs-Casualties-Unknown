@@ -4,6 +4,53 @@
 
 const RIG = {};
 
+// Browser storage for Sprite Paint's session recovery (IndexedDB: holds much more than localStorage)
+let recoveryDbPromise = null;
+function recoveryDb(){
+  if (recoveryDbPromise) return recoveryDbPromise;
+  recoveryDbPromise = new Promise((resolve, reject)=>{
+    if (!window.indexedDB) { reject(new Error('Browser autosave storage is unavailable')); return; }
+    const request = window.indexedDB.open('luna-ars-recovery', 1);
+    request.onupgradeneeded = ()=>{
+      if (!request.result.objectStoreNames.contains('drafts')) request.result.createObjectStore('drafts', { keyPath: 'key' });
+    };
+    request.onsuccess = ()=>resolve(request.result);
+    request.onerror = ()=>reject(request.error || new Error('Could not open browser autosave storage'));
+    request.onblocked = ()=>reject(new Error('Browser autosave storage is blocked by another editor tab'));
+  });
+  return recoveryDbPromise;
+}
+RIG.recoveryStore = {
+  get(key){
+    return recoveryDb().then(db=>new Promise((resolve, reject)=>{
+      const tx = db.transaction('drafts', 'readonly');
+      const request = tx.objectStore('drafts').get(key);
+      request.onsuccess = ()=>resolve(request.result ? request.result.value : null);
+      request.onerror = ()=>reject(request.error || new Error('Could not read autosave draft'));
+      tx.onabort = ()=>reject(tx.error || new Error('Autosave read was interrupted'));
+    }));
+  },
+  put(key, value){
+    return recoveryDb().then(db=>new Promise((resolve, reject)=>{
+      const tx = db.transaction('drafts', 'readwrite');
+      tx.objectStore('drafts').put({ key, value });
+      tx.oncomplete = ()=>resolve();
+      tx.onerror = ()=>reject(tx.error || new Error('Could not write autosave draft'));
+      tx.onabort = ()=>reject(tx.error || new Error('Autosave write was interrupted'));
+    }));
+  },
+  delete(key){
+    return recoveryDb().then(db=>new Promise((resolve, reject)=>{
+      const tx = db.transaction('drafts', 'readwrite');
+      tx.objectStore('drafts').delete(key);
+      tx.oncomplete = ()=>resolve();
+      tx.onerror = ()=>reject(tx.error || new Error('Could not remove autosave draft'));
+      tx.onabort = ()=>reject(tx.error || new Error('Autosave delete was interrupted'));
+    }));
+  }
+};
+
+
 // ---------- game skeleton (from the game's scene: rest pose of Experiment/Body) ----------
 RIG.PPU = 8; // the open character's pixels per unit (8 = the game's own scale; 16, 24... = art drawn 2x, 3x bigger)
 RIG.learned = {}; // layer name pattern -> role, taught by setting roles by hand
@@ -150,13 +197,15 @@ RIG.J = (doc, part) => { const r = RIG.restPx(part); return { x: +(r.x + doc.ali
 // ===================== PSD / PSB reader =====================
 RIG.readPSD = function (buf) {
   const dv = new DataView(buf); let p = 0;
-  const u8 = () => dv.getUint8(p++);
-  const u16 = () => { const v = dv.getUint16(p); p += 2; return v; };
-  const i16 = () => { const v = dv.getInt16(p); p += 2; return v; };
-  const u32 = () => { const v = dv.getUint32(p); p += 4; return v; };
-  const i32 = () => { const v = dv.getInt32(p); p += 4; return v; };
-  const u64 = () => { const hi = u32(), lo = u32(); return hi * 4294967296 + lo; };
-  const str = (n) => { let s = ''; for (let i = 0; i < n; i++) s += String.fromCharCode(u8()); return s; };
+  // a cut-off or damaged file gives a clear message instead of garbage layers
+  const need = (n) => { if (p + n > dv.byteLength) throw new Error('PSD file is truncated or corrupt (ran out of data at byte ' + p + ')'); };
+  const u8 = () => { need(1); return dv.getUint8(p++); };
+  const u16 = () => { need(2); const v = dv.getUint16(p); p += 2; return v; };
+  const i16 = () => { need(2); const v = dv.getInt16(p); p += 2; return v; };
+  const u32 = () => { need(4); const v = dv.getUint32(p); p += 4; return v; };
+  const i32 = () => { need(4); const v = dv.getInt32(p); p += 4; return v; };
+  const u64 = () => { need(8); const hi = u32(), lo = u32(); return hi * 4294967296 + lo; };
+  const str = (n) => { need(n); let s = ''; for (let i = 0; i < n; i++) s += String.fromCharCode(u8()); return s; };
   if (str(4) !== '8BPS') throw new Error('Not a PSD/PSB file');
   const ver = u16(); const big = ver === 2; p += 6;
   const channels = u16(), H = u32(), W = u32(), depth = u16(), mode = u16();
@@ -1050,6 +1099,7 @@ RIG.buildRig = function (doc) {
     if (d.middle) o.middle = addImg('hs_' + tag + '_middle.png', d.middle);
     if (d.x !== undefined && d.y !== undefined) { o.x = +(+d.x).toFixed(1); o.y = +(+d.y).toFixed(1); }
     if (d.rotation) o.rotation = +d.rotation; if (d.mirror) o.mirror = true;
+    if (d.size && Math.abs(d.size - 1) > 0.001) o.size = +(+d.size).toFixed(3); // mod 0.4+: resizes the part, game art included
     return o;
   };
   // rigid body parts, in drawing order
@@ -1165,7 +1215,7 @@ RIG.docFromRig = function (rig, images) {
   };
   let order = 0; const byFile = {};
   const hsIn = (h) => h ? { outline: h.outline ? images[h.outline] : null, middle: h.middle ? images[h.middle] : null,
-    x: h.x, y: h.y, scale: h.scale || 3, rotation: h.rotation || 0, mirror: !!h.mirror } : null;
+    x: h.x, y: h.y, scale: h.scale || 3, size: h.size || 1, rotation: h.rotation || 0, mirror: !!h.mirror } : null;
   const mk = (file, x, y) => {
     const key = file + '@' + x + ',' + y; if (byFile[key]) return byFile[key];
     const img = images[file]; if (!img) throw new Error('Missing image ' + file);
