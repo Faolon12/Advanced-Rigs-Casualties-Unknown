@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.3 Alpha)</title>
+<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.4 Alpha)</title>
 <style>
 :root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
 *{box-sizing:border-box}
@@ -245,7 +245,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 <body data-mode="rig">
 <div id="app" role="application">
 <header>
-  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.3 Alpha</small></h1>
+  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.4 Alpha</small></h1>
   <div id="modeSwitcher">
     <button id="modeRig" class="modeBtn active" onclick="switchMode('rig')">Rig Editor</button>
     <button id="modePaint" class="modeBtn" onclick="switchMode('paint')">Sprite Paint</button>
@@ -264,6 +264,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
     <button id="btnAddPsd" title="Add a PSD / PSB to this character: layers with the same names are updated, new ones are added (with no character open, it starts a new one)">Add PSD / PSB…</button>
     <select id="dlMenu" title="Download every layer of this character, to repaint in Photoshop, Krita, GIMP, Photopea…" style="width:150px;flex:none"><option value="">⬇ Download all…</option><option value="psd">as one PSD</option><option value="psb">as one PSB (large)</option><option value="png">as PNGs (one per layer)</option></select>
     <button id="btnAuto" title="Re-run automatic part matching and bone placement">Auto setup</button>
+    <label class="muted" title="Manual setup: opening or adding files assigns nothing and moves nothing. You give every layer its role on the left (select several + set role), move parts yourself and place bones by hand." style="display:flex;align-items:center;gap:4px;cursor:pointer"><input id="manualMode" type="checkbox">Manual</label>
     <span class="muted">Name</span><label for="name" style="margin-right:4px">Character name</label><input id="name" type="text" value="MyCharacter" style="width:150px" aria-label="Character name">
     <button id="btnTheme" title="Switch the editor's look (Casualties lab terminal / plain)">Theme</button>
     <button id="btnHelp">How to</button>
@@ -379,8 +380,9 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 
 
 </div>
-<div id="panelPaint" class="modePanel">
+<div id="panelPaint" class="modePanel" role="application" aria-label="Sprite Paint">
 <header>
+<button id="paintBtnBack" title="Back to the rig editor (your painting stays here; it's already on the rig)">← Rig editor</button>
 <h1>Sprite Paint Editor <span>Luna Advanced Rig Systems</span></h1>
 <div class="grow"></div>
 <button id="paintBtnNew" title="New sprite">New</button>
@@ -510,7 +512,7 @@ canvas#paintPreview{cursor:grab;touch-action:none}
 </div>
 </aside>
 
-<div id="viewport">
+<div id="paintViewport">
 <div id="paintCanvasWrap">
 <canvas id="paintCv" width="256" height="256" tabindex="0" title="Right-click to pick the visible color; focus here for keyboard shortcuts"></canvas>
 <canvas id="paintSelectionOverlay" aria-hidden="true"></canvas>
@@ -595,6 +597,12 @@ window.switchMode = function(mode) {
 /*__CORE__*/
 
 /*__UI__*/
+</script>
+<script>
+/*__PROPS__*/
+</script>
+<script>
+/*__PAINT__*/
 </script>
 </body>
 </html>

@@ -4,6 +4,7 @@
 
 const RIG = {};
 
+// Browser storage for Sprite Paint's session recovery (IndexedDB: holds much more than localStorage)
 let recoveryDbPromise = null;
 function recoveryDb(){
   if (recoveryDbPromise) return recoveryDbPromise;
@@ -195,6 +196,7 @@ RIG.J = (doc, part) => { const r = RIG.restPx(part); return { x: +(r.x + doc.ali
 // ===================== PSD / PSB reader =====================
 RIG.readPSD = function (buf) {
   const dv = new DataView(buf); let p = 0;
+  // a cut-off or damaged file gives a clear message instead of garbage layers
   const need = (n) => { if (p + n > dv.byteLength) throw new Error('PSD file is truncated or corrupt (ran out of data at byte ' + p + ')'); };
   const u8 = () => { need(1); return dv.getUint8(p++); };
   const u16 = () => { need(2); const v = dv.getUint16(p); p += 2; return v; };
@@ -1016,6 +1018,50 @@ RIG.exportAnims = function (doc, layerId, seg, add) {
 // Draw order: the game draws its parts in a fixed order (RIG.ORDER). Your layer list says how YOU want them stacked.
 // Every drawn layer gets the in-game order closest to the game's own that still keeps your stacking (weighted
 // isotonic fit: body parts stay as close to the game's order as possible so worn gear and bandages still sit right).
+// Game sounds don't need studio quality: a WAV recorded at 192 kHz / 24-bit / stereo is ~20x bigger than needed, and big
+// rigs take long to reach other players. WAVs are written as mono 16-bit at up to 44.1 kHz (sounds the same in game).
+// .ogg / .mp3 are already compressed and are left alone.
+RIG.shrinkSound = function (name, data) {
+  try {
+    if (!/\.wav$/i.test(name) || !data || data.length < 44) return data;
+    const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const tag = (o) => String.fromCharCode(data[o], data[o + 1], data[o + 2], data[o + 3]);
+    if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return data;
+    let pos = 12, fmt = 1, ch = 1, rate = 44100, bits = 16, ds = -1, dl = 0;
+    while (pos + 8 <= data.length) {
+      const id = tag(pos), len = dv.getUint32(pos + 4, true);
+      if (id === 'fmt ') { fmt = dv.getUint16(pos + 8, true); ch = dv.getUint16(pos + 10, true); rate = dv.getUint32(pos + 12, true); bits = dv.getUint16(pos + 22, true); if (fmt === 0xFFFE && len >= 26) fmt = dv.getUint16(pos + 32, true); }
+      else if (id === 'data') { ds = pos + 8; dl = Math.min(len, data.length - ds); break; }
+      pos += 8 + len + (len & 1);
+    }
+    if (ds < 0 || ![8, 16, 24, 32].includes(bits) || (fmt !== 1 && fmt !== 3)) return data;
+    const outRate = Math.min(rate, 44100);
+    if (ch === 1 && bits === 16 && outRate === rate) return data;           // already small
+    const bp = bits / 8, frames = Math.floor(dl / (bp * ch));
+    const sample = (i, c) => { const o = ds + (i * ch + c) * bp;
+      if (bits === 8) return (data[o] - 128) / 128;
+      if (bits === 16) return dv.getInt16(o, true) / 32768;
+      if (bits === 24) return ((data[o] | (data[o + 1] << 8) | (data[o + 2] << 16)) << 8 >> 8) / 8388608;
+      return fmt === 3 ? dv.getFloat32(o, true) : dv.getInt32(o, true) / 2147483648; };
+    const mono = new Float32Array(frames);
+    for (let i = 0; i < frames; i++) { let v = 0; for (let c = 0; c < ch; c++) v += sample(i, c); mono[i] = v / ch; }
+    const step = rate / outRate, n = Math.floor(frames / step);
+    const out = new Uint8Array(44 + n * 2), ov = new DataView(out.buffer);
+    const put = (o, t) => { for (let i = 0; i < 4; i++) out[o + i] = t.charCodeAt(i); };
+    put(0, 'RIFF'); ov.setUint32(4, 36 + n * 2, true); put(8, 'WAVE'); put(12, 'fmt '); ov.setUint32(16, 16, true);
+    ov.setUint16(20, 1, true); ov.setUint16(22, 1, true); ov.setUint32(24, outRate, true); ov.setUint32(28, outRate * 2, true);
+    ov.setUint16(32, 2, true); ov.setUint16(34, 16, true); put(36, 'data'); ov.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) {
+      // average the source samples that fall into this output sample (a simple low-pass, avoids harsh aliasing)
+      const a = Math.floor(i * step), b = Math.max(a + 1, Math.floor((i + 1) * step)); let v = 0;
+      for (let j = a; j < b && j < frames; j++) v += mono[j];
+      v /= (b - a); v = Math.max(-1, Math.min(1, v));
+      ov.setInt16(44 + i * 2, Math.round(v * 32767), true);
+    }
+    return out;
+  } catch (e) { return data; }
+};
+
 RIG.layerOrders = function (doc) {
   const drawn = doc.layers.filter(l => !l.cutSource && (l.role.type === 'part' || l.role.type === 'chain'));
   const g = drawn.map(l => {
@@ -1052,6 +1098,7 @@ RIG.buildRig = function (doc) {
     if (d.middle) o.middle = addImg('hs_' + tag + '_middle.png', d.middle);
     if (d.x !== undefined && d.y !== undefined) { o.x = +(+d.x).toFixed(1); o.y = +(+d.y).toFixed(1); }
     if (d.rotation) o.rotation = +d.rotation; if (d.mirror) o.mirror = true;
+    if (d.size && Math.abs(d.size - 1) > 0.001) o.size = +(+d.size).toFixed(3); // mod 0.4+: resizes the part, game art included
     return o;
   };
   // rigid body parts, in drawing order
@@ -1106,7 +1153,7 @@ RIG.buildRig = function (doc) {
   if (doc.sounds) {
     const snd = {};
     for (const key in doc.sounds) {
-      const list = doc.sounds[key].map(f => { const name = 'snd_' + key + '_' + f.file.replace(/[^A-Za-z0-9_.\-]+/g, '_'); files[name] = { raw: f.data }; return name; });
+      const list = doc.sounds[key].map(f => { const name = 'snd_' + key + '_' + f.file.replace(/[^A-Za-z0-9_.\-]+/g, '_'); files[name] = { raw: RIG.shrinkSound(f.file, f.data) }; return name; });
       if (list.length) snd[key] = list;
     }
     if (Object.keys(snd).length) rig.sounds = snd;
@@ -1167,7 +1214,7 @@ RIG.docFromRig = function (rig, images) {
   };
   let order = 0; const byFile = {};
   const hsIn = (h) => h ? { outline: h.outline ? images[h.outline] : null, middle: h.middle ? images[h.middle] : null,
-    x: h.x, y: h.y, scale: h.scale || 3, rotation: h.rotation || 0, mirror: !!h.mirror } : null;
+    x: h.x, y: h.y, scale: h.scale || 3, size: h.size || 1, rotation: h.rotation || 0, mirror: !!h.mirror } : null;
   const mk = (file, x, y) => {
     const key = file + '@' + x + ',' + y; if (byFile[key]) return byFile[key];
     const img = images[file]; if (!img) throw new Error('Missing image ' + file);

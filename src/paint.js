@@ -1,3 +1,89 @@
+// ===================== Sprite Paint: draw and repaint sprites right in the editor =====================
+// By Silvasta (made with help from an AI assistant), brought into the editor as its own panel, like the Props editor.
+// It talks to the rig through window.__rigEditor (ui.js): import layers or game sprites, paint, and they go straight back to the rig.
+(function () {
+  'use strict';
+  const st = document.createElement('style'); st.textContent = `#panelPaint{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;background:var(--bg,#15161a);color:var(--text,#e6e6ea);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}#panelPaint.active{display:flex}#panelPaint *{box-sizing:border-box}#panelPaint main{flex:1;min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);gap:0}
+#panelPaint header{flex:none}
+#panelPaint #viewport{flex:1;min-height:0;min-width:0;overflow:auto}
+#panelPaint aside{flex:none}
+#panelPaint .right{flex:none}
+#panelPaint button,#panelPaint select,#panelPaint input{font:inherit;color:var(--text)}
+#panelPaint button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+#panelPaint button:hover{border-color:#555a66}
+#panelPaint button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+#panelPaint button.primary:hover{filter:brightness(1.1)}
+#panelPaint button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+#panelPaint button.secondary{background:var(--panel2);border-color:var(--line);color:var(--dim)}
+#panelPaint button.secondary:hover{border-color:var(--text);color:var(--text)}
+#panelPaint button.danger{background:rgba(224,71,91,0.2);border-color:var(--acc);color:var(--acc)}
+#panelPaint button.danger:hover{background:var(--acc);color:#fff}
+#panelPaint select,#panelPaint input[type=text],#panelPaint input[type=number]{background:#111216;border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+#panelPaint input[type=color]{border:none;background:none;width:26px;height:26px;cursor:pointer}
+#panelPaint header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;row-gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);z-index:10}
+#panelPaint header h1{font-size:15px;margin:0 10px 0 0;white-space:nowrap}
+#panelPaint header h1 span{color:var(--acc)}
+#panelPaint header .grow{flex:1}
+#panelPaint main{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr) minmax(280px,340px);min-height:0;gap:0;overflow:hidden}
+#panelPaint aside{background:var(--panel);overflow:auto;min-height:0;min-width:0;border-right:1px solid var(--line)}
+#panelPaint aside.right{border-left:1px solid var(--line);border-right:none}
+#panelPaint #viewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#panelPaint #canvas-wrap{position:relative;display:inline-block;cursor:crosshair}
+#panelPaint canvas#cv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5)}
+#panelPaint canvas#preview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3)}
+#panelPaint .crosshair{position:absolute;top:50%;left:50%;width:20px;height:20px;transform:translate(-50%,-50%);pointer-events:none;border:1px dashed var(--acc2);border-radius:50%;display:none}
+#panelPaint #canvas-wrap.painting .crosshair{display:block}
+#panelPaint h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:14px 12px 6px;padding-top:10px;border-top:1px solid var(--line)}
+#panelPaint .section{padding:0 12px 10px}
+#panelPaint .row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+#panelPaint .row label{flex:0 0 90px;font-size:12px;color:var(--dim)}
+#panelPaint .row input[type=range]{flex:1}
+#panelPaint .toolbar{display:flex;gap:4px;flex-wrap:wrap}
+#panelPaint .toolbar button{flex:1;min-width:56px}
+#panelPaint .paint-tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+#panelPaint .paint-tools button{min-width:0;padding:7px 3px;font-size:11px}
+#panelPaint .paint-tools button .tool-icon{display:block;font-size:17px;line-height:1.2}
+#panelPaint .paint-tools button[aria-pressed=true]{border-color:var(--acc2);box-shadow:inset 0 0 0 1px var(--acc2);background:var(--panel2)}
+#panelPaint #paintSelectionOverlay{position:absolute;display:none;pointer-events:none;image-rendering:pixelated}
+#panelPaint .color-swatch{width:25px;height:25px;padding:0;border:1px solid var(--line);border-radius:5px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+#panelPaint .color-swatch:hover,#panelPaint .color-swatch.active{border-color:var(--text);box-shadow:0 0 0 2px var(--acc2)}
+#panelPaint .color-pick-wrap{position:relative;width:42px;height:34px;flex:0 0 42px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel2)}
+#panelPaint .color-pick-wrap input[type=color]{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;cursor:pointer}
+#panelPaint .paint-palette{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+#panelPaint .paint-palette-label{font-size:10px;color:var(--dim);margin-top:7px}
+#panelPaint .paint-layer-opacity{position:sticky;top:0;z-index:4;padding:7px 12px 2px;background:var(--panel);border-bottom:1px solid var(--line)}
+#panelPaint .paint-layer-opacity .row{margin-bottom:5px}
+#panelPaint .paint-active-layer-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;margin-bottom:3px}
+#panelPaint .layer-item{display:flex;align-items:center;gap:6px;padding:4px 5px 4px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:#111216;min-width:0}
+#panelPaint .layer-item.active{border-color:var(--acc2);background:var(--panel2)}
+#panelPaint .layer-item .layer-vis{width:14px;height:14px;border:1px solid var(--line);border-radius:3px;flex:0 0 14px}
+#panelPaint .layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;min-width:0}
+#panelPaint .layer-actions{display:flex;gap:3px;align-items:center}
+#panelPaint .layer-actions button{padding:2px 6px;font-size:11px;min-width:0}
+#panelPaint .layer-menu-btn{padding:0 7px;font-size:15px;line-height:1.5;min-width:0;flex:none;background:none;border:none;color:var(--dim);cursor:pointer;border-radius:4px}
+#panelPaint .layer-menu-btn:hover{background:#22242c;color:var(--text)}
+#panelPaint #layerMenu{position:fixed;z-index:80;display:none;min-width:186px;padding:5px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 26px rgba(0,0,0,.55)}
+#panelPaint #layerMenu.open{display:block}
+#panelPaint #layerMenu .mi{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:5px;background:none;color:var(--text);font-size:12px;text-align:left;cursor:pointer}
+#panelPaint #layerMenu .mi:hover{background:#22242c}
+#panelPaint #layerMenu .sep{height:1px;margin:4px 2px;background:var(--line)}
+#panelPaint #layerMenu .op{display:flex;align-items:center;gap:6px;padding:4px 8px 3px;font-size:11px;color:var(--dim)}
+#panelPaint #layerMenu .op input[type=range]{flex:1;min-width:84px}
+#panelPaint #layerMenu .op span:last-child{min-width:32px;text-align:right;color:var(--text)}
+#panelPaint .btn-row{display:flex;gap:4px;margin-top:8px}
+#panelPaint .btn-row button{flex:1}
+#panelPaint .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);color:var(--text);padding:8px 14px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;white-space:nowrap}
+#panelPaint .toast.show{opacity:1}
+#panelPaint .empty{padding:30px;text-align:center;color:var(--dim)}
+#panelPaint .empty b{color:var(--text)}
+#panelPaint .input-small{width:70px}
+#panelPaint #paintViewport{position:relative;background:#0a0a0f;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:auto}
+#panelPaint #paintCanvasWrap{position:relative;display:flex;align-items:center;justify-content:center;padding:12px;min-width:100%;min-height:100%}
+#panelPaint canvas#paintCv{image-rendering:pixelated;box-shadow:0 0 20px rgba(0,0,0,0.5);display:block;flex:none;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px}
+#panelPaint canvas#paintPreview{image-rendering:pixelated;box-shadow:0 0 10px rgba(0,0,0,0.3);max-width:100%;max-height:100%;display:block;background-color:#eee;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%,transparent 75%,#bbb 75%),linear-gradient(45deg,#bbb 25%,#eee 25%,#eee 75%,#bbb 75%);background-size:12px 12px;background-position:0 0,6px 6px;touch-action:none;cursor:grab}
+#panelPaint canvas#paintPreview.panning{cursor:grabbing}
+#panelPaint canvas#paintPreview{cursor:grab;touch-action:none}
+#panelPaint #paintCoord{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--dim);pointer-events:none}`; document.head.appendChild(st);
 /* ===== Sprite Paint Editor script ===== */
 
 /*============================================================
@@ -146,7 +232,8 @@ function restorePaintContext(){
 }
 
 function toast(msg, ms=2600){
-  const t = document.getElementById('toast');
+  const R = window.__rigEditor; if (R && R.toastMsg) { R.toastMsg(msg, ms); return; }
+  const t = document.getElementById('toast'); if (!t) return;
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(t._h);
@@ -420,7 +507,7 @@ function drawPreviewEditingLayer(){
 // The canvas bitmap is always the sprite's real size; CSS scales it uniformly so
 // it fills the browser instead of sitting in a fixed rectangle.
 function fitZoom(){
-  const vp = document.getElementById('viewport');
+  const vp = document.getElementById('paintViewport');
   const r = vp ? vp.getBoundingClientRect() : { width: 0, height: 0 };
   if (r.width < 2 || r.height < 2) return zoom;
   const availW = Math.max(64, r.width - 32);
@@ -484,7 +571,7 @@ function renderSelectionOverlay(preview=null){
 
 function focusPaintLayer(i){
   const layer = layers[i];
-  const viewport = document.getElementById('viewport');
+  const viewport = document.getElementById('paintViewport');
   if (!layer || !layer.rigLayerId || !viewport) return;
   const R = rigAPI(), rigLayer = R && R.layerById(layer.rigLayerId);
   if (!rigLayer) return;
@@ -589,11 +676,15 @@ function rigPushTargets(workspaceId=activeWorkspaceId){
   const targets = workspaceId ? [] : layers.filter(p =>
     !p.assetWorkspaceId && (!p.rigLayerId || !cutLayerIds.has(p.rigLayerId)));
   const assetLayers = workspaceId ? layers.filter(p => p.assetWorkspaceId === workspaceId && p.assetBase) : [];
-  return targets.length || assetLayers.length ? { R, doc, targets, assetLayers, assetWorkspaceId: workspaceId } : null;
+  const only = !pushAllPending && pushOnlyPending.size ? targets.filter(p => pushOnlyPending.has(p)) : targets;
+  return only.length || assetLayers.length ? { R, doc, targets: only, assetLayers, assetWorkspaceId: workspaceId } : null;
 }
 
-function scheduleAutoPush(){
+let pushAllPending = false;
+const pushOnlyPending = new Set();
+function scheduleAutoPush(onlyLayer){
   if (restoringPaint) return;
+  if (onlyLayer) pushOnlyPending.add(onlyLayer); else pushAllPending = true;
   const workspaceId = activeWorkspaceId;
   if (!rigPushTargets(workspaceId)) return;
   clearTimeout(autoPushTimer);
@@ -622,6 +713,7 @@ function opaqueBounds(canvas){
 function autoPushNow(workspaceId=activeWorkspaceId){
   clearTimeout(autoPushTimer);
   const g = rigPushTargets(workspaceId);
+  pushAllPending = false; pushOnlyPending.clear();
   if (!g) return { pushed: 0, failed: 0, added: 0 };
   let pushed = 0, failed = 0, added = 0;
   const failures = [];
@@ -1453,7 +1545,7 @@ function paint(x,y){
   }
   dirty = true;
   composite();
-  if (tool !== 'picker') scheduleAutoPush();
+  if (tool !== 'picker') scheduleAutoPush(layers[active]);
 }
 
 function floodFill(g, sx, sy, newColor, bounds=null){
@@ -1499,7 +1591,7 @@ function switchPaintTab(tab){
   });
   
   // Update visibility of main areas
-  const paintArea = document.getElementById('viewport');
+  const paintArea = document.getElementById('paintViewport');
   const previewArea = document.getElementById('previewWrap').parentElement;
   
   if(tab === 'paint'){
@@ -1733,7 +1825,11 @@ paint_preview.addEventListener('wheel', e=>{
 document.getElementById('paintBtnUndo').onclick = undoPaint;
 document.getElementById('paintBtnRedo').onclick = redoPaint;
 window.addEventListener('keydown', (e)=>{
-  if (document.body.dataset.mode !== 'paint' || viewTab !== 'paint') return;
+  if (document.body.dataset.mode !== 'paint') return;
+  // the rig editor underneath must not see keys while painting (its Ctrl+Z would undo the rig, arrows would move rig layers)
+  if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) e.stopPropagation();
+  if (e.key === 'Escape') closeLayerMenu();
+  if (viewTab !== 'paint') return;
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.target.isContentEditable) return;
   const k = e.key.toLowerCase();
@@ -1785,7 +1881,7 @@ window.addEventListener('keydown', (e)=>{
     nudgeSelection(e.key === 'ArrowLeft' ? -distance : e.key === 'ArrowRight' ? distance : 0,
       e.key === 'ArrowUp' ? -distance : e.key === 'ArrowDown' ? distance : 0);
   }
-});
+}, true);
 document.getElementById('paintLayerOpacity').addEventListener('pointerdown', ()=>pushPaintUndo());
 document.getElementById('paintActiveLayerOpacity').addEventListener('pointerdown', ()=>pushPaintUndo());
 
@@ -1806,7 +1902,7 @@ document.getElementById('paintBtnFlipH').onclick = ()=>{
     id.data[dst]=id.data[src]; id.data[dst+1]=id.data[src+1]; id.data[dst+2]=id.data[src+2]; id.data[dst+3]=id.data[src+3];
   }
   g.putImageData(id,0,0);
-  dirty = true; composite(); scheduleAutoPush(); toast('Flipped horizontal');
+  dirty = true; composite(); scheduleAutoPush(layers[active]); toast('Flipped horizontal');
 };
 document.getElementById('paintBtnFlipV').onclick = ()=>{
   if(active===null) return;
@@ -1820,7 +1916,7 @@ document.getElementById('paintBtnFlipV').onclick = ()=>{
     id.data[dst]=id.data[src]; id.data[dst+1]=id.data[src+1]; id.data[dst+2]=id.data[src+2]; id.data[dst+3]=id.data[src+3];
   }
   g.putImageData(id,0,0);
-  dirty = true; composite(); scheduleAutoPush(); toast('Flipped vertical');
+  dirty = true; composite(); scheduleAutoPush(layers[active]); toast('Flipped vertical');
 };
 document.getElementById('paintBtnRotate').onclick = ()=>{
   if(active===null) return;
@@ -1834,7 +1930,7 @@ document.getElementById('paintBtnRotate').onclick = ()=>{
   layers[active].canvas = tmp;
   paint_cv.width = tmp.width; paint_cv.height = tmp.height;
   autoFit = true;
-  dirty = true; composite(); scheduleAutoPush(); toast('Rotated 90°');
+  dirty = true; composite(); scheduleAutoPush(layers[active]); toast('Rotated 90°');
 };
 
 function loadImage(file){
@@ -1985,6 +2081,8 @@ function importAllRigAssets() {
   if (!doc) { toast('Open a rig first'); return; }
   const flat = R.layersForPaint();
   if (!flat.length) { toast('The rig has no layers to import'); return; }
+  const mb = Math.round(flat.length * doc.width * doc.height * 4 / 1048576);
+  if (mb > 1200 && !confirm('Importing all ' + flat.length + ' layers of this ' + doc.width + '×' + doc.height + ' character needs about ' + mb + ' MB of memory, which can crash the browser tab.\n\nTip: double-click a single layer in the rig editor to paint just that one.\n\nImport them all anyway?')) return;
   if (!fitPaintToRig(doc)) return;
   selectionRect = null;
   if (paintCanvasIsBlank()) { layers = []; active = null; }
@@ -2020,6 +2118,7 @@ function pushPaintToRig() {
   const R = window.__rigEditor, doc = R && R.doc;
   if (!doc) { toast('Open a rig first'); return; }
   if (!rigPushTargets()) { toast('Nothing to push: import a rig layer or open an image asset first'); return; }
+  pushAllPending = true;
   const result = autoPushNow();
   if (result.pushed) toast('Pushed ' + result.pushed + ' image(s) to the rig', 2500);
   else if (result.failed) toast('Could not push: check that the painted pixels fit inside the rig canvas', 7000);
@@ -2185,3 +2284,15 @@ function initRigIntegration() {
 }
 
 initRigIntegration();
+
+
+  document.getElementById('paintBtnBack').onclick = () => window.switchMode('rig');
+  window.LunaPaint = {
+    open: () => window.switchMode('paint'),
+    close: () => window.switchMode('rig'),
+    /** paint one rig layer (double-click in the layer list) */
+    paintLayer: (id) => { window.switchMode('paint'); importRigLayer(id); },
+    /** read-only look at the paint session (for testing and bug reports) */
+    state: () => ({ layers: layers.map(l => ({ name: l.name, rigLayerId: l.rigLayerId || null, rig: [l.rigX, l.rigY, l.rigW, l.rigH], expand: !!l.needsExpand, w: l.canvas && l.canvas.width, h: l.canvas && l.canvas.height })), active, tool, canvas: [paint_cv.width, paint_cv.height] })
+  };
+})();

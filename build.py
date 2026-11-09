@@ -21,7 +21,7 @@ def src(f):
 
 def main():
     # Validate all source files exist
-    for f in ['ui.html', 'core.js', 'vanilla_hs.js', 'ui.js', 'paint.js']:
+    for f in ['ui.html', 'core.js', 'vanilla_hs.js', 'ui.js', 'props.js', 'paint.js']:
         src(f)  # will exit if missing
 
     # Back up previous index.html if it exists
@@ -32,17 +32,19 @@ def main():
         shutil.copy2(out, backup_path)
         print(f'backed up previous build to {backup_path}')
 
+    # Nothing from the game is bundled: the game template (sprites, wearables, animations) is loaded from the player's
+    # own game, where the mod writes it (BepInEx/plugins/AdvancedRigs/GameTemplate).
     html = (src('ui.html')
             .replace('/*__CORE__*/', src('core.js') + '\n' + src('vanilla_hs.js'))
-            .replace('/*__UI__*/', src('ui.js') + '\n\n' + src('paint.js')))
+            .replace('/*__UI__*/', src('ui.js'))
+            .replace('/*__PROPS__*/', src('props.js'))
+            .replace('/*__PAINT__*/', src('paint.js')))
 
-    # Sanity check: both markers replaced
-    if '/*__CORE__*/' in html:
-        print("ERROR: /*__CORE__*/ marker not replaced in ui.html", file=sys.stderr)
-        sys.exit(1)
-    if '/*__UI__*/' in html:
-        print("ERROR: /*__UI__*/ marker not replaced in ui.html", file=sys.stderr)
-        sys.exit(1)
+    # Sanity check: every marker replaced
+    for marker in ('/*__CORE__*/', '/*__UI__*/', '/*__PROPS__*/', '/*__PAINT__*/'):
+        if marker in html:
+            print(f"ERROR: {marker} marker not replaced in ui.html", file=sys.stderr)
+            sys.exit(1)
 
     with open(out, 'w', encoding='utf-8') as fh:
         fh.write(html)

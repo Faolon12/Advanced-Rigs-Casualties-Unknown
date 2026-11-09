@@ -8,8 +8,8 @@ let selChain = null;      // selected chain id
 let tab = 'rig';
 const view = { zoom: 8, panX: 0, panY: 0 }; // rig view: screen = canvasPx*zoom + pan
 let showSkel = true, moveSkel = false;
+let bridgeExcludedLayerId = null;   // Sprite Paint: a layer left out of the rig snapshot (it's drawn on top from Paint)
 const imgCache = new Map(); // layer/obj -> canvas
-let bridgeExcludedLayerId = null;
 
 function toast(msg, ms) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2600); }
 function hint(msg) { $('#hint').innerHTML = msg; }
@@ -612,13 +612,7 @@ function layerRow(l, inF, flat) {
   sel.onclick = (e) => e.stopPropagation();
   sel.onchange = () => setRole(l, sel.value);
   row.append(th, right);
-  row.ondblclick = (e) => {
-    e.stopPropagation();
-    if (doc) {
-      switchMode('paint');
-      importRigLayer(l.id);
-    }
-  };
+  row.ondblclick = (e) => { e.stopPropagation(); if (doc && window.LunaPaint) window.LunaPaint.paintLayer(l.id); };
   row.onclick = (e) => {
     if (e.ctrlKey || e.metaKey) { if (selSet.has(l.id)) { selSet.delete(l.id); if (selLayer === l.id) selLayer = [...selSet][0] || null; } else { selSet.add(l.id); selLayer = l.id; } renderLayers(); renderInspector(); draw(); return; }
     if (e.shiftKey && selLayer && flat) { const a = flat.findIndex(o => o.id === selLayer), b = flat.findIndex(o => o.id === l.id); if (a >= 0 && b >= 0) { const [lo, hi] = a < b ? [a, b] : [b, a]; for (let k = lo; k <= hi; k++) selSet.add(flat[k].id); } renderLayers(); return; }
@@ -1248,7 +1242,7 @@ function refresh() { syncPpu(); renderLayers(); renderInspector(); updateHeadSta
 // ---------------------------------------------------------------- canvas: rig view
 function resize() {
   const r = stage.getBoundingClientRect(); const d = window.devicePixelRatio || 1;
-  // while the rig panel is hidden (paint mode) the stage has no size: keep the last good canvas
+  // hidden (e.g. behind Sprite Paint): keep the last good canvas size
   if (r.width < 2 || r.height < 2) { if (!cv.width || cv.width < 2) { cv.width = 1; cv.height = 1; } draw(); return; }
   cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); draw();
 }
@@ -1271,7 +1265,7 @@ function drawChecker(W, H) {
 
 function syncPpu() { RIG.PPU = (doc && doc.ppu) || 8; }
 function draw(options = {}) {
-  const preview = options.preview === true;
+  const preview = options.preview === true;   // Sprite Paint's snapshot: just the art, no selection / bones / x-ray
   syncPpu();
   const d = window.devicePixelRatio || 1; ctx.setTransform(d, 0, 0, d, 0, 0);
   const W = cv.width / d, H = cv.height / d;
@@ -1333,13 +1327,14 @@ function draw(options = {}) {
     ctx.setLineDash([]);
     const o = toScreen(doc.align); ctx.fillStyle = 'rgba(120,200,255,.9)'; ctx.beginPath(); ctx.arc(o.x, o.y, 3, 0, 7); ctx.fill();
   }
-  // selected layer outline
   if (!preview) {
+    // selected layer outline
     const sl = selLayer && RIG.layer(doc, selLayer);
     if (selSet.size > 1) for (const id of selSet) { const o = RIG.layer(doc, id); if (!o || o === sl) continue; const p = toScreen(o); ctx.strokeStyle = 'rgba(143,91,255,.8)'; ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.strokeRect(p.x - .5, p.y - .5, o.w * view.zoom + 1, o.h * view.zoom + 1); ctx.setLineDash([]); }
     if (sl) { const p = toScreen(sl); ctx.strokeStyle = '#8f5bff'; ctx.lineWidth = 1.5; ctx.strokeRect(p.x - .5, p.y - .5, sl.w * view.zoom + 1, sl.h * view.zoom + 1); }
     const sc = selChain && RIG.chain(doc, selChain);
     if (sc && !sl) { ctx.strokeStyle = 'rgba(143,91,255,.55)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); for (const s of sc.segs) { const l = RIG.layer(doc, s.layer); if (!l) continue; const p = toScreen(l); ctx.strokeRect(p.x - .5, p.y - .5, l.w * view.zoom + 1, l.h * view.zoom + 1); } ctx.setLineDash([]); }
+    // bones
     for (const ch of doc.chains) drawBones(ch, ch.id === selChain);
   }
 }
@@ -1398,6 +1393,8 @@ cv.addEventListener('pointerdown', (e) => {
   if (tab === 'gear') { gearPointerDown(sx, sy); return; }
   if (tab === 'test') { grab = { sx, sy }; return; }
   if (tab === 'health') {
+    const corner = hsCornerAt(sx, sy);
+    if (corner) { const c = corner.it, v = corner.v; hsResize = { key: c.key, cx: v.cx + c.x * v.z, cy: v.cy - c.y * v.z, d0: Math.max(4, Math.hypot(sx - (v.cx + c.x * v.z), sy - (v.cy - c.y * v.z))), s0: c.size || 1 }; return; }
     const hit = hsAt(sx, sy);
     selHs = hit ? hit.it.key : null;
     if (hit) hsDrag = { key: hit.it.key, sx, sy, x0: hit.it.x, y0: hit.it.y, z: hit.v.z, mirror: hit.it.mirror };
@@ -1428,8 +1425,9 @@ cv.addEventListener('pointermove', (e) => {
   if (tab === 'gear') { gearPointerMove(sx, sy); return; }
   if (tab === 'test') { if (grab) { grab.sx = sx; grab.sy = sy; } return; }
   if (tab === 'health') {
-    if (hsDrag) { const e2 = hsEntry(hsDrag.key); e2.x = Math.round(hsDrag.x0 + (sx - hsDrag.sx) / hsDrag.z); e2.y = Math.round(hsDrag.y0 - (sy - hsDrag.sy) / hsDrag.z); if (e2.mirror === undefined) e2.mirror = hsDrag.mirror; draw(); }
-    else cv.style.cursor = hsAt(sx, sy) ? 'move' : 'default';
+    if (hsResize) { const d1 = Math.hypot(sx - hsResize.cx, sy - hsResize.cy); hsSetSize(hsResize.key, Math.round(hsResize.s0 * d1 / hsResize.d0 * 20) / 20); draw(); }
+    else if (hsDrag) { const e2 = hsEntry(hsDrag.key); e2.x = Math.round(hsDrag.x0 + (sx - hsDrag.sx) / hsDrag.z); e2.y = Math.round(hsDrag.y0 - (sy - hsDrag.sy) / hsDrag.z); if (e2.mirror === undefined) e2.mirror = hsDrag.mirror; draw(); }
+    else cv.style.cursor = hsCornerAt(sx, sy) ? 'nwse-resize' : hsAt(sx, sy) ? 'move' : 'default';
     return;
   }
   if (!drag) { if (doc) cv.style.cursor = handleAt(sx, sy) ? 'grab' : (moveSkel ? 'move' : 'crosshair'); return; }
@@ -1471,10 +1469,14 @@ document.addEventListener('keydown', (e) => {
   if (!l) return;
   e.preventDefault(); const k = e.shiftKey ? 5 : 1; moveLayersBy(selSet.size > 1 ? selectedLayers() : [l], d[0] * k, d[1] * k); draw();
 });
-cv.addEventListener('pointerup', () => { if (GS.drag) { GS.drag = null; renderInspector(); renderLayers(); } if (AS.drag) { AS.drag = null; renderInspector(); } if (hsDrag) { hsDrag = null; renderInspector(); } if (drag && drag.type === 'skel') hint('Skeleton moved. Body parts follow it automatically.'); drag = null; grab = null; });
+cv.addEventListener('pointerup', () => { if (GS.drag) { GS.drag = null; renderInspector(); renderLayers(); } if (AS.drag) { AS.drag = null; renderInspector(); } if (hsDrag || hsResize) { hsDrag = null; hsResize = null; renderInspector(); } if (drag && drag.type === 'skel') hint('Skeleton moved. Body parts follow it automatically.'); drag = null; grab = null; });
 cv.addEventListener('wheel', (e) => {
   e.preventDefault(); const r = cv.getBoundingClientRect(); const sx = e.clientX - r.left, sy = e.clientY - r.top;
   if (tab === 'test' || tab === 'gear') { test.zoom = Math.max(6, Math.min(140, test.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); return; }
+  if (tab === 'health') { // scroll over a part = resize it
+    const hit = hsAt(sx, sy); if (!hit) return;
+    selHs = hit.it.key; hsSetSize(hit.it.key, Math.round((hit.it.size || 1) * (e.deltaY < 0 ? 1.05 : 1 / 1.05) * 100) / 100); renderInspector(); draw(); return;
+  }
   const before = toCanvas(sx, sy); view.zoom = Math.max(1, Math.min(48, view.zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2)));
   view.panX = sx - before.x * view.zoom; view.panY = sy - before.y * view.zoom; draw();
 }, { passive: false });
@@ -1628,11 +1630,11 @@ function makeMyGear(g, w) { // your copy of one worn sprite (starts as the game'
 }
 const thumbCache = new Map();
 function gearThumb(sprite) {
-const l = doc && myGear(sprite); const override = doc && doc.spriteSwaps && doc.spriteSwaps[sprite];
-const im = l || override || (RIG.GAME && RIG.GAME.images[sprite]); if (!im) return '';
-const key = l || override || sprite; if (!l && !override && thumbCache.has(key)) return thumbCache.get(key);
+  const l = doc && myGear(sprite); const override = doc && doc.spriteSwaps && doc.spriteSwaps[sprite];
+  const im = l || override || (RIG.GAME && RIG.GAME.images[sprite]); if (!im) return '';
+  const key = l || override || sprite; if (!l && !override && thumbCache.has(key)) return thumbCache.get(key);
   let url = ''; try { url = layerCanvas(im).toDataURL(); } catch (e) { }
-  if (!l) thumbCache.set(key, url); return url;
+  if (!l && !override) thumbCache.set(key, url); return url;
 }
 let gearFilter = '';
 function gearTabHtml() {
@@ -2233,7 +2235,7 @@ function loop(now) {
   // the game's own sprites (from the game template) for anything the rig doesn't replace, drawn on their real pivots
   const tplDraw = (name) => {
     const G = RIG.GAME; if (!G) return false;
-    const im = (doc.spriteSwaps && doc.spriteSwaps[name]) || G.images[name];
+    const im = (doc.spriteSwaps && doc.spriteSwaps[name]) || G.images[name];   // repainted game sprites show too
     if (!im) return false;
     const sp = G.sprites[name] || {}, pv = sp.pivot || [im.w / 2, im.h / 2];
     ctx.drawImage(layerCanvas(im), -pv[0], -(im.h - pv[1])); return true;
@@ -2341,7 +2343,7 @@ function bindSounds() {
   $('#sndFile').onchange = async (e) => {
     const fs = [...e.target.files]; e.target.value = ''; if (!fs.length || !target) { renderInspector(); return; }
     const list = doc.sounds[target] = doc.sounds[target] || [];
-    for (const f of fs) list.push({ file: f.name, data: new Uint8Array(await f.arrayBuffer()) });
+    for (const f of fs) list.push({ file: f.name, data: RIG.shrinkSound(f.name, new Uint8Array(await f.arrayBuffer())) });
     renderInspector();
   };
   const box = $('#insp');
@@ -2508,9 +2510,9 @@ function hsItems() {
     const t = ths[L0.part]; // the player's own game wins over the built-in numbers
     const L = t && t.outline ? Object.assign({}, L0, { outline: t.outline, middle: t.middle || L0.middle, x: t.x, y: t.y, w: t.w || L0.w, h: t.h || L0.h, mirror: !!t.mirror }) : L0;
     const c = doc.healthScreen[L.part];
-    const hasArt = c && c.outline;
-    return { key: L.part, label: RIG.PART_LABEL[L.part], x: c && c.x !== undefined ? c.x : L.x, y: c && c.y !== undefined ? c.y : L.y,
-      w: hasArt ? c.outline.w * (c.scale || 3) : L.w, h: hasArt ? c.outline.h * (c.scale || 3) : L.h,
+    const hasArt = c && c.outline, k = (c && c.size) || 1;
+    return { key: L.part, label: RIG.PART_LABEL[L.part], x: c && c.x !== undefined ? c.x : L.x, y: c && c.y !== undefined ? c.y : L.y, size: k,
+      w: (hasArt ? c.outline.w * (c.scale || 3) : L.w) * k, h: (hasArt ? c.outline.h * (c.scale || 3) : L.h) * k,
       mirror: c ? !!c.mirror && (hasArt || true) : L.mirror, rot: c ? (c.rotation || 0) : 0,
       outline: hasArt ? c.outline : null, middle: c && c.middle ? c.middle : null, vOutline: L.outline, vMiddle: L.middle, custom: !!c, vanillaMirror: L.mirror };
   });
@@ -2520,10 +2522,10 @@ function hsItems() {
     const nG = RIG.groupCount(ch); let gi = 0;
     ch.segs.forEach((sg, k) => {
       if (!RIG.isGroupLeader(ch, k)) return;
-      const key = 'seg:' + sg.layer, c = doc.healthScreen[key], hasArt = c && c.outline; const n = gi++;
+      const key = 'seg:' + sg.layer, c = doc.healthScreen[key], hasArt = c && c.outline; const n = gi++; const sz = (c && c.size) || 1;
       items.push({ key, label: (ch.injury.name || ch.name) + (nG > 1 ? ' ' + (n + 1) : ''), extra: true,
         x: c && c.x !== undefined ? c.x : -150 - ci * 58, y: c && c.y !== undefined ? c.y : 20 - n * 62, injKey: 'c:' + ch.name + ':' + RIG.groupsOf(ch)[k], chainName: ch.name, firstK: k,
-        w: hasArt ? c.outline.w * (c.scale || 3) : (c ? 72 : 54), h: hasArt ? c.outline.h * (c.scale || 3) : (c ? 75 : 56),
+        w: (hasArt ? c.outline.w * (c.scale || 3) : (c ? 72 : 54)) * sz, h: (hasArt ? c.outline.h * (c.scale || 3) : (c ? 75 : 56)) * sz, size: sz,
         mirror: c ? !!c.mirror : false, rot: c ? (c.rotation || 0) : 0, outline: hasArt ? c.outline : null, middle: c && c.middle ? c.middle : null,
         vOutline: 'crusOutline', vMiddle: 'crusMiddle', custom: !!c });
     });
@@ -2594,6 +2596,7 @@ function drawHealth(W, H) {
       ctx.strokeStyle = it.key === selHs ? '#8f5bff' : 'rgba(255,207,74,.6)'; ctx.lineWidth = it.key === selHs ? 2 : 1;
       ctx.strokeRect(v.cx + it.x * v.z - w / 2 - 2, v.cy - it.y * v.z - h / 2 - 2, w + 4, h + 4);
       ctx.fillStyle = '#ffcf4a'; ctx.font = '11px system-ui'; if (it.extra) ctx.fillText(it.label, v.cx + it.x * v.z - w / 2, v.cy - it.y * v.z - h / 2 - 5);
+      if (it.key === selHs) { const hx = v.cx + it.x * v.z + w / 2 + 2, hy = v.cy - it.y * v.z + h / 2 + 2; ctx.fillStyle = '#8f5bff'; ctx.fillRect(hx - 5, hy - 5, 10, 10); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(hx - 5, hy - 5, 10, 10); }
     }
   }
   ctx.font = '12px ui-monospace, Consolas, monospace'; ctx.fillStyle = '#8a8f98';
@@ -2611,6 +2614,19 @@ function hsAt(sx, sy) {
   return null;
 }
 function hsEntry(key) { return doc.healthScreen[key] = doc.healthScreen[key] || { scale: 3 }; }
+// resizing keeps the part where it is: a part still in its default spot gets that spot written down first
+function hsSetSize(key, size) {
+  const it = hsItems().find(i => i.key === key); const e2 = hsEntry(key);
+  if (it && e2.x === undefined) { e2.x = it.x; e2.y = it.y; if (e2.mirror === undefined) e2.mirror = it.mirror; }
+  e2.size = Math.max(0.1, Math.min(5, size));
+}
+let hsResize = null;
+function hsCornerAt(sx, sy) {
+  const it = selHs && hsItems().find(i => i.key === selHs); if (!it) return null;
+  const d = window.devicePixelRatio || 1, v = hsView(cv.width / d, cv.height / d);
+  const hx = v.cx + it.x * v.z + it.w * v.z / 2 + 2, hy = v.cy - it.y * v.z + it.h * v.z / 2 + 2;
+  return Math.abs(sx - hx) <= 8 && Math.abs(sy - hy) <= 8 ? { it, v } : null;
+}
 function hsInspector() {
   const it = hsItems().find(i => i.key === selHs);
   if (!it) return `<h2>Health screen</h2><div class="sec muted">Click a part to give it your own art or move it. Injurable pieces (tail, wings…) show up here once you tick <i>Can be injured</i> on them.<br><br>To see how hurt parts look here, injure them in <b>Test → Injury tester</b>.<br><br>Tip: press <b>F9</b> in game to save the game's own health screen art, repaint it, and load it with <b>Add sprites…</b> (files named <code>health_Head_outline.png</code> etc. are placed automatically).</div>`;
@@ -2619,6 +2635,8 @@ function hsInspector() {
     <div class="row"><label>Outline image</label><button id="hsOut">${c.outline ? 'Replace…' : 'Load…'}</button>${c.outline ? `<span class="pill">${c.outline.w}×${c.outline.h}</span>` : '<span class="muted">game art</span>'}</div>
     <div class="row"><label>Middle image</label><button id="hsMid">${c.middle ? 'Replace…' : 'Load…'}</button>${c.middle ? `<span class="pill">${c.middle.w}×${c.middle.h}</span>` : '<span class="muted">same as outline</span>'}</div>
     <div class="muted">The outline is tinted by skin health, the middle by muscle health and infection, just like the game's parts. Draw both the same size.</div>
+    <div class="row"><label>Size</label><input id="hsSize" type="range" min="10" max="300" step="5" value="${Math.round((c.size || 1) * 100)}" style="width:120px"><input id="hsSizeN" type="number" min="10" max="500" step="5" value="${Math.round((c.size || 1) * 100)}" style="width:60px"><span class="muted">%</span></div>
+    <div class="muted">Resizes this part on the health screen, the game's own art too. Or drag the purple corner, or scroll over the part.</div>
     <div class="row"><label>Pixel scale</label><input id="hsScale" type="number" min="1" max="8" step="0.5" value="${c.scale || 3}" style="width:70px"><span class="muted">the game uses 3</span></div>
     <div class="row"><label>Rotation°</label><input id="hsRot" type="number" step="5" value="${c.rotation || 0}" style="width:70px"></div>
     <div class="row"><label>Mirror</label><input id="hsMir" type="checkbox" ${it.mirror ? 'checked' : ''}></div>
@@ -2638,6 +2656,9 @@ function bindHsInspector() {
     e2[slot] = await decodePng(f); renderInspector(); draw();
   };
   $('#hsScale').oninput = (e) => { hsEntry(it.key).scale = +e.target.value || 3; draw(); };
+  const setSize = (pct) => { hsSetSize(it.key, pct / 100); $('#hsSize').value = Math.round(pct); $('#hsSizeN').value = Math.round(pct); draw(); };
+  $('#hsSize').oninput = (e) => setSize(+e.target.value || 100);
+  $('#hsSizeN').oninput = (e) => setSize(Math.max(10, Math.min(500, +e.target.value || 100)));
   $('#hsRot').oninput = (e) => { hsEntry(it.key).rotation = +e.target.value || 0; draw(); };
   $('#hsMir').onchange = (e) => { const e2 = hsEntry(it.key); e2.mirror = e.target.checked; if (e2.x === undefined) { e2.x = it.x; e2.y = it.y; } draw(); };
   $('#hsReset').onclick = () => { delete doc.healthScreen[it.key]; renderInspector(); draw(); };
@@ -2972,11 +2993,12 @@ function bridgeAnimCrop() {
   const d = window.devicePixelRatio || 1;
   const W = cv.width / d, H = cv.height / d;
   const z = test.zoom || 44;
-  const groundY = Math.max(120, (H - 206) * 0.86);
+  const groundY = Math.max(120, (H - 206) * 0.86);   // where the Animate view keeps the character (the camera follows it)
   const w = 4.8 * z, h = 5.0 * z;
   return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
 }
 window.__rigEditor = { get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
+  // Sprite Paint (src/paint.js)
   layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, addPaintLayer: bridgeAddPaintLayer, renamePaintLayer: bridgeRenamePaintLayer,
   imageAssetsForPaint: bridgeImageAssets, setImageAssetPixels: bridgeSetImageAssetPixels,
   headVariantsForPaint: bridgeHeadVariantsForPaint, applyHeadVariants: bridgeApplyHeadVariants, snapshot: bridgeSnapshot,
