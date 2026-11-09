@@ -4181,7 +4181,7 @@ const gameMode = () => !!(RIG.GAME && RIG.GAME.clips && RIG.GAME.clips.Experimen
 function moveConsts(T) {
   const g = RIG.GAME && RIG.GAME.tpl && RIG.GAME.tpl.body;
   if (!g || !gameMode()) return Object.assign({}, MOVE, { wallSlide: MOVE.wallSlide, footBottom: 2.415 + 0.7 });
-  const cs = g.colSize || [1.6, 5], er = g.edgeRadius || 0.1, m = g.mass || 50;
+  const cs = g.colSize || [1.6, 5], er = g.edgeRadius || 0.1, m = g.mass >= 1 ? g.mass : 50; // a template saved while ragdolled has the game's ragdoll mass (0.01): use the standing body's
   return { maxSpeed: g.maxSpeed, walkSpeed: g.maxSpeed * 0.5, crouchSpeed: g.maxSpeed * 0.5, moveForce: g.moveForce / m, slowdown: g.slowdownAmount,
     gravity: Math.abs(g.gravity || 55), jumpSpeed: g.jumpSpeed, wallSlide: g.wallSlideSlowdown * (1 / (1 + (T ? T.slidTime || 0 : 0) * 0.35)),
     climbSpeed: 6, swimSpeed: 6, halfW: cs[0] / 2 + er, height: cs[1] + 2 * er, footBottom: cs[1] / 2 + er, fixedDt: g.fixedDt || 0.02 };
@@ -4229,8 +4229,8 @@ function playStep(T, dt) {
     T.vx += (move * P.swimSpeed - T.vx) * Math.min(1, dt * 3);
     T.vy += ((up || T.jumpHeld ? 1 : 0) * 4 - (dn ? 3 : 0) - 1.2 - T.vy) * Math.min(1, dt * 3); // buoyant
   } else {
-    if (move > 0 && T.vx < maxS) T.vx += P.moveForce * dt;
-    if (move < 0 && T.vx > -maxS) T.vx -= P.moveForce * dt;
+    if (move > 0 && T.vx < maxS) T.vx = Math.min(T.vx + P.moveForce * dt, Math.max(maxS, T.vx)); // pushing never takes you past top speed
+    if (move < 0 && T.vx > -maxS) T.vx = Math.max(T.vx - P.moveForce * dt, Math.min(-maxS, T.vx));
     if (T.grounded && Math.abs(T.vx) > maxS) T.vx = Math.sign(T.vx) * maxS;
     if (move === 0 || (move > 0 && T.vx < 0) || (move < 0 && T.vx > 0)) T.vx *= 1 - P.slowdown * (T.grounded ? 1 : 0.5);
     const g = (T.vy > 0 && !T.jumpHeld && T.vy <= P.jumpSpeed) ? 2.5 : 1; // let go of jump early = shorter jump
@@ -4274,7 +4274,7 @@ function playStep(T, dt) {
   // the game's lean: speeding up / slowing down tilts the standing body (Body.accelRot)
   b.accelRot += ((T.prevVx - T.vx) * 15 - b.accelRot) * Math.min(1, dt * 5);
   T.prevVx = T.vx;
-  if (b.y < -40) { b.x = 0; b.y = 0; T.vx = T.vy = 0; }
+  if (b.y < -40 || !isFinite(b.x) || !isFinite(b.y) || Math.abs(b.x) > 500 || b.y > 500) { b.x = 0; b.y = 0; T.vx = T.vy = 0; }
   void lastVx;
 }
 
@@ -4531,6 +4531,7 @@ function loop(now) {
   }
   ctx.fillStyle = alive ? PAL.text : '#e0475b'; ctx.font = '12px ui-monospace, Consolas, monospace';
   const lab = (RIG.ACTIONS.find(x => x[0] === act) || [act, act])[1];
+  if (!gearMode && !animMode && !gameMode() && !REC.on) { ctx.save(); ctx.fillStyle = PAL.warn || '#e9b44c'; ctx.fillText('Rough preview: no game template in this browser, so movement, physics and animations are approximate. Click "no game template" at the top to load it.', 12, 38); ctx.restore(); }
   if (!gearMode) ctx.fillText('State: ' + lab + (A === 'play' ? '' : '  (demo)') + '   ·   eyes: ' + (RIG.EYE_LABEL[eyeState] || eyeState) + (headState ? '   ·   head: ' + (RIG.HEAD_STATE_LABEL[headState] || headState) : ''), 12, 20);
   if (A === 'play' && !gearMode) {
     ctx.fillStyle = '#6f7280';
