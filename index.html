@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.4 Alpha)</title>
+<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.5 Alpha)</title>
 <style>
 :root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
 *{box-sizing:border-box}
@@ -163,7 +163,7 @@ aside.right{overflow-x:hidden}
 <body>
 <div id="app">
 <header>
-  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.4 Alpha</small></h1>
+  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.5 Alpha</small></h1>
   <button id="btnOpen" class="primary">Open…</button>
   <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden>
   <button id="btnSave" title="Save this character as a project file (.luna) to keep working on it later. Open… loads it back.">Save</button>
@@ -5397,7 +5397,7 @@ window.__rigEditor = { recordGif, gifEncode, get view() { return view; }, addLoo
       ${p.interact.type === 'ui' ? `<div class="row"><label>Screen</label><select id="ppUi"><option value="">— pick —</option>${uiOpts.map(u => `<option value="${E(u)}" ${u === p.interact.ui ? 'selected' : ''}>${E(pack.uis[u].title || u)}</option>`).join('')}</select></div>${uiOpts.length ? '' : '<p class="muted">Make a screen first (left, "+ New screen").</p>'}` : ''}
       ${p.interact.type === 'actions' ? actionsHtml(p.interact.actions, 'pa') : ''}
       <h3>Seats (${p.seats.length})</h3>
-      <p class="muted">Double-click the picture to add a seat; drag the green circles; right-click one to remove it. A seat is where the character's body goes when sitting (about 2.4 blocks above a chair's floor).</p>
+      <p class="muted">Double-click the picture to add a seat; drag the green circles; right-click one to remove it. A seat is where the character's bottom rests when sitting: put it on top of the cushion.</p>
       ${p.seats.map((s, i) => `<div class="row"><span class="muted" style="flex:1">Seat ${i + 1}: ${s.x.toFixed(2)}, ${s.y.toFixed(2)} blocks</span><button data-sx="${i}">✕</button></div>`).join('')}
       <div class="row" style="margin-top:14px"><button id="ppDup">Duplicate</button><button id="ppDel">Delete prop</button></div>`;
     const re = () => { renderLeft(); renderRight(); draw(); };
@@ -5415,7 +5415,7 @@ window.__rigEditor = { recordGif, gifEncode, get view() { return view; }, addLoo
       const step = (d) => { animFrame = (curFrame(p) + d + p.frames.length) % p.frames.length; animPlay = false; renderRight(); draw(); };
       q('#ppPrev').onclick = () => step(-1); q('#ppNext').onclick = () => step(1);
     }
-    q('#ppType').onchange = (e) => { p.interact.type = e.target.value; if (p.interact.type === 'sit' && !p.seats.length) p.seats.push({ x: 0, y: 2.4 }); re(); };
+    q('#ppType').onchange = (e) => { p.interact.type = e.target.value; if (p.interact.type === 'sit' && !p.seats.length) p.seats.push({ x: 0, y: 1.6 }); re(); };
     if (q('#ppText')) q('#ppText').oninput = (e) => { p.interact.text = e.target.value; };
     if (q('#ppUi')) q('#ppUi').onchange = (e) => { p.interact.ui = e.target.value; };
     if (p.interact.type === 'actions') bindActions(p.interact.actions, 'pa', () => renderRight());
@@ -5578,7 +5578,7 @@ window.__rigEditor = { recordGif, gifEncode, get view() { return view; }, addLoo
     // seats: blocks from the pivot (1 block = 8 game pixels)
     p.seats.forEach((s, i) => {
       const sx = ox + s.x * PX * z, sy = gy - s.y * PX * z;
-      ctx.fillStyle = 'rgba(76,195,138,.18)'; ctx.fillRect(sx - 6 * z, sy - 22 * z, 12 * z, 26 * z); // a sitting body, roughly
+      ctx.fillStyle = 'rgba(76,195,138,.2)'; ctx.fillRect(sx - 4 * z, sy - 20 * z, 8 * z, 20 * z); ctx.fillRect(sx - 4 * z, sy - 4 * z, 14 * z, 4 * z); ctx.fillRect(sx + 7 * z, sy - 4 * z, 3 * z, 13 * z); // a sitting body, roughly: hips on the seat
       ctx.fillStyle = '#4cc38a'; ctx.beginPath(); ctx.arc(sx, sy, 6, 0, 7); ctx.fill(); ctx.fillStyle = '#000'; ctx.font = 'bold 9px system-ui'; ctx.fillText(i + 1, sx - 3, sy + 3);
     });
     hintText(`<b>${E(p.name)}</b> · ${pw}×${ph} px = ${(pw * k / PX).toFixed(2)}×${(ph * k / PX).toFixed(2)} blocks · drag the picture so the red cross is at the point that should go where you click in game (usually the bottom middle)` + (p.interact.type === 'sit' ? ' · double-click to add a seat' : ''));
@@ -5707,7 +5707,7 @@ window.__rigEditor = { recordGif, gifEncode, get view() { return view; }, addLoo
     for (const it of pack.items) out.items.push({ id: it.id, name: it.name, base: it.base, sprite: it.image ? await addImg(it.image, 'item_' + it.id) : undefined, description: it.description || undefined });
     for (const p of pack.props) {
       const frames = []; for (let i = 0; i < p.frames.length; i++) frames.push(await addImg(p.frames[i], p.id + (p.frames.length > 1 ? '_' + (i + 1) : '')));
-      const o = { id: p.id, name: p.name, description: p.description, frames, fps: p.fps, ppu: p.ppu, pivot: p.pivot, scale: p.scale, layer: p.layer, order: p.order, solid: p.solid, seats: p.seats };
+      const o = { id: p.id, name: p.name, description: p.description, frames, fps: p.fps, ppu: p.ppu, pivot: p.pivot, scale: p.scale, layer: p.layer, order: p.order, solid: p.solid, seats: p.seats.map(st => ({ x: st.x, y: st.y, hips: true })) };
       if (p.interact.type !== 'none') o.interact = { type: p.interact.type, ui: p.interact.ui || undefined, text: p.interact.text || undefined, actions: p.interact.type === 'actions' ? p.interact.actions : undefined };
       out.props.push(o);
     }
@@ -5774,7 +5774,7 @@ window.__rigEditor = { recordGif, gifEncode, get view() { return view; }, addLoo
     for (const p of j.props || []) {
       const frames = []; for (const f of (p.frames && p.frames.length ? p.frames : [p.sprite])) { const r = await img(f); if (r) frames.push(r); }
       pk.props.push({ id: p.id || 'prop', name: p.name || p.id || 'Prop', description: p.description || '', frames, fps: p.fps || 6, ppu: p.ppu || PX, pivot: p.pivot || { x: 0.5, y: 0 }, scale: p.scale || 1,
-        layer: p.layer || 'back', order: p.order || 0, solid: !!p.solid, seats: p.seats || [], interact: Object.assign({ type: (p.seats && p.seats.length) ? 'sit' : 'none', ui: '', text: '', actions: [] }, p.interact || {}) });
+        layer: p.layer || 'back', order: p.order || 0, solid: !!p.solid, seats: (p.seats || []).map(st => ({ x: st.x, y: st.hips ? st.y : Math.round((st.y - 0.8) * 20) / 20 })), interact: Object.assign({ type: (p.seats && p.seats.length) ? 'sit' : 'none', ui: '', text: '', actions: [] }, p.interact || {}) });
     }
     for (const n in j.sounds || {}) if (files[j.sounds[n]]) pk.sounds[n] = { file: j.sounds[n], bytes: files[j.sounds[n]] };
     pack = pk; sel = pk.props[0] || null; mode = 'prop'; selEl = null; renderAll();
