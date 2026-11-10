@@ -3804,7 +3804,7 @@ function startTest() {
   if (prev) for (const k of ['grounded', 'climbing', 'inWater', 'idleTime']) test[k] = prev[k] !== undefined ? prev[k] : test[k];
   test.body.accelRot = test.body.accelRot || 0;
   test.ga = gameMode() ? (prev && prev.ga && prev.ga.tpl === RIG.GAME.tpl ? prev.ga : new RIG.GameAnim(RIG.GAME.tpl, RIG.GAME.clips)) : null;
-  for (const f in images) { const im = images[f]; test.canv[f] = layerCanvas(im); }
+  for (const f in images) { const im = images[f]; if (im && im.w > 0 && im.h > 0 && im.rgba) test.canv[f] = layerCanvas(im); } // only pictures: sounds are in the files too
   if (!raf) raf = requestAnimationFrame(loop);
 }
 // slider changes: update motion without rebuilding (keeps the motion going)
