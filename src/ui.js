@@ -50,6 +50,8 @@ async function loadProject(file) {
 }
 function setDoc(d) {
   doc = d; imgCache.clear(); selLayer = null; selChain = doc.chains[0] ? doc.chains[0].id : null;
+  // build on the character this rig was made for (or remember the one picked now)
+  if (RIG.GAME) { if (doc.species && doc.species !== RIG.GAME.species && speciesList(RIG.GAME).includes(doc.species)) useSpecies(doc.species); else if (!doc.species && RIG.GAME.species) doc.species = RIG.GAME.species; }
   $('#name').value = doc.name; $('#drop').style.display = 'none';
   fitView(); refresh(); hint(rigHint()); if (tab === 'test') startTest();
 }
@@ -189,37 +191,89 @@ RIG.GAME = null;
 function idb() { return new Promise((res, rej) => { const r = indexedDB.open('luna-ars', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
 async function idbSet(k, v) { const db = await idb(); return new Promise((res, rej) => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); }
 async function idbGet(k) { const db = await idb(); return new Promise((res, rej) => { const rq = db.transaction('kv').objectStore('kv').get(k); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); }); }
-async function setGame(tpl, clips, pngs, store) {
+// Templates from mod 0.5+ hold every built-in character (tpl.species: experiment, milky, dune), each with its own body
+// parts, skeleton, movement numbers, face, animations and wearable art. RIG.GAME.tpl / .clips always show the one picked.
+const SPECIES_NAMES = { experiment: 'Experiment', milky: 'Milky', dune: 'Dune' };
+function speciesList(G) { return G && G.base && G.base.species ? Object.keys(G.base.species) : []; }
+function speciesView(base, sp) {
+  if (!base.species || !base.species[sp]) return base;
+  const v = Object.assign({}, base, base.species[sp]);
+  // the game swaps some worn sprites and their size per character (WearableSpriteSwap)
+  v.gear = (base.gear || []).map(g => { const o = g.species && g.species[sp]; return o ? Object.assign({}, g, o.sprite ? { sprite: o.sprite } : {}, o.scale ? { scale: o.scale } : {}) : g; });
+  // each character has its own head on the health screen
+  const h = base.hsHeads && base.hsHeads[sp];
+  if (h && base.healthScreen && base.healthScreen.Head) {
+    // the template gives each head's picture size in pixels; the screen shows pictures at a fixed zoom (the saved
+    // head's shown size / its picture size, 3x in the full release), so scale by that, not by raw pixels
+    const BH = base.healthScreen.Head, bs = base.sprites && base.sprites[BH.outline];
+    const zx = bs && bs.w ? BH.w / bs.w : 3, zy = bs && bs.h ? BH.h / bs.h : 3;
+    v.healthScreen = Object.assign({}, base.healthScreen, { Head: Object.assign({}, BH, { outline: h.outline, middle: h.middle, w: h.w ? h.w * zx : BH.w, h: h.h ? h.h * zy : BH.h }) });
+  }
+  v.speciesName = sp;
+  return v;
+}
+function useSpecies(sp) {
+  const G = RIG.GAME; if (!G) return;
+  if (!G.base.species || !G.base.species[sp]) sp = G.base.defaultSpecies || speciesList(G)[0] || null;
+  G.species = sp;
+  G.tpl = sp ? speciesView(G.base, sp) : G.base;
+  G.clips = (sp && G.allClips[sp]) || G.allClips._ || {};
+  if (doc && sp) doc.species = sp;
+  updateGameBadge(); imgCache.clear(); if (doc) refresh(); else renderInspector();
+}
+async function setGame(tpl, clips, pngs, store, allClips) {
   const images = {};
   for (const n in pngs) { try { images[n] = await decodePng(new Blob([pngs[n]], { type: 'image/png' })); } catch (e) { } }
-  RIG.GAME = { tpl, clips: clips || {}, images, sprites: tpl.sprites || {} };
-  if (store) { try { await idbSet('gameTemplate', { tpl, clips, pngs }); } catch (e) { console.warn('could not keep the game template in this browser', e); } }
-  updateGameBadge(); imgCache.clear(); if (doc) refresh(); else renderInspector();
+  allClips = allClips || { _: clips || {} };
+  RIG.GAME = { base: tpl, tpl, allClips, clips: clips || {}, images, sprites: tpl.sprites || {}, species: null };
+  if (store) { try { await idbSet('gameTemplate', { tpl, clips, pngs, allClips }); } catch (e) { console.warn('could not keep the game template in this browser', e); } }
+  useSpecies((doc && doc.species) || tpl.defaultSpecies || 'experiment');
 }
 function updateGameBadge() {
   const b = $('#gameBadge'); if (!b) return;
-  if (RIG.GAME) { const g = RIG.GAME; b.textContent = '✓ game template'; b.title = 'Loaded from your game: ' + Object.keys(g.images).length + ' sprites, ' + ((g.tpl.gear || []).length) + ' wearables, ' + Object.keys(g.clips).length + ' animations. Click to reload it.'; b.style.color = 'var(--ok)'; }
-  else { b.textContent = 'no game template'; b.style.color = 'var(--warn)'; }
+  const sel = $('#speciesSel');
+  if (RIG.GAME) {
+    const g = RIG.GAME; b.textContent = '✓ game template'; b.title = 'Loaded from your game: ' + Object.keys(g.images).length + ' sprites, ' + ((g.tpl.gear || []).length) + ' wearables, ' + Object.keys(g.clips).length + ' animations. Click to reload it.'; b.style.color = 'var(--ok)';
+    const list = speciesList(g);
+    if (sel) {
+      sel.hidden = false;
+      if (list.length >= 2) {
+        sel.disabled = false;
+        sel.title = "Which of the game's characters to build on: its body parts, proportions, animations and how wearables look on it.";
+        sel.innerHTML = list.map(k => `<option value="${k}"${k === g.species ? ' selected' : ''}>${SPECIES_NAMES[k] || k}</option>`).join('');
+      } else {
+        // an older template (mod before 1.0) holds only the character that was played
+        sel.disabled = true;
+        sel.title = 'This game template holds one character. Update the mod to 1.0 and start the game once (it saves Experiment, Milky and Dune by itself at the main menu), then click the template badge and pick the GameTemplate folder again.';
+        sel.innerHTML = '<option>One character: update the mod</option>';
+      }
+    }
+  }
+  else { b.textContent = 'no game template'; b.style.color = 'var(--warn)'; if (sel) { sel.hidden = false; sel.disabled = true; sel.title = 'Load the game template to pick Experiment, Milky or Dune.'; sel.innerHTML = '<option>Character…</option>'; } }
 }
 async function loadGameTemplateFiles(list) {
   const files = [...list]; const byPath = {};
   for (const f of files) byPath[(f.webkitRelativePath || f.name).replace(/\\/g, '/')] = f;
   const keys = Object.keys(byPath);
   const tf = keys.find(p => /(^|\/)template\.json$/i.test(p));
-  if (!tf) { toast('That folder has no template.json. Pick BepInEx\\plugins\\AdvancedRigs\\GameTemplate (the mod makes it the first time you play, or press F10 in game).', 8000); return; }
+  if (!tf) { toast('That folder has no template.json. In the game, open the rig menu and click "Open the template folder", then pick that folder here (it\'s the GameTemplate folder next to the mod, made by itself when the game starts).', 9000); return; }
   const base = tf.slice(0, tf.length - 'template.json'.length);
   const tpl = JSON.parse(await byPath[tf].text());
   if (tpl.format !== 'luna-ars-game-template') { toast('That template.json isn\'t a Luna Advanced Rig Systems game template.', 6000); return; }
-  const af = keys.find(p => p === base + 'animations.json');
-  const clips = af ? JSON.parse(await byPath[af].text()) : {};
+  const readJson = async (name) => { const k = keys.find(p => p === base + name); return k ? JSON.parse(await byPath[k].text()) : null; };
+  const clips = (await readJson('animations.json')) || {};
+  const allClips = { _: clips };
+  for (const sp in tpl.species || {}) allClips[sp] = (await readJson(tpl.species[sp].animations || 'animations.json')) || {};
   const pngs = {};
   for (const n in tpl.sprites || {}) { const f = byPath[base + tpl.sprites[n].file]; if (f) pngs[n] = new Uint8Array(await f.arrayBuffer()); }
-  await setGame(tpl, clips, pngs, true);
-  toast('Game template loaded from your game: ' + Object.keys(pngs).length + ' sprites, ' + (tpl.gear || []).length + ' wearables, ' + Object.keys(clips).length + ' animations.', 6000);
+  await setGame(tpl, clips, pngs, true, allClips);
+  const nsp = Object.keys(tpl.species || {}).length;
+  toast('Game template loaded from your game: ' + (nsp ? nsp + ' characters, ' : '') + Object.keys(pngs).length + ' sprites, ' + (tpl.gear || []).length + ' wearables, ' + Object.keys(clips).length + ' animations.' + (nsp ? '' : ' (An older template: update the mod and it saves every character.)'), 7000);
 }
 $('#fileTpl').onchange = async (e) => { try { await loadGameTemplateFiles(e.target.files); } catch (er) { console.error(er); toast('Could not load the game template: ' + er.message, 6000); } e.target.value = ''; };
 $('#gameBadge').onclick = () => $('#fileTpl').click();
-(async () => { try { const g = await idbGet('gameTemplate'); if (g && g.tpl) await setGame(g.tpl, g.clips, g.pngs, false); } catch (e) { } updateGameBadge(); })();
+(async () => { try { const g = await idbGet('gameTemplate'); if (g && g.tpl) await setGame(g.tpl, g.clips, g.pngs, false, g.allClips); } catch (e) { } updateGameBadge(); })();
+if ($('#speciesSel')) $('#speciesSel').onchange = (e) => useSpecies(e.target.value);
 
 // a layer for a game sprite, placed exactly like the game draws it: its pivot on the part's joint
 function gameLayer(d, spriteName, name, role, part) {
@@ -355,7 +409,7 @@ $('#tbAdd').onclick = () => {
 
 $('#btnTemplate').onclick = async () => {
   if (!RIG.GAME) {
-    toast('Pick the GameTemplate folder from your game: BepInEx\\plugins\\AdvancedRigs\\GameTemplate. The mod makes it the first time you play with it (or press F10 in game).', 9000);
+    toast('Pick the GameTemplate folder from your game. In the game, open the rig menu and click "Open the template folder" to find it (it\'s next to the mod, and it\'s made by itself when the game starts).', 9000);
     $('#fileTpl').click(); return;
   }
   if (doc && doc.layers.length && !confirm('Start over from the game template? Your current character is closed (save it first if you want to keep it).')) return;
@@ -379,16 +433,16 @@ stage.addEventListener('drop', (e) => {
 $('#btnAuto').onclick = () => { if (!doc) return; RIG.autoAssign(doc); selChain = doc.chains[0] ? doc.chains[0].id : null; refresh(); toast('Parts and bones set up automatically'); };
 $('#name').oninput = (e) => { if (doc) doc.name = e.target.value.replace(/[^A-Za-z0-9_\- ]/g, '') || 'MyCharacter'; };
 // editor look: the Casualties lab-terminal theme, or the plain one (kept in this browser)
-const THEMES = ['casualties', 'plain'];
+const THEMES = ['casualties', 'plain', 'light', 'trans', 'rainbow', 'progress', 'bi', 'lesbian', 'nonbinary', 'pan', 'ace', 'aro'];
 // canvas colours per theme
 const PALS = {
   plain: { bg: '#101115', sheet: '#17181d', sheetLine: '#2a2c34', grid: '#1b1d23', ground: '#1b1d23', groundLine: '#3a3d47', box: '#23252d', text: '#9a9caa' },
   casualties: { bg: '#060708', sheet: '#0b0f0d', sheetLine: '#1f3a2a', grid: '#0f1912', ground: '#0d1310', groundLine: '#2f5a3d', box: '#141c17', text: '#7fb98f' }
 };
 const CV = () => PALS[document.documentElement.getAttribute('data-theme')] || PALS.plain;
-function setTheme(t) { document.documentElement.setAttribute('data-theme', t); try { localStorage.setItem('luna-ars-theme', t); } catch (e) { } if (doc) draw(); }
+function setTheme(t) { document.documentElement.setAttribute('data-theme', t); try { localStorage.setItem('luna-ars-theme', t); } catch (e) { } const sel = $('#themeSel'); if (sel) sel.value = t; if (doc) draw(); }
 try { const t = localStorage.getItem('luna-ars-theme'); if (THEMES.includes(t)) document.documentElement.setAttribute('data-theme', t); } catch (e) { }
-$('#btnTheme').onclick = () => { const cur = document.documentElement.getAttribute('data-theme') || 'casualties'; setTheme(THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length]); };
+if ($('#themeSel')) { $('#themeSel').value = document.documentElement.getAttribute('data-theme') || 'casualties'; $('#themeSel').onchange = (e) => setTheme(e.target.value); }
 $('#btnHelp').onclick = () => $('#help').classList.add('show');
 $('#helpClose').onclick = () => $('#help').classList.remove('show');
 
@@ -405,6 +459,13 @@ function roleOptions(l) {
     h += `<optgroup label="Injury art (shown while that part is hurt)">`;
     for (const c of injurable) c.segs.forEach((sg, k) => { if (sg.layer !== l.id) h += `<option value="injury:${sg.layer}">${esc(c.name)} piece ${k + 1}</option>`; });
     for (const o of partLayers) h += `<option value="injury:${o.id}">${esc(o.name)} (${RIG.PART_LABEL[o.role.part]})</option>`;
+    h += `</optgroup>`;
+  }
+  const headChains = doc.chains.filter(c => c.head && c.head.enabled && c.segs.length);
+  if (headChains.length) {
+    h += `<optgroup label="Extra head art (shown when the mouth opens)">`;
+    for (const c of headChains) { const sg = c.segs[c.head.piece >= 0 && c.head.piece < c.segs.length ? c.head.piece : c.segs.length - 1];
+      if (sg.layer !== l.id) for (const [st, lab] of [['mouth', 'mouth open'], ['mouthHalf', 'mouth half open']]) h += `<option value="state:${sg.layer}:${st}">${esc(c.name)}: ${lab}</option>`; }
     h += `</optgroup>`;
   }
   if (l.role.type === 'gear') h += `<option value="gear">Worn gear: ${esc(l.role.item || l.role.sprite)}</option>`;
@@ -697,6 +758,351 @@ const SLIDERS = [
   ['wagPhase', 'Wag wave', 0, 2, 0.05, 'Delay toward the tip'], ['wagWhileMoving', 'Wag when running', 0, 1, 0.05, ''],
   ['flapAmplitude', 'Flap°', 0, 70, 1, 'Wing beat'], ['flapSpeed', 'Flap speed', 0, 6, 0.05, 'Beats per second'], ['flapPhase', 'Flap wave', 0, 2, 0.05, '']
 ];
+// ---------------------------------------------------------------- Inventory tab
+// The game's inventory circle, as the mod recorded it from your game (template "inventory": every picture in it, in the
+// circle's own units, y up). Any piece can be moved, resized and given your own pictures (the normal one and the one
+// shown while the slot holds something), like the health screen. Extra hands get buttons on a ring just outside the
+// game's, placed with the very numbers the mod uses. Without a recorded circle it falls back to a rough picture.
+const INV = { sel: null, drag: null, hits: [], holding: false, last: null, k: 1, cx: 0, cy: 0, zoom: 1, panX: 0, panY: 0, pan: null };
+// pieces the player can't see (fully see-through, or not shown) aren't drawn, listed or used to fit the view
+const invVisible = (it) => it.on !== false && !/^#?[0-9a-f]{6}00$/i.test(it.color || '');
+const SLOT_NAMES = { 0: 'Main hand', 1: 'Off hand', 2: 'Head', 3: 'Upper back', 4: 'Middle back', 5: 'Lower back' };
+const INV_NAMES = { RadialCenter: 'Middle circle', WeightImage: 'Weight box', 'WeightImage/Image': 'Weight icon', CustomizeItem: 'Customize box', 'CustomizeItem/Image': 'Customize icon', DrainLiquid: 'Drain box', 'DrainLiquid/Image': 'Drain icon' };
+// the extra hands' ring, worked out like the mod does (so templates recorded by an older mod still match)
+function invRing(T) {
+  const ER = T.extraRing || {}, slots = T.items.filter(i => i.slot !== undefined && i.slot >= 0 && invVisible(i));
+  if (!slots.length) return Object.assign({ round: 96 }, ER);
+  let outer = 0; for (const i of slots) outer = Math.max(outer, Math.abs(i.x) + i.w / 2, Math.abs(i.y) + i.h / 2);
+  const round = 96, ring = outer + round / 2 * 1.25, main = slots.find(i => i.slot === 0);
+  const baseAng = main && Math.hypot(main.x, main.y) > 1 ? Math.atan2(main.y, main.x) * 180 / Math.PI : 90;
+  const center = T.items.find(i => i.path === 'RadialCenter');
+  void center; return { ring, btn: round / 2, round, baseAng, step: Math.max(18, (round / 2 * 2.6) / ring * 180 / Math.PI) };
+}
+const invHands = () => (doc && doc.chains || []).filter(c => c.hand && c.hand.enabled);
+const invB = (ch) => (ch.hand.button = ch.hand.button || { angle: null, distance: 1, size: 1 });
+const invOwnAngle = (b) => !(b.angle === undefined || b.angle === null || b.angle === '');
+function invTpl() { const G = RIG.GAME; const t = G && ((G.base && G.base.inventory) || (G.tpl && G.tpl.inventory)); return t && t.items && t.items.length ? t : null; }
+// the rough stand-in (no recorded circle): six round buttons, same rules for the extra ring
+function invFallback() {
+  const R0 = 100, btn = 20, items = [];
+  for (let k = 0; k < 6; k++) { const a = (90 + k * 60) * Math.PI / 180; items.push({ name: ['Main hand', 'Off hand', 'Mouth', 'Back', 'Belt', 'Pocket'][k], x: Math.cos(a) * R0, y: Math.sin(a) * R0, w: btn * 2, h: btn * 2, slot: k, on: true, fake: true }); }
+  const ring = R0 + btn + 48 * 1.25;
+  return { items, extraRing: { ring, btn: 48, round: 96, baseAng: 90, step: Math.max(18, (48 * 2.6) / ring * 180 / Math.PI) }, fake: true };
+}
+const invLook = (path) => (doc.inventory = doc.inventory || {}, doc.inventory[path]);
+const invLookMk = (path) => { doc.inventory = doc.inventory || {}; return (doc.inventory[path] = doc.inventory[path] || { dx: 0, dy: 0, size: 1 }); };
+const invTintCache = new Map();
+function invTint(img, color) {
+  if (!color || /^#?ffffffff$/i.test(color)) return layerCanvas(img);
+  let m = invTintCache.get(img); if (!m) { m = {}; invTintCache.set(img, m); }
+  if (m[color]) return m[color];
+  const src = layerCanvas(img), c = document.createElement('canvas'); c.width = img.w; c.height = img.h; const g = c.getContext('2d');
+  const hex = color.replace('#', ''), r = parseInt(hex.slice(0, 2), 16), gg = parseInt(hex.slice(2, 4), 16), bb = parseInt(hex.slice(4, 6), 16), al = hex.length >= 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1;
+  g.drawImage(src, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = `rgb(${r},${gg},${bb})`; g.fillRect(0, 0, img.w, img.h);
+  g.globalCompositeOperation = 'destination-in'; g.globalAlpha = al; g.drawImage(src, 0, 0);
+  return (m[color] = c);
+}
+// the picture a piece shows: yours, or the game's (the "holding something" one when that preview is on)
+function invPic(it) {
+  const L = it.path ? invLook(it.path) : null, G = RIG.GAME;
+  if (it.slot !== undefined && INV.holding) { if (L && (L.muted || L.normal)) return L.muted || L.normal; const n = it.muted || it.normal; return n && G && G.images[n]; }
+  if (L && L.normal) return L.normal;
+  const n = it.slot !== undefined ? it.normal : it.sprite; return n && G && G.images[n];
+}
+// the extra hands' round button, the same pixels the mod makes (InventoryCircle.RoundSprite)
+let _invRound = null;
+function invRoundImg() {
+  if (_invRound) return _invRound;
+  const S = 32, c = (S - 1) / 2, r = S / 2 - 1, rgba = new Uint8ClampedArray(S * S * 4);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const d = Math.hypot(x - c, y - c), o = (y * S + x) * 4;
+    if (d > r + 0.5) continue;
+    if (d > r - 0.9) { rgba[o] = rgba[o + 1] = rgba[o + 2] = 255; rgba[o + 3] = 255; } else rgba[o + 3] = 110;
+  }
+  return (_invRound = { w: S, h: S, rgba });
+}
+function invMain(T) { return T.items.find(i => i.slot === 0) || null; }
+function drawInv(W, H) {
+  const P = CV(); ctx.fillStyle = P.bg; ctx.fillRect(0, 0, W, H);
+  if (!doc) return;
+  const T = invTpl() || invFallback(); INV.last = T;
+  const ER = T.fake ? T.extraRing : invRing(T);
+  // fit the circle and the extra ring (not the screen-tall edges around the inventory), then your zoom and pan
+  let E = ER.ring + (ER.round || ER.btn * 2) * 0.8;
+  for (const it of T.items) if (invVisible(it) && Math.max(it.w, it.h) < 1200) E = Math.max(E, Math.max(Math.abs(it.x) + it.w / 2, Math.abs(it.y) + it.h / 2));
+  const k = Math.min(W, H) * 0.47 / E * INV.zoom, cx = W / 2 + INV.panX, cy = H / 2 + INV.panY; INV.k = k; INV.cx = cx; INV.cy = cy;
+  const S = (x, y) => ({ x: cx + x * k, y: cy - y * k });
+  INV.hits = [];
+  ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+  // where the game takes clicks on its own buttons
+  if (T.clickInner && T.clickOuter) { ctx.save(); ctx.setLineDash([3, 5]); ctx.strokeStyle = P.text; ctx.globalAlpha = 0.25; for (const r of [T.clickInner, T.clickOuter]) { ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, 7); ctx.stroke(); } ctx.restore(); }
+  ctx.imageSmoothingEnabled = false;
+  for (const it of T.items) {
+    if (!invVisible(it)) continue;
+    const L = it.path ? invLook(it.path) : null;
+    const x = it.x + (L ? L.dx || 0 : 0), y = it.y + (L ? L.dy || 0 : 0), sz = L ? L.size || 1 : 1;
+    const w = it.w * sz * k, h = it.h * sz * k, p = S(x, y);
+    const img = invPic(it);
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(-(it.rot || 0) * Math.PI / 180);
+    if (img) ctx.drawImage(invTint(img, L && (L.normal || L.muted) ? null : it.color), -w / 2, -h / 2, w, h);
+    else if (it.fake) { ctx.fillStyle = P.box; ctx.strokeStyle = P.text; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, w / 2, 0, 7); ctx.fill(); ctx.stroke(); }
+    ctx.restore();
+    if (it.slot !== undefined && it.slot >= 0) { ctx.fillStyle = P.text; ctx.globalAlpha = 0.8; ctx.fillText(it.fake ? it.name : (SLOT_NAMES[it.slot] || 'Slot ' + it.slot), p.x, p.y); ctx.globalAlpha = 1; }
+    if (!it.fake) INV.hits.push({ key: 'p:' + it.path, it, p, w, h, rot: it.rot || 0 });
+  }
+  // extra hands: same placement as the mod (auto ones step along the ring from the main hand's button)
+  const hands = invHands(), main = invMain(T);
+  ctx.save(); ctx.setLineDash([5, 5]); ctx.strokeStyle = P.text; ctx.globalAlpha = hands.length ? 0.45 : 0.15; ctx.beginPath(); ctx.arc(cx, cy, ER.ring * k, 0, 7); ctx.stroke(); ctx.restore();
+  let auto = 0;
+  for (const ch of hands) {
+    const b = invB(ch), ang = invOwnAngle(b) ? +b.angle : ER.baseAng + ER.step * (++auto), d = ER.ring * (b.distance || 1), a = ang * Math.PI / 180;
+    const p = S(Math.cos(a) * d, Math.sin(a) * d);
+    // a round button like the mod's (the game's own middle circle), or your picture
+    const mw = (ER.round || 96) * (b.size || 1) * k, mh = mw;
+    const icon = b.icon && RIG.layer(doc, b.icon);
+    const roundImg = invRoundImg();
+    const center = T.items.find(i => i.path === 'RadialCenter');
+    if (icon) ctx.drawImage(layerCanvas(icon), p.x - mw / 2, p.y - mh / 2, mw, mh);
+    else { ctx.save(); ctx.globalAlpha = 0.5; ctx.drawImage(layerCanvas(roundImg), p.x - mw / 2, p.y - mh / 2, mw, mh); ctx.restore(); }
+    void center; void main;
+    ctx.fillStyle = P.text; ctx.fillText(ch.hand.name || ch.name, p.x, p.y + mh / 2 + 12);
+    INV.hits.push({ key: 'h:' + ch.id, ch, p, w: mw, h: mh, rot: 0 });
+  }
+  // selection outline
+  const sel = INV.hits.find(h => h.key === INV.sel);
+  if (sel) { ctx.save(); ctx.translate(sel.p.x, sel.p.y); ctx.rotate(-sel.rot * Math.PI / 180); ctx.setLineDash([4, 3]); ctx.lineWidth = 2; ctx.strokeStyle = '#ffcf4a'; ctx.strokeRect(-sel.w / 2 - 2, -sel.h / 2 - 2, sel.w + 4, sel.h + 4); ctx.restore(); }
+  if (T.fake) { ctx.fillStyle = PAL_WARN(); ctx.fillText('Rough picture: no inventory circle in your game template yet. Open your inventory in a world once (with the newest mod), then load the game template again.', W / 2, H - 16); }
+}
+const PAL_WARN = () => (CV().warn || '#e9b44c');
+function invAt(sx, sy) {
+  for (let i = INV.hits.length - 1; i >= 0; i--) {
+    const h = INV.hits[i], a = h.rot * Math.PI / 180, dx = sx - h.p.x, dy = sy - h.p.y;
+    const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
+    if (Math.abs(lx) <= h.w / 2 + 3 && Math.abs(ly) <= h.h / 2 + 3) return h;
+  }
+  return null;
+}
+function invPointerDown(sx, sy) {
+  const h = invAt(sx, sy);
+  if (h) { INV.sel = h.key; pushUndo(); INV.drag = { key: h.key, sx, sy }; renderInspector(); draw(); return; }
+  INV.pan = { sx, sy, x: INV.panX, y: INV.panY };   // empty space: move the view
+}
+function invPointerMove(sx, sy) {
+  if (INV.pan) { INV.panX = INV.pan.x + sx - INV.pan.sx; INV.panY = INV.pan.y + sy - INV.pan.sy; draw(); return; }
+  if (!INV.drag) { cv.style.cursor = invAt(sx, sy) ? 'move' : 'grab'; return; }
+  const key = INV.drag.key, k = INV.k || 1;
+  if (key.startsWith('p:')) {
+    const L = invLookMk(key.slice(2));
+    L.dx = Math.round(((L.dx || 0) + (sx - INV.drag.sx) / k) * 10) / 10; L.dy = Math.round(((L.dy || 0) - (sy - INV.drag.sy) / k) * 10) / 10;
+    INV.drag.sx = sx; INV.drag.sy = sy;
+  } else {
+    const ch = invHands().find(c => 'h:' + c.id === key); if (!ch) return;
+    const T = INV.last || invFallback(), ER = T.fake ? T.extraRing : invRing(T), b = invB(ch);
+    b.angle = Math.round(Math.atan2(-(sy - INV.cy), sx - INV.cx) * 180 / Math.PI);
+    b.distance = Math.max(0.6, Math.min(2, Math.round(Math.hypot(sx - INV.cx, sy - INV.cy) / (ER.ring * k) * 50) / 50));
+  }
+  draw();
+}
+function invZoom(f, sx, sy) {
+  const r = cv.getBoundingClientRect(); if (sx === undefined) { sx = r.width / 2; sy = r.height / 2; }
+  const nz = Math.max(0.3, Math.min(6, INV.zoom * f)), g = nz / INV.zoom;
+  // keep the point under the mouse still
+  INV.panX = (sx - r.width / 2) - ((sx - r.width / 2) - INV.panX) * g; INV.panY = (sy - r.height / 2) - ((sy - r.height / 2) - INV.panY) * g;
+  INV.zoom = nz; draw();
+}
+function invWheel(sx, sy, up) {
+  const h = invAt(sx, sy);
+  if (!h) { invZoom(up ? 1.12 : 1 / 1.12, sx, sy); return; }   // empty space: zoom the view
+  INV.sel = h.key; const f = up ? 1.06 : 1 / 1.06;
+  if (h.key.startsWith('p:')) { const L = invLookMk(h.key.slice(2)); L.size = Math.max(0.3, Math.min(3, Math.round((L.size || 1) * f * 100) / 100)); }
+  else { const b = invB(h.ch); b.size = Math.max(0.5, Math.min(2, Math.round((b.size || 1) * f * 100) / 100)); }
+  renderInspector(); draw();
+}
+function invPieceName(it) { return it.slot !== undefined && it.slot >= 0 ? (SLOT_NAMES[it.slot] || 'Slot ' + it.slot) + ' slot' : INV_NAMES[it.path] || it.name.replace(/([a-z])([A-Z])/g, '$1 $2'); }
+function invThumb(img) { if (!img) return '<span class="muted">the game\'s</span>'; const c = layerCanvas(img); return `<img src="${c.toDataURL()}" style="height:28px;image-rendering:pixelated;vertical-align:middle;background:#0003">`; }
+function invInspector() {
+  const T = invTpl(), hands = invHands();
+  let h = `<h2>Inventory</h2><div class="sec muted">Your inventory circle in game. Click any piece to restyle it: drag to move, scroll to resize, give it your own picture. ${T ? '' : '<br><b>Load the game template</b> after opening your inventory in a world once with the newest mod, to see and restyle the real circle.'}</div>
+    <div class="sec"><div class="row" title="Show the pictures a slot uses while it holds something"><label>Holding items</label><input id="invHold" type="checkbox" ${INV.holding ? 'checked' : ''}><span class="muted">preview</span></div></div>`;
+  if (T) {
+    const pieces = T.items.filter(invVisible);
+    const custom = (it) => { const L = invLook(it.path); return L && ((L.dx || L.dy) || (L.size && L.size !== 1) || L.normal || L.muted); };
+    h += `<div class="sec">${pieces.map(it => `<button data-invsel="p:${esc(it.path)}" class="${INV.sel === 'p:' + it.path ? 'on' : ''}" style="margin:2px" title="${esc(it.path)}">${esc(invPieceName(it))}${custom(it) ? ' •' : ''}</button>`).join('')}</div>`;
+  }
+  if (hands.length) h += `<div class="sec"><span class="muted">Extra hands:</span> ${hands.map(c => `<button data-invsel="h:${c.id}" class="${INV.sel === 'h:' + c.id ? 'on' : ''}" style="margin:2px">${esc(c.hand.name || c.name)}</button>`).join('')}</div>`;
+  if (!INV.sel) return h + `<div class="sec muted">Nothing picked. Click a piece on the left.</div>`;
+  if (INV.sel.startsWith('p:') && T) {
+    const it = T.items.find(i => 'p:' + i.path === INV.sel); if (!it) return h;
+    const L = invLook(it.path) || {}, isBtn = it.slot !== undefined;
+    h += `<h2>${esc(invPieceName(it))}</h2><div class="sec">
+      <div class="row"><label>Moved</label><input id="invDx" type="number" step="1" value="${L.dx || 0}" style="width:70px"><input id="invDy" type="number" step="1" value="${L.dy || 0}" style="width:70px"><span class="muted">right, up</span></div>
+      <div class="row"><label>Size</label><input type="range" id="invPSize" min="0.3" max="3" step="0.05" value="${L.size || 1}"><span class="v">${Math.round((L.size || 1) * 100)}%</span></div>
+      <div class="row"><label>${isBtn ? 'Picture' : 'Picture'}</label>${invThumb(L.normal)}<button id="invPicN">⬆ PNG…</button>${L.normal ? '<button id="invPicNx">✕</button>' : ''}</div>
+      ${isBtn ? `<div class="row" title="Shown while the slot holds something (the game's is a dimmer version)"><label>Holding something</label>${invThumb(L.muted)}<button id="invPicM">⬆ PNG…</button>${L.muted ? '<button id="invPicMx">✕</button>' : ''}</div>` : ''}
+      <div class="muted" style="margin:4px 0">The game's picture is ${Math.round(it.w)}×${Math.round(it.h)} here; yours is stretched to fit, so draw it that shape.${isBtn && (L.dx || L.dy) ? ' Moved slot buttons take clicks anywhere on themselves.' : ''}</div>
+      <div class="row"><button id="invPReset">Back to the game's</button></div>
+      <input id="invPicFile" type="file" accept="image/png" hidden></div>`;
+    return h;
+  }
+  const ch = hands.find(c => 'h:' + c.id === INV.sel); if (!ch) return h;
+  const b = invB(ch), auto = !invOwnAngle(b);
+  const icons = doc.layers.filter(o => o.role.type === 'ignore' || o.id === b.icon);
+  h += `<h2>${esc(ch.hand.name || ch.name)}</h2><div class="sec">
+    <div class="row"><label>Name</label><input id="invName" type="text" value="${esc(ch.hand.name || ch.name)}" style="flex:1"></div>
+    <div class="row" title="Off: it goes in the next free place on the outer ring"><label>Own place</label><input id="invOwn" type="checkbox" ${auto ? '' : 'checked'}><span class="muted">${auto ? 'next free place (drag it to set one)' : Math.round(b.angle) + '° around'}</span></div>
+    <div class="row" title="1 = on the ring just outside the game's own buttons"><label>How far out</label><input type="range" id="invDist" min="0.6" max="2" step="0.02" value="${b.distance || 1}"><span class="v">${Math.round((b.distance || 1) * 100)}%</span></div>
+    <div class="row"><label>Size</label><input type="range" id="invSize" min="0.5" max="2" step="0.05" value="${b.size || 1}"><span class="v">${Math.round((b.size || 1) * 100)}%</span></div>
+    <div class="row" title="Any layer that isn't used for anything else, or the game's round button"><label>Picture</label><select id="invIcon" style="flex:1"><option value="">a round button (the game's circle)</option>${icons.map(o => `<option value="${o.id}" ${o.id === b.icon ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}</select></div>
+    <div class="row"><label>Add a picture</label><button id="invAddPic">⬆ PNG…</button><input id="invPicFile" type="file" accept="image/png" hidden></div>
+    <div class="row"><button id="invReset">Back to the next free place</button></div></div>`;
+  return h;
+}
+function bindInvInspector() {
+  const box = $('#insp');
+  box.querySelectorAll('[data-invsel]').forEach(b => b.onclick = () => { INV.sel = b.dataset.invsel; renderInspector(); draw(); });
+  const hold = $('#invHold'); if (hold) hold.onchange = (e) => { INV.holding = e.target.checked; draw(); };
+  const file = $('#invPicFile');
+  const pick = (cb) => { if (!file) return; file.onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { cb(await decodePng(f)); } catch (er) { toast('Could not read that PNG: ' + er.message, 5000); } }; file.click(); };
+  if (INV.sel && INV.sel.startsWith('p:')) {
+    const path = INV.sel.slice(2);
+    const set = (fn) => { pushUndo(); const L = invLookMk(path); fn(L); renderInspector(); draw(); };
+    const dx = $('#invDx'), dy = $('#invDy'), sz = $('#invPSize');
+    if (dx) dx.onchange = (e) => set(L => L.dx = +e.target.value || 0);
+    if (dy) dy.onchange = (e) => set(L => L.dy = +e.target.value || 0);
+    if (sz) sz.oninput = (e) => { const L = invLookMk(path); L.size = +e.target.value; sz.nextElementSibling.textContent = Math.round(L.size * 100) + '%'; draw(); };
+    const bind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+    bind('#invPicN', () => pick(img => set(L => L.normal = img)));
+    bind('#invPicM', () => pick(img => set(L => L.muted = img)));
+    bind('#invPicNx', () => set(L => L.normal = null));
+    bind('#invPicMx', () => set(L => L.muted = null));
+    bind('#invPReset', () => { pushUndo(); delete doc.inventory[path]; renderInspector(); draw(); });
+    return;
+  }
+  const ch = invHands().find(c => 'h:' + c.id === INV.sel); if (!ch) return;
+  const b = invB(ch);
+  const nm = $('#invName'); if (nm) nm.oninput = (e) => { ch.hand.name = e.target.value; draw(); };
+  const own = $('#invOwn'); if (own) own.onchange = (e) => { pushUndo(); const T = INV.last || invFallback(), ER = T.fake ? T.extraRing : invRing(T); b.angle = e.target.checked ? Math.round(ER.baseAng + ER.step) : null; renderInspector(); draw(); };
+  const dist = $('#invDist'); if (dist) dist.oninput = (e) => { b.distance = +e.target.value; dist.nextElementSibling.textContent = Math.round(b.distance * 100) + '%'; draw(); };
+  const size = $('#invSize'); if (size) size.oninput = (e) => { b.size = +e.target.value; size.nextElementSibling.textContent = Math.round(b.size * 100) + '%'; draw(); };
+  const ic = $('#invIcon'); if (ic) ic.onchange = (e) => { b.icon = e.target.value || null; draw(); };
+  const rs = $('#invReset'); if (rs) rs.onclick = () => { pushUndo(); b.angle = null; b.distance = 1; b.size = 1; renderInspector(); draw(); };
+  const add = $('#invAddPic');
+  if (add) add.onclick = () => pick(img => {
+    const l = { id: RIG.newId(), name: 'Button: ' + (ch.hand.name || ch.name), x: 0, y: 0, w: img.w, h: img.h, rgba: img.rgba, order: doc.layers.length, hidden: true, role: { type: 'ignore' } };
+    pushUndo(); doc.layers.push(l); b.icon = l.id; refresh(); renderInspector(); draw();
+  });
+}
+
+// ---------------------------------------------------------------- Hitboxes tab
+// Each game body part's hit area (its collider), drawn on your character standing still. The template (mod 1.0+,
+// template 4) gives the game's own shapes; older templates fall back to each part's picture. Your shapes are in the
+// part's own units (width, height, centre), exactly what the mod puts on the part's collider.
+const HB = { sel: null, drag: null, S: null, frames: null, feet: null, sizeK: 1, boxes: [] };
+function hbLimb(name) { const G = RIG.GAME; return G && (G.tpl.limbs || []).find(l => l.name === name); }
+function hbGame(name) {   // the game's own shape for a part: {w,h,x,y, approx}
+  const L = hbLimb(name); if (!L) return null;
+  if (L.hit && L.hit.length) { const h = L.hit[0]; return { w: h.w, h: h.h, x: h.x, y: h.y, t: h.t }; }
+  const sp = RIG.GAME.sprites[L.sprite]; if (!sp) return null;
+  const ppu = sp.ppu || 33.33, pv = sp.pivot || [sp.w / 2, sp.h / 2];
+  return { w: sp.w / ppu, h: sp.h / ppu, x: (sp.w / 2 - pv[0]) / ppu, y: (sp.h / 2 - pv[1]) / ppu, approx: true };
+}
+function hbShape(name) { const c = doc.hitboxes && doc.hitboxes[name]; return c ? Object.assign({ mine: true }, c) : hbGame(name); }
+function hbMatrix(name) {
+  const f = HB.frames && HB.frames[name], L = hbLimb(name); if (!f || !HB.S) return null;
+  const ls = L && L.lscale ? L.lscale : [1, 1];
+  return RIG.M.mul(HB.S, RIG.M.mul(f, RIG.M.S(ls[0] || 1, ls[1] || 1)));
+}
+function drawHitboxes() {
+  const d = window.devicePixelRatio || 1; ctx.setTransform(d, 0, 0, d, 0, 0);
+  HB.boxes = [];
+  // the body box (its height is the Height setting; its width follows)
+  const G = RIG.GAME, sp = (G && G.species) || doc.species, bb = G && G.base && G.base.species && G.base.species[sp] && G.base.species[sp].body;
+  if (bb && bb.colSize && HB.feet) {
+    const k = HB.sizeK || 1, w = bb.colSize[0] * k, h = bb.colSize[1] * k, a = RIG.M.pt(HB.S, { x: HB.feet.x - w / 2, y: HB.feet.y }), c = RIG.M.pt(HB.S, { x: HB.feet.x + w / 2, y: HB.feet.y + h });
+    ctx.save(); ctx.setLineDash([6, 4]); ctx.strokeStyle = 'rgba(120,200,255,.8)'; ctx.lineWidth = 1.5; ctx.strokeRect(Math.min(a.x, c.x), Math.min(a.y, c.y), Math.abs(c.x - a.x), Math.abs(c.y - a.y)); ctx.restore();
+  }
+  for (const name of RIG.PARTS) {
+    const sh = hbShape(name), Mw = hbMatrix(name); if (!sh || !Mw) continue;
+    const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => RIG.M.pt(Mw, { x: sh.x + u * sh.w / 2, y: sh.y + v * sh.h / 2 }));
+    const on = HB.sel === name;
+    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath();
+    ctx.fillStyle = on ? 'rgba(255,207,74,.22)' : sh.mine ? 'rgba(224,71,91,.16)' : 'rgba(76,195,138,.12)'; ctx.fill();
+    ctx.lineWidth = on ? 2 : 1.2; ctx.strokeStyle = on ? '#ffcf4a' : sh.mine ? '#e0475b' : (sh.approx ? 'rgba(76,195,138,.5)' : '#4cc38a'); ctx.stroke();
+    HB.boxes.push({ name, Mw, sh });
+  }
+}
+function hbHit(sx, sy) {
+  let best = null;
+  for (const b of HB.boxes) {
+    const l = RIG.M.ivec(b.Mw, { x: sx - b.Mw[4], y: sy - b.Mw[5] });
+    const px = Math.hypot(b.Mw[0], b.Mw[1]), py = Math.hypot(b.Mw[2], b.Mw[3]), mx = 7 / px, my = 7 / py;   // 7 screen pixels
+    const dx = l.x - b.sh.x, dy = l.y - b.sh.y, hw = b.sh.w / 2, hh = b.sh.h / 2;
+    if (Math.abs(dx) > hw + mx || Math.abs(dy) > hh + my) continue;
+    const edge = { l: Math.abs(dx + hw) < mx, r: Math.abs(dx - hw) < mx, b: Math.abs(dy + hh) < my, t: Math.abs(dy - hh) < my };
+    const area = b.sh.w * b.sh.h;
+    if (!best || (b.name === HB.sel) || area < best.area && best.name !== HB.sel) best = { name: b.name, Mw: b.Mw, edge, area, l };
+  }
+  return best;
+}
+function hitPointerDown(sx, sy) {
+  const h = hbHit(sx, sy); HB.sel = h ? h.name : null;
+  if (h) {
+    pushUndo(); doc.hitboxes = doc.hitboxes || {};
+    if (!doc.hitboxes[h.name]) { const g = hbGame(h.name); if (g) doc.hitboxes[h.name] = { w: g.w, h: g.h, x: g.x, y: g.y }; }
+    HB.drag = { name: h.name, Mw: h.Mw, edge: h.edge, sx, sy, any: h.edge.l || h.edge.r || h.edge.t || h.edge.b };
+  }
+  renderInspector();
+}
+function hitPointerMove(sx, sy) {
+  if (!HB.drag) { const h = hbHit(sx, sy); cv.style.cursor = !h ? 'default' : (h.edge.l || h.edge.r) && (h.edge.t || h.edge.b) ? 'nwse-resize' : (h.edge.l || h.edge.r) ? 'ew-resize' : (h.edge.t || h.edge.b) ? 'ns-resize' : 'move'; return; }
+  const D = HB.drag, c = doc.hitboxes[D.name]; if (!c) return;
+  const l = RIG.M.ivec(D.Mw, { x: sx - D.sx, y: sy - D.sy }); D.sx = sx; D.sy = sy;
+  if (!D.any) { c.x += l.x; c.y += l.y; }
+  else {
+    if (D.edge.r) { c.w = Math.max(0.05, c.w + l.x); c.x += l.x / 2; } if (D.edge.l) { c.w = Math.max(0.05, c.w - l.x); c.x += l.x / 2; }
+    if (D.edge.t) { c.h = Math.max(0.05, c.h + l.y); c.y += l.y / 2; } if (D.edge.b) { c.h = Math.max(0.05, c.h - l.y); c.y += l.y / 2; }
+  }
+}
+function hitInspector() {
+  const G = RIG.GAME, hasT = G && (G.tpl.limbs || []).some(l => l.hit && l.hit.length);
+  let h = `<h2>Hitboxes</h2><div class="sec muted">Where each body part can be hit in game (bullets, bites, falls on that part). <b style="color:#4cc38a">Green</b>: the game's. <b style="color:#e0475b">Red</b>: yours. The dashed box is the body that walks, jumps and fits through gaps: its height is the <b>Height</b> in the Rig tab.${hasT ? '' : '<br><br>Your game template is from before hit areas were recorded, so the green boxes are each part’s picture size. Start the game once with the newest mod to record the real ones.'}<br><br>Used where <b>Custom hitboxes</b> is allowed in game (the host decides in multiplayer).</div>`;
+  h += `<div class="sec">${RIG.PARTS.map(p => `<button data-hbsel="${p}" class="${HB.sel === p ? 'on' : ''}" style="margin:2px">${esc(RIG.PART_LABEL[p] || p)}${doc.hitboxes && doc.hitboxes[p] ? ' •' : ''}</button>`).join('')}</div>`;
+  if (!HB.sel) return h + '<div class="sec muted">Click a part on the left, or in the list.</div>';
+  const c = (doc.hitboxes || {})[HB.sel], g = hbGame(HB.sel) || { w: 0, h: 0, x: 0, y: 0 }, s = c || g;
+  const num = (id, v) => `<input id="${id}" type="number" step="0.05" value="${(+v).toFixed(2)}" style="width:64px">`;
+  h += `<h2>${esc(RIG.PART_LABEL[HB.sel] || HB.sel)}</h2><div class="sec">
+    <div class="row"><label>Size</label>${num('hbW', s.w)}${num('hbH', s.h)}<span class="muted">wide, tall</span></div>
+    <div class="row"><label>Centre</label>${num('hbX', s.x)}${num('hbY', s.y)}<span class="muted">from the joint</span></div>
+    <div class="muted">The game's: ${g.w.toFixed(2)} × ${g.h.toFixed(2)}${g.approx ? ' (picture size)' : ''}.</div>
+    <div class="row"><button id="hbReset">Back to the game's</button><button id="hbResetAll">All parts back</button></div></div>`;
+  return h;
+}
+function bindHitInspector() {
+  const box = $('#insp');
+  box.querySelectorAll('[data-hbsel]').forEach(b => b.onclick = () => { HB.sel = b.dataset.hbsel; renderInspector(); });
+  const set = (k) => (e) => { pushUndo(); doc.hitboxes = doc.hitboxes || {}; if (!doc.hitboxes[HB.sel]) { const g = hbGame(HB.sel); doc.hitboxes[HB.sel] = { w: g.w, h: g.h, x: g.x, y: g.y }; } doc.hitboxes[HB.sel][k] = k === 'w' || k === 'h' ? Math.max(0.05, +e.target.value || 0.05) : +e.target.value || 0; renderInspector(); };
+  for (const [id, k] of [['#hbW', 'w'], ['#hbH', 'h'], ['#hbX', 'x'], ['#hbY', 'y']]) { const el = $(id); if (el) el.onchange = set(k); }
+  const r = $('#hbReset'); if (r) r.onclick = () => { pushUndo(); if (doc.hitboxes) delete doc.hitboxes[HB.sel]; renderInspector(); };
+  const ra = $('#hbResetAll'); if (ra) ra.onclick = () => { pushUndo(); doc.hitboxes = {}; renderInspector(); };
+}
+
+// a small picture of the inventory circle: the game's buttons (grey) and where each extra hand's button goes
+function handRingSvg() {
+  const R0 = 52, ring = R0 + 18, cx = 100, cy = 100;
+  let g = `<svg id="handRing" width="200" height="200" viewBox="0 0 200 200" style="display:block;margin:6px auto">`;
+  g += `<circle cx="${cx}" cy="${cy}" r="${R0}" fill="none" stroke="var(--line)" stroke-width="22" opacity="0.6"/>`;
+  for (let k = 0; k < 6; k++) { const a = (90 + k * 60) * Math.PI / 180; g += `<circle cx="${cx + Math.cos(a) * R0}" cy="${cy - Math.sin(a) * R0}" r="9" fill="var(--panel2)" stroke="var(--dim)"/>`; }
+  g += `<circle cx="${cx}" cy="${cy}" r="${ring}" fill="none" stroke="var(--dim)" stroke-dasharray="3 3" opacity="0.6"/>`;
+  let auto = 0;
+  for (const ch of doc.chains || []) {
+    if (!ch.hand || !ch.hand.enabled) continue;
+    const b = ch.hand.button || {}, own = !(b.angle === undefined || b.angle === null || b.angle === '');
+    const ang = own ? +b.angle : 120 + 26 * (++auto), d = ring * (b.distance || 1), r = 9 * (b.size || 1);
+    const a = ang * Math.PI / 180, x = cx + Math.cos(a) * d, y = cy - Math.sin(a) * d;
+    g += `<circle cx="${x}" cy="${y}" r="${r}" fill="var(--acc)" opacity="0.9"/><text x="${x}" y="${y + r + 11}" font-size="9" text-anchor="middle" fill="var(--text)">${esc((ch.hand.name || ch.name).slice(0, 14))}</text>`;
+  }
+  return g + `<text x="100" y="196" font-size="9" text-anchor="middle" fill="var(--dim)">grey: the game's buttons (roughly) · pink: extra hands</text></svg>`;
+}
 function renderInspector() {
   const box = $('#insp');
   if (!doc) {
@@ -708,6 +1114,8 @@ function renderInspector() {
     return;
   }
   if (tab === 'health') { box.innerHTML = hsInspector(); bindHsInspector(); return; }
+  if (tab === 'inv') { box.innerHTML = invInspector(); bindInvInspector(); return; }
+  if (tab === 'hit') { box.innerHTML = hitInspector(); bindHitInspector(); return; }
   if (tab === 'anim') { box.innerHTML = animInspectorHtml(); bindAnimateTab(); return; }
   if (tab === 'test') { box.innerHTML = injTesterHtml(); bindInjTester(); return; }
   if (tab === 'gear') { box.innerHTML = gearTabHtml(); bindGearTab(); return; }
@@ -738,7 +1146,39 @@ function renderInspector() {
       ${ch.segs.map((sg, k) => { const arts = doc.layers.filter(a => a.role.type === 'injury' && a.role.of === sg.layer); return `<div class="seg"><span>${k + 1}. ${arts.length ? arts.map(a => `<span class="pill">${a.role.state}</span>`).join(' ') : '<span class="muted">none yet</span>'}</span></div>`; }).join('')}
       <div class="muted" style="margin-top:4px">Add art: set an extra layer's role to <i>Injury art → ${esc(ch.name)} piece N</i>. Place pieces on the <b>Health screen</b> tab.</div>` : ''}
     </div>`;
-    if (ch.physics) {
+    {
+      const fo = ch.follow || '', hd = ch.hand || {}, co = ch.collide || {};
+      const opts = [['', '— its own motion —'], ['ArmF', 'Front arm'], ['ArmB', 'Back arm'], ['LegF', 'Front leg'], ['LegB', 'Back leg']];
+      h += `<h2>Works like a limb</h2><div class="sec">
+      <div class="row" title="Each piece bends like that arm or leg (upper, lower, hand/foot): an extra arm or leg that walks, climbs, ragdolls and dies with the body, no animation needed."><label>Moves with</label><select id="chFollow" style="flex:1">${opts.map(([v, t]) => `<option value="${v}" ${v === fo ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      ${fo ? `<div class="row" title="A little behind the real limb, so it doesn't move in perfect step"><label>Delay</label><input type="range" id="chFDelay" min="0" max="0.3" step="0.01" value="${ch.followDelay || 0}"><span class="v">${Math.round((ch.followDelay || 0) * 1000)} ms</span></div>
+      <div class="row"><label>Bend the other way</label><input id="chFMirror" type="checkbox" ${ch.followMirror ? 'checked' : ''}></div>` : ''}
+      <div class="row" title="Holds an item like a hand (a bag, a tool, food...). Shows on an outer ring of the inventory circle; V passes items between it and the hand in use. Needs extra hands allowed in game (the host decides in multiplayer)."><label>Holds items</label><input id="chHand" type="checkbox" ${hd.enabled ? 'checked' : ''}><span class="muted">extra hand, claw, tail, second head…</span></div>
+      ${hd.enabled ? `<div class="row"><label>Name in inventory</label><input id="chHandName" type="text" value="${esc(hd.name || ch.name)}" style="flex:1"></div>
+      <div class="row"><label>Holding piece</label><select id="chHandPiece" style="flex:1"><option value="-1" ${!(hd.piece >= 0) ? 'selected' : ''}>the last one (tip)</option>${ch.segs.map((sg, k) => `<option value="${k}" ${hd.piece === k ? 'selected' : ''}>${k + 1}. ${esc((RIG.layer(doc, sg.layer) || {}).name || '?')}</option>`).join('')}</select></div>
+      <div class="row" title="Off: it holds like the mouth (no guns or other hands-only items)"><label>Real hand</label><input id="chHandIsHand" type="checkbox" ${hd.isHand !== false ? 'checked' : ''}><span class="muted">can hold hands-only items</span></div>
+      ${(() => { const b = hd.button || {}; const auto = b.angle === undefined || b.angle === null || b.angle === '';
+        const icons = doc.layers.filter(o => o.role.type === 'ignore' || o.id === b.icon);
+        return `<div class="muted" style="margin:6px 0 2px">Its button on the inventory circle (more in the <a href="#" id="goInv">Inventory</a> tab)</div>
+        <div class="row" title="Off: it goes in the next free place on the outer ring"><label>Own place</label><input id="hbAuto" type="checkbox" ${auto ? '' : 'checked'}><span class="muted">${auto ? 'next free place' : 'set below'}</span></div>
+        ${auto ? '' : `<div class="row" title="Degrees around the circle: 0 = right, 90 = up, 180 = left, -90 = down"><label>Around</label><input type="range" id="hbAng" min="-180" max="180" step="1" value="${b.angle}"><span class="v">${Math.round(b.angle)}°</span></div>`}
+        <div class="row" title="1 = just outside the game's own buttons (never overlapping them)"><label>How far out</label><input type="range" id="hbDist" min="0.6" max="2" step="0.02" value="${b.distance || 1}"><span class="v">${Math.round((b.distance || 1) * 100)}%</span></div>
+        <div class="row"><label>Button size</label><input type="range" id="hbSize" min="0.5" max="2" step="0.05" value="${b.size || 1}"><span class="v">${Math.round((b.size || 1) * 100)}%</span></div>
+        <div class="row" title="A picture for the button (any layer that isn't used for anything else)"><label>Button picture</label><select id="hbIcon" style="flex:1"><option value="">the game's</option>${icons.map(o => `<option value="${o.id}" ${o.id === b.icon ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}</select></div>
+        ${handRingSvg()}`; })()}
+      ${!ch.injury.enabled ? '<div class="muted">Tip: turn on <b>Can be injured</b> so it can be hurt, shows on the health screen, and drops what it holds when torn off.</div>' : ''}` : ''}
+      <div class="row" title="An extra head: shows the character's eyes (blinking, moods) and opens its mouth when the real one does (talking, eating, voice chat). One brain: eating and talking still go through the real head. Turn on Holds items (Real hand off) so it can carry things in its mouth."><label>Is a head</label><input id="chHead" type="checkbox" ${(ch.head || {}).enabled ? 'checked' : ''}><span class="muted">second, third head…</span></div>
+      ${(ch.head || {}).enabled ? (() => { const hh = ch.head; const sg = ch.segs[hh.piece >= 0 && hh.piece < ch.segs.length ? hh.piece : ch.segs.length - 1]; const sl = sg && RIG.layer(doc, sg.layer);
+        const mouths = sg ? doc.layers.filter(a => a.role.type === 'state' && a.role.of === sg.layer).map(a => a.role.state) : [];
+        return `<div class="row"><label>Eyes</label><input id="chHeadEyes" type="checkbox" ${hh.eyes ? 'checked' : ''}><span class="muted">the character's own eyes, at this spot</span></div>
+        ${hh.eyes ? `<div class="row" title="Canvas pixels: where the middle of the eyes sits on this head"><label>Eyes at</label>x <input id="chEyeX" type="number" step="0.5" style="width:64px" value="${hh.eyesPoint ? hh.eyesPoint.x : 0}"> y <input id="chEyeY" type="number" step="0.5" style="width:64px" value="${hh.eyesPoint ? hh.eyesPoint.y : 0}"></div>
+        <div class="row"><label>Eye size</label><input type="range" id="chEyeS" min="0.5" max="2" step="0.05" value="${hh.eyesScale || 1}"><span class="v">${Math.round((hh.eyesScale || 1) * 100)}%</span></div>` : ''}
+        <div class="row"><label>Mouth moves</label><input id="chHeadMouth" type="checkbox" ${hh.mouth !== false ? 'checked' : ''}><span class="muted">${mouths.length ? mouths.map(m => `<span class="pill">${m}</span>`).join(' ') : 'add art: a layer\'s role → <i>' + esc(ch.name) + ': mouth open</i>'}</span></div>`; })() : ''}
+      <div class="row" title="Its pieces stay out of the ground: a tail lies on the floor when you lie down, a slug body drags along it. Needs Physics on."><label>Touches the ground</label><input id="chCollide" type="checkbox" ${co.enabled ? 'checked' : ''} ${ch.physics && !fo ? '' : 'disabled'}><span class="muted">${ch.physics && !fo ? 'collision' : 'needs Physics on'}</span></div>
+      ${co.enabled && ch.physics && !fo ? `<div class="row"><label>Gap to ground</label><input type="range" id="chColR" min="0" max="6" step="0.5" value="${co.radius !== undefined ? co.radius : 1.5}"><span class="v">${co.radius !== undefined ? co.radius : 1.5}px</span></div>` : ''}
+      </div>`;
+    }
+    if (ch.physics && !ch.follow) {
       h += `<h2>Motion</h2><div class="sec">` + SLIDERS.map(([k, label, mn, mx, st, tip]) =>
         `<div class="row" title="${tip}"><label>${label}</label><input type="range" data-k="${k}" min="${mn}" max="${mx}" step="${st}" value="${ch.motion[k]}"><span class="v" id="v_${k}">${(+ch.motion[k]).toFixed(st < 1 ? 2 : 0)}</span></div>`).join('') +
         `<div class="row"><label>Flap when</label><select id="chFlapWhen">${['never', 'air', 'always'].map(o => `<option ${o === ch.motion.flapWhen ? 'selected' : ''}>${o}</option>`).join('')}</select></div>
@@ -769,7 +1209,15 @@ function renderInspector() {
 
   h += `<h2>Character</h2><div class="sec">
     ${RIG.HIDEABLE.map(o => `<div class="row"><label>Hide game ${o.toLowerCase()}</label><input type="checkbox" data-hide="${o}" ${doc.hideObjects.includes(o) ? 'checked' : ''}></div>`).join('')}
+    <div class="row" title="Reskin: the game's character with your art on it (anything you don't replace stays the game's). Custom character: only your art shows; the game's body works unseen underneath (health, items, hitboxes)."><label>Kind</label><select id="bodyKind" style="flex:1"><option value="reskin" ${doc.customBody ? '' : 'selected'}>Reskin / add parts</option><option value="custom" ${doc.customBody ? 'selected' : ''}>Custom character (only my art)</option></select></div>
+    ${doc.customBody ? '<div class="muted" style="margin:2px 0 6px">The game\'s art is all hidden. Map your art to the game\'s parts (they carry health, items and injuries), add extra parts for anything more (legs, wings, a tail…), then set its <b>Height</b>, draw its <b>Hitboxes</b>, and make its own animations in <b>Animate</b> (choose "my own animation").</div>' : ''}
+    <div class="row" title="The character select groups rigs by this name; each rig of a character is one of its outfits"><label>Character name</label><input id="charName" type="text" value="${esc(doc.character || '')}" placeholder="${esc(doc.name || '')}" style="flex:1"></div>
+    <div class="row"><label>Outfit name</label><input id="outfitName" type="text" value="${esc(doc.outfit || '')}" placeholder="Default" style="flex:1"></div>
     <div class="row"><label>Hide game tail</label><input type="checkbox" id="hideTail" ${doc.hideVanillaTail ? 'checked' : ''}></div>
+    <div class="row" title="How tall your character is in game, in the game's units. Everything scales with it: the art, the body, the hitboxes, steps and ledges."><label>Height</label><input type="range" id="szH" min="2.1" max="8.3" step="0.05" value="${RIG.heightOf(doc).toFixed(2)}"><input type="number" id="szHn" min="2.1" max="8.3" step="0.05" value="${RIG.heightOf(doc).toFixed(2)}" style="width:62px"></div>
+    <div class="row"><label></label>${['experiment', 'milky', 'dune'].map(k => `<button data-szh="${k}" style="margin:1px">${SPECIES_NAMES[k] || k} ${RIG.speciesHeight(k)}</button>`).join('')}</div>
+    ${(() => { const H = RIG.heightOf(doc), lo = Math.min(...['experiment', 'milky', 'dune'].map(RIG.speciesHeight)), hi = Math.max(...['experiment', 'milky', 'dune'].map(RIG.speciesHeight)); return H < lo - 0.001 || H > hi + 0.001 ? '<div class="muted">Shorter than Milky or taller than Dune needs <b>Any size</b> turned on in game (the host decides in multiplayer); otherwise the nearest allowed height is used.</div>' : ''; })()}
+    <div class="row" title="How easy the body parts are to hit, compared to the game's own. Only used where 'Custom hitboxes' is allowed in game (the host decides in multiplayer)."><label>Hitboxes</label><input type="range" id="hbScale" min="0.5" max="1.5" step="0.05" value="${(doc.hitbox || {}).scale || 1}"><span class="v">${Math.round(((doc.hitbox || {}).scale || 1) * 100)}%</span></div>
     <div class="row"><label>Art scale</label><select id="artScale" title="How many times bigger than the game's own sprites your art is drawn. Bigger art stays sharp in game (exported with more pixels per unit).">${[1, 2, 3, 4, 5, 6, 8].map(k => `<option value="${k}" ${Math.round((doc.ppu || 8) / 8) === k ? 'selected' : ''}>${k}× ${k === 1 ? '(game size)' : 'HD'}</option>`).join('')}</select>${(doc.ppu || 8) > 8 ? '<button id="artShrink" title="Shrink every layer pixel-perfectly to the game\'s own size">Shrink to 1×</button>' : ''}</div>
     ${gearBox()}
     <div class="row"><label>All layers</label><button id="dlAll" title="Every layer as a full-size PNG, to edit in Photoshop, Krita, Paint…; drop them back to update">⬇ PNGs</button><button id="dlPsd" title="Every layer in one Photoshop file (PSD), to repaint everything at once in Photoshop, Krita, GIMP, Photopea…">⬇ PSD</button><button id="dlPsb" title="Same as a PSB (Photoshop large document)">⬇ PSB</button><button id="upPsd" title="Bring your edited PSD / PSB back: same-named layers are updated, new ones are added">⬆ Update from PSD…</button></div>
@@ -800,6 +1248,35 @@ function renderInspector() {
     $('#chPreset').onchange = (e) => { applyPreset(ch, e.target.value); refresh(); };
     $('#chPhys').onchange = (e) => { ch.physics = e.target.checked; refresh(); };
     $('#injOn').onchange = (e) => { ch.injury.enabled = e.target.checked; if (!ch.injury.name) ch.injury.name = ch.name; refresh(); };
+    $('#chFollow').onchange = (e) => { if (e.target.value) { ch.follow = e.target.value; ch.physics = false; } else delete ch.follow; refresh(); startTestIfOpen(); };
+    const fd = $('#chFDelay'); if (fd) fd.oninput = (e) => { ch.followDelay = +e.target.value; fd.nextElementSibling.textContent = Math.round(ch.followDelay * 1000) + ' ms'; };
+    const fm = $('#chFMirror'); if (fm) fm.onchange = (e) => { ch.followMirror = e.target.checked; };
+    $('#chHand').onchange = (e) => { ch.hand = Object.assign({ name: ch.name, isHand: true, piece: -1 }, ch.hand || {}, { enabled: e.target.checked }); refresh(); };
+    const hn = $('#chHandName'); if (hn) hn.oninput = (e) => { ch.hand.name = e.target.value; };
+    const gi = $('#goInv'); if (gi) gi.onclick = (e) => { e.preventDefault(); INV.sel = 'h:' + ch.id; tabTo('inv'); };
+    const hbB = () => (ch.hand.button = ch.hand.button || { angle: null, distance: 1, size: 1 });
+    const ha = $('#hbAuto'); if (ha) ha.onchange = (e) => { hbB().angle = e.target.checked ? 120 : null; refresh(); };
+    const hg = $('#hbAng'); if (hg) hg.oninput = (e) => { hbB().angle = +e.target.value; hg.nextElementSibling.textContent = Math.round(+e.target.value) + '°'; const r = $('#handRing'); if (r) r.outerHTML = handRingSvg(); };
+    const hdist = $('#hbDist'); if (hdist) hdist.oninput = (e) => { hbB().distance = +e.target.value; hdist.nextElementSibling.textContent = Math.round(+e.target.value * 100) + '%'; const r = $('#handRing'); if (r) r.outerHTML = handRingSvg(); };
+    const hsz = $('#hbSize'); if (hsz) hsz.oninput = (e) => { hbB().size = +e.target.value; hsz.nextElementSibling.textContent = Math.round(+e.target.value * 100) + '%'; const r = $('#handRing'); if (r) r.outerHTML = handRingSvg(); };
+    const hic = $('#hbIcon'); if (hic) hic.onchange = (e) => { hbB().icon = e.target.value || null; };
+    const hp = $('#chHandPiece'); if (hp) hp.onchange = (e) => { ch.hand.piece = +e.target.value; };
+    const hi = $('#chHandIsHand'); if (hi) hi.onchange = (e) => { ch.hand.isHand = e.target.checked; };
+    $('#chHead').onchange = (e) => {
+      if (e.target.checked) {
+        const sg = ch.segs[ch.segs.length - 1], sl = sg && RIG.layer(doc, sg.layer);
+        ch.head = Object.assign({ piece: -1, mouth: true, eyes: true, eyesScale: 1, eyesPoint: sl ? { x: sl.x + sl.w / 2, y: sl.y + sl.h * 0.45 } : { x: 0, y: 0 } }, ch.head || {}, { enabled: true });
+      } else if (ch.head) ch.head.enabled = false;
+      refresh();
+    };
+    const he = $('#chHeadEyes'); if (he) he.onchange = (e) => { ch.head.eyes = e.target.checked; refresh(); };
+    const ex = $('#chEyeX'), ey = $('#chEyeY');
+    if (ex) ex.oninput = () => { ch.head.eyesPoint = { x: +ex.value, y: +ey.value }; draw(); };
+    if (ey) ey.oninput = () => { ch.head.eyesPoint = { x: +ex.value, y: +ey.value }; draw(); };
+    const es = $('#chEyeS'); if (es) es.oninput = (e) => { ch.head.eyesScale = +e.target.value; es.nextElementSibling.textContent = Math.round(ch.head.eyesScale * 100) + '%'; };
+    const hm = $('#chHeadMouth'); if (hm) hm.onchange = (e) => { ch.head.mouth = e.target.checked; };
+    const cc = $('#chCollide'); if (cc) cc.onchange = (e) => { ch.collide = Object.assign({ radius: 1.5 }, ch.collide || {}, { enabled: e.target.checked }); refresh(); };
+    const cr = $('#chColR'); if (cr) cr.oninput = (e) => { ch.collide.radius = +e.target.value; cr.nextElementSibling.textContent = ch.collide.radius + 'px'; };
     const inn = $('#injName'); if (inn) inn.oninput = (e) => { ch.injury.name = e.target.value; };
     bindGroupsBox(ch);
     const it = $('#injTear'); if (it) it.onchange = (e) => { ch.injury.tearOff = e.target.checked; startTestIfOpen(); };
@@ -825,6 +1302,14 @@ function renderInspector() {
     const dl = $('#lyDl'), rp = $('#lyRep'); if (dl) dl.onclick = () => downloadLayer(l); if (rp) rp.onclick = () => pickReplace(l); bindAddArt(l);
     const de = $('#lyDel'); if (de) de.onclick = () => deleteLayer(l); }
   const is = $('#injState'); if (is && l) is.onchange = (e) => { l.role.state = e.target.value; updateHeadStates(); };
+  const cn = $('#charName'); if (cn) cn.oninput = (e) => { doc.character = e.target.value.trim() || undefined; };
+  const bk = $('#bodyKind'); if (bk) bk.onchange = (e) => { pushUndo(); doc.customBody = e.target.value === 'custom' || undefined; renderInspector(); startTestIfOpen(); draw(); };
+  const on = $('#outfitName'); if (on) on.oninput = (e) => { doc.outfit = e.target.value.trim() || undefined; };
+  const setH = (h, rerender) => { h = Math.max(2.1, Math.min(8.3, +h || 5)); doc.size = { height: Math.round(h * 100) / 100 }; const a = $('#szH'), n = $('#szHn'); if (a) a.value = h; if (n && document.activeElement !== n) n.value = h.toFixed(2); if (rerender) renderInspector(); startTestIfOpen(); };
+  const szh = $('#szH'); if (szh) { szh.oninput = (e) => setH(e.target.value); szh.onchange = () => renderInspector(); }
+  const szn = $('#szHn'); if (szn) szn.onchange = (e) => setH(e.target.value, true);
+  box.querySelectorAll('[data-szh]').forEach(b => b.onclick = () => setH(RIG.speciesHeight(b.dataset.szh), true));
+  const hbs = $('#hbScale'); if (hbs) hbs.oninput = (e) => { doc.hitbox = { scale: +e.target.value }; hbs.nextElementSibling.textContent = Math.round(doc.hitbox.scale * 100) + '%'; };
   box.querySelectorAll('[data-hide]').forEach(c => c.onchange = () => {
     const o = c.dataset.hide; doc.hideObjects = doc.hideObjects.filter(x => x !== o); if (c.checked) doc.hideObjects.push(o);
   });
@@ -1331,6 +1816,7 @@ function draw(options = {}) {
   const W = cv.width / d, H = cv.height / d;
   if (tab === 'test' || tab === 'anim' || tab === 'gear') return; // test loop draws itself
   if (tab === 'health') { drawHealth(W, H); return; }
+  if (tab === 'inv') { drawInv(W, H); return; }
   drawChecker(W, H);
   if (!doc) return;
   ctx.imageSmoothingEnabled = false;
@@ -1452,6 +1938,8 @@ cv.addEventListener('pointerdown', (e) => {
   if (tab === 'anim') { animPointerDown(sx, sy, e); return; }
   if (tab === 'gear') { gearPointerDown(sx, sy); return; }
   if (tab === 'test') { grab = { sx, sy }; return; }
+  if (tab === 'inv') { invPointerDown(sx, sy); return; }
+  if (tab === 'hit') { hitPointerDown(sx, sy); return; }
   if (tab === 'health') {
     const corner = hsCornerAt(sx, sy);
     if (corner) { const c = corner.it, v = corner.v; hsResize = { key: c.key, cx: v.cx + c.x * v.z, cy: v.cy - c.y * v.z, d0: Math.max(4, Math.hypot(sx - (v.cx + c.x * v.z), sy - (v.cy - c.y * v.z))), s0: c.size || 1 }; return; }
@@ -1484,6 +1972,8 @@ cv.addEventListener('pointermove', (e) => {
   if (tab === 'anim') { animPointerMove(sx, sy); return; }
   if (tab === 'gear') { gearPointerMove(sx, sy); return; }
   if (tab === 'test') { if (grab) { grab.sx = sx; grab.sy = sy; } return; }
+  if (tab === 'inv') { invPointerMove(sx, sy); return; }
+  if (tab === 'hit') { hitPointerMove(sx, sy); return; }
   if (tab === 'health') {
     if (hsResize) { const d1 = Math.hypot(sx - hsResize.cx, sy - hsResize.cy); hsSetSize(hsResize.key, Math.round(hsResize.s0 * d1 / hsResize.d0 * 20) / 20); draw(); }
     else if (hsDrag) { const e2 = hsEntry(hsDrag.key); e2.x = Math.round(hsDrag.x0 + (sx - hsDrag.sx) / hsDrag.z); e2.y = Math.round(hsDrag.y0 - (sy - hsDrag.sy) / hsDrag.z); if (e2.mirror === undefined) e2.mirror = hsDrag.mirror; draw(); }
@@ -1529,10 +2019,11 @@ document.addEventListener('keydown', (e) => {
   if (!l) return;
   e.preventDefault(); const k = e.shiftKey ? 5 : 1; moveLayersBy(selSet.size > 1 ? selectedLayers() : [l], d[0] * k, d[1] * k); draw();
 });
-cv.addEventListener('pointerup', () => { if (GS.drag) { GS.drag = null; renderInspector(); renderLayers(); } if (AS.drag) { AS.drag = null; renderInspector(); } if (hsDrag || hsResize) { hsDrag = null; hsResize = null; renderInspector(); } if (drag && drag.type === 'skel') hint('Skeleton moved. Body parts follow it automatically.'); drag = null; grab = null; });
+cv.addEventListener('pointerup', () => { INV.pan = null; if (HB.drag) { HB.drag = null; renderInspector(); } if (INV.drag) { INV.drag = null; renderInspector(); } if (GS.drag) { GS.drag = null; renderInspector(); renderLayers(); } if (AS.drag) { AS.drag = null; renderInspector(); } if (hsDrag || hsResize) { hsDrag = null; hsResize = null; renderInspector(); } if (drag && drag.type === 'skel') hint('Skeleton moved. Body parts follow it automatically.'); drag = null; grab = null; });
 cv.addEventListener('wheel', (e) => {
   e.preventDefault(); const r = cv.getBoundingClientRect(); const sx = e.clientX - r.left, sy = e.clientY - r.top;
   if (tab === 'test' || tab === 'gear') { test.zoom = Math.max(6, Math.min(140, test.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); return; }
+  if (tab === 'inv') { invWheel(sx, sy, e.deltaY < 0); return; }
   if (tab === 'health') { // scroll over a part = resize it
     const hit = hsAt(sx, sy); if (!hit) return;
     selHs = hit.it.key; hsSetSize(hit.it.key, Math.round((hit.it.size || 1) * (e.deltaY < 0 ? 1.05 : 1 / 1.05) * 100) / 100); renderInspector(); draw(); return;
@@ -1540,8 +2031,8 @@ cv.addEventListener('wheel', (e) => {
   const before = toCanvas(sx, sy); view.zoom = Math.max(1, Math.min(48, view.zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2)));
   view.panX = sx - before.x * view.zoom; view.panY = sy - before.y * view.zoom; draw();
 }, { passive: false });
-$('#zoomIn').onclick = () => { if (tab === 'test' || tab === 'gear') test.zoom = Math.min(140, test.zoom * 1.25); else { view.zoom = Math.min(48, view.zoom * 1.25); draw(); } };
-$('#zoomOut').onclick = () => { if (tab === 'test' || tab === 'gear') test.zoom = Math.max(6, test.zoom / 1.25); else { view.zoom = Math.max(1, view.zoom / 1.25); draw(); } };
+$('#zoomIn').onclick = () => { if (tab === 'inv') { invZoom(1.25); return; } if (tab === 'test' || tab === 'gear') test.zoom = Math.min(140, test.zoom * 1.25); else { view.zoom = Math.min(48, view.zoom * 1.25); draw(); } };
+$('#zoomOut').onclick = () => { if (tab === 'inv') { invZoom(1 / 1.25); return; }  if (tab === 'test' || tab === 'gear') test.zoom = Math.max(6, test.zoom / 1.25); else { view.zoom = Math.max(1, view.zoom / 1.25); draw(); } };
 $('#btnSkel').onclick = (e) => { showSkel = !showSkel; e.target.classList.toggle('on', showSkel); draw(); };
 $('#btnMoveSkel').onclick = (e) => { moveSkel = !moveSkel; e.target.classList.toggle('on', moveSkel); hint(moveSkel ? 'Drag anywhere to move the game skeleton under your drawing. Click the button again when done.' : rigHint()); };
 $('#btnAlign').onclick = () => { if (!doc) return; RIG.autoAlign(doc); draw(); toast('Skeleton lined up with your body parts'); };
@@ -1552,14 +2043,18 @@ let test = null, grab = null, raf = 0;
 function tabTo(t) {
   tab = t; $('#tabRig').classList.toggle('on', t === 'rig'); $('#tabTest').classList.toggle('on', t === 'test'); $('#tabHealth').classList.toggle('on', t === 'health'); $('#tabAnim').classList.toggle('on', t === 'anim'); $('#tabGear').classList.toggle('on', t === 'gear');
   $('#rigTools').style.display = t === 'rig' ? '' : 'none'; $('#testTools').style.display = t === 'test' ? '' : 'none'; $('#gearTools').style.display = t === 'gear' ? '' : 'none';
-  $('#healthTools').style.display = t === 'health' ? '' : 'none'; $('#animTools').style.display = t === 'anim' ? '' : 'none';
+  $('#healthTools').style.display = t === 'health' ? '' : 'none'; $('#invTools').style.display = t === 'inv' ? '' : 'none'; $('#tabInv').classList.toggle('on', t === 'inv'); $('#animTools').style.display = t === 'anim' ? '' : 'none';
   $('#dope').style.display = t === 'anim' ? 'flex' : 'none';
+  $('#tabHit').classList.toggle('on', t === 'hit'); $('#hitTools').style.display = t === 'hit' ? '' : 'none';
+  if (t === 'hit') { if (!gameMode()) toast('Hitboxes needs the game template from your game (click "no game template" at the top to load it).', 7000); startTest(); renderInspector(); hint('Where each body part can be hit in game. Click a part, drag its box to move it, drag an edge to resize. The dashed box is the body (its height is the Height in the Rig tab).'); return; }
   if (t === 'anim') { if (!gameMode()) { toast('Animate needs the game template from your game (the mod saves it; click "no game template" at the top to load it).', 7000); } startTest(); renderInspector(); hint('Pick an animation, pick a bone (click it, or in the list), then turn / move it at any moment of the animation. Your changes are added on top of the game\'s animation, in game too.'); return; }
   if (t === 'gear') { fillGearPoses(); if (!RIG.GAME) toast('Gear needs the game template from your game (click "no game template" at the top to load it).', 7000); startTest(); renderInspector(); hint('Pick an item on the right. It is shown worn on your character: <b>drag it</b> to fit (arrow keys nudge), check it in other poses, then Download → repaint → Replace.'); return; }
   if (t === 'test') { startTest(); renderInspector(); hint('Play with the keyboard (A/D, Space, S, W, F, T…), or pick a demo. <span style="opacity:.8">This is a <b>simulation</b> based on Casualties: Unknown\'s code by Orson — not the game itself.</span>'); }
-  else { cancelAnimationFrame(raf); raf = 0; hint(t === 'health' ? 'The in-game health screen. Drag any part to move it; click it to give it your own outline/middle art. Injurable pieces appear here too.' : rigHint()); renderInspector(); draw(); }
+  else { cancelAnimationFrame(raf); raf = 0; hint(t === 'health' ? 'The in-game health screen. Drag any part to move it; click it to give it your own outline/middle art. Injurable pieces appear here too.' : t === 'inv' ? 'Your inventory circle: click any piece to move it, resize it (scroll) or give it your own pictures. Extra hands\' buttons go on the dashed ring.' : rigHint()); renderInspector(); draw(); }
 }
-const startTestIfOpen = () => { if (tab === 'test' || tab === 'gear') startTest(); };
+const startTestIfOpen = () => { if (tab === 'test' || tab === 'gear' || tab === 'hit') startTest(); };
+$('#tabInv').onclick = () => tabTo('inv');
+$('#tabHit').onclick = () => tabTo('hit');
 $('#tabGear').onclick = () => tabTo('gear'); $('#tabRig').onclick = () => tabTo('rig'); $('#tabTest').onclick = () => tabTo('test'); $('#tabHealth').onclick = () => tabTo('health'); $('#tabAnim').onclick = () => tabTo('anim');
 $('#actPrev').onchange = () => {
   if (!test) return; const A = $('#actPrev').value || 'idle';
@@ -1698,7 +2193,7 @@ function gearThumb(sprite) {
 }
 let gearFilter = '';
 function gearTabHtml() {
-  if (!RIG.GAME) return `<h2>Gear</h2><div class="sec muted">Load the game template first (click <b>no game template</b> at the top and pick <code>BepInEx\plugins\AdvancedRigs\GameTemplate</code>). The mod writes it the first time you play, or press <b>F10</b> in game.</div>`;
+  if (!RIG.GAME) return `<h2>Gear</h2><div class="sec muted">Load the game template first: click <b>no game template</b> at the top and pick the <b>GameTemplate</b> folder (in the game: rig menu → <b>Open the template folder</b>). The mod saves it by itself when the game starts.</div>`;
   const list = gearList();
   if (!list.length) return `<h2>Gear</h2><div class="sec muted">Your game template has no wearables in it. Load into a world and press <b>F10</b> in game to save it again, then reload it here.</div>`;
   if (!GS.item || !list.some(g => g.id === GS.item)) { GS.item = list[0].id; GS.piece = list[0].sprite; }
@@ -1797,10 +2292,29 @@ $('#animClip').onchange = (e) => { AS.clip = e.target.value; AS.t = 0; AS.sel.cl
 const clipOf = () => RIG.GAME && RIG.GAME.clips[AS.clip];
 const clipLen = () => { const c = clipOf(); return c ? (c.length || 0) : 0; };
 const clipFps = () => { const c = clipOf(); return (c && c.fps) || 30; };
+// every bone the clip can move: all body parts (a body animation can also pose the arms: it goes on top of the
+// arms animation, like in game), plus any other bone the game's clip animates (pivots, helpers…)
 function bonesOfClip() {
   const c = clipOf(); if (!c || !RIG.GAME) return [];
   const arms = c.animator === 'arms', ap = (RIG.GAME.tpl.armsPath || 'UpTorso/Arms') + '/';
-  return (RIG.GAME.tpl.limbs || []).filter(L => L.anim && (arms ? L.anim.startsWith(ap) : !L.anim.startsWith(ap))).map(L => ({ part: L.name, bone: arms ? L.anim.slice(ap.length) : L.anim }));
+  const out = [], seen = new Set();
+  for (const L of RIG.GAME.tpl.limbs || []) {
+    if (!L.anim) continue;
+    const inArms = L.anim.startsWith(ap);
+    if (arms && !inArms) continue;           // the arms animation only reaches the arms
+    const bone = arms ? L.anim.slice(ap.length) : L.anim;
+    out.push({ part: L.name, bone, overArms: !arms && inArms }); seen.add(bone);
+  }
+  for (const path in c.tracks || {}) {
+    if (seen.has(path) || !path) continue;
+    out.push({ part: path.split('/').pop(), bone: path, extra: true }); seen.add(path);
+  }
+  // moving parts (tail, wings, extra arms, necks…): each piece can be turned during this animation, on top of its
+  // own physics / arm-following
+  if (!arms) for (const ch of doc.chains || []) ch.segs.forEach((sg, k) => {
+    out.push({ part: ch.segs.length > 1 ? ch.name + ' ' + (k + 1) : ch.name, bone: 'chain:' + ch.name + '/' + k, chain: true });
+  });
+  return out;
 }
 const animEntry = () => (doc && doc.animations || {})[AS.clip];
 const clipMode = () => { const a = animEntry(); return a && a.mode ? a.mode : (a ? 'add' : 'off'); };
@@ -1862,12 +2376,12 @@ function deleteSelKeys() {
   AS.sel.clear(); cleanupAnim(); renderInspector();
 }
 function animInspectorHtml() {
-  if (!gameMode()) return `<h2>Animate</h2><div class="sec muted">This needs the <b>game template</b> from your game, which holds the game's animations. The mod saves it to <code>BepInEx\\plugins\\AdvancedRigs\\GameTemplate</code> the first time you play with it (or press <b>F10</b> in game). Then click <b>no game template</b> at the top and pick that folder.</div>`;
+  if (!gameMode()) return `<h2>Animate</h2><div class="sec muted">This needs the <b>game template</b> from your game, which holds the game's animations. The mod saves it to the <b>GameTemplate</b> folder next to the mod when the game starts (in the game: rig menu → <b>Open the template folder</b>). Then click <b>no game template</b> at the top and pick that folder.</div>`;
   const c = clipOf(); if (!c) return '<div class="empty">Pick an animation</div>';
   const bones = bonesOfClip(), mode = clipMode(), a = animEntry();
   let h = `<h2>${esc(CLIP_LABEL[AS.clip] || AS.clip)}</h2><div class="sec"><span class="muted">${c.length ? c.length.toFixed(2) + ' s, ' + (c.loop ? 'loops' : 'plays once') : 'a single pose (the game blends it by speed)'} · ${c.animator === 'arms' ? 'arms' : 'body'} · <b>${mode === 'off' ? 'game default' : mode === 'add' ? 'adjusted' : 'your own'}</b></span>
     <div class="muted" style="margin:6px 0">${mode === 'replace' ? 'Replace: every bone with keys follows your poses; bones without keys stay the game\'s.' : mode === 'add' ? 'Adjust: your keys are added to the game\'s animation.' : 'Game default. Pick Adjust or Replace under the canvas to change it (or just move a bone).'}</div>`;
-  h += bones.map(b => { const has = a && a.bones && a.bones[b.bone] && a.bones[b.bone].length; return `<button data-bone="${b.bone}" class="${AS.bone === b.bone ? 'on' : ''}" style="margin:2px">${esc(RIG.PART_LABEL[b.part] || b.part)}${has ? ' ◆' : ''}</button>`; }).join('');
+  h += bones.map(b => { const has = a && a.bones && a.bones[b.bone] && a.bones[b.bone].length; return `<button data-bone="${b.bone}" class="${AS.bone === b.bone ? 'on' : ''}" style="margin:2px" title="${b.overArms ? 'Goes on top of the arms animation (attack, aim, carry…)' : b.extra ? 'Another bone this animation moves' : ''}">${b.overArms ? '↳ ' : ''}${esc(RIG.PART_LABEL[b.part] || b.part)}${has ? ' ◆' : ''}</button>`; }).join('');
   h += `</div>`;
   if (AS.bone) {
     const cur = boneNow(AS.bone), rest = test && test.ga ? test.ga.rest(c.animator === 'arms' ? test.ga.armsPath + '/' + AS.bone : AS.bone) : [0, 0, 0];
@@ -1875,8 +2389,8 @@ function animInspectorHtml() {
     const xv = rep ? cur.x - rest[0] : cur.x, yv = rep ? cur.y - rest[1] : cur.y;
     h += `<h2>${esc(RIG.PART_LABEL[(bones.find(b => b.bone === AS.bone) || {}).part] || AS.bone)} · ${AS.t.toFixed(2)} s</h2><div class="sec">
       <div class="row"><label>${rep ? 'Angle' : 'Turn'}</label><input type="range" id="akR" min="-180" max="180" step="0.5" value="${(cur.r || 0).toFixed(1)}"><input type="number" id="akRn" step="0.5" value="${(cur.r || 0).toFixed(1)}"></div>
-      <div class="row"><label>Move ↔ px</label><input type="range" id="akX" min="-24" max="24" step="0.5" value="${(xv * 8).toFixed(1)}"><input type="number" id="akXn" step="0.5" value="${(xv * 8).toFixed(1)}"></div>
-      <div class="row"><label>Move ↕ px</label><input type="range" id="akY" min="-24" max="24" step="0.5" value="${(yv * 8).toFixed(1)}"><input type="number" id="akYn" step="0.5" value="${(yv * 8).toFixed(1)}"></div>
+      ${AS.bone && AS.bone.startsWith('chain:') ? (doc.animations[AS.clip] && doc.animations[AS.clip].mode === 'replace' ? '<div class="muted">This is your own animation, so this sets the piece\'s whole pose (from its drawn shape); its own motion doesn\'t show while it plays.</div>' : '<div class="muted">Moving parts can only be turned here; it adds to their own motion. (In your own animations it sets their whole pose.)</div>') : `<div class="row"><label>Move ↔ px</label><input type="range" id="akX" min="-24" max="24" step="0.5" value="${(xv * 8).toFixed(1)}"><input type="number" id="akXn" step="0.5" value="${(xv * 8).toFixed(1)}"></div>
+      <div class="row"><label>Move ↕ px</label><input type="range" id="akY" min="-24" max="24" step="0.5" value="${(yv * 8).toFixed(1)}"><input type="number" id="akYn" step="0.5" value="${(yv * 8).toFixed(1)}"></div>`}
       <div class="muted">Drag the bone on the canvas to turn it (Shift+drag moves it). Changing a value keys it at the playhead.</div>
       <div class="row"><button id="akClearBone">Clear this bone's keys</button><button id="akClearClip">Clear all keys</button></div></div>`;
   }
@@ -2155,9 +2669,10 @@ function loop(now) {
   const ease = (cur, to, k) => cur + (to - cur) * Math.min(1, dt * k);
   b.t += dt;
   let act = A;
-  const gearMode = tab === 'gear';
+  const hitMode = tab === 'hit';
+  const gearMode = tab === 'gear' || hitMode;
   const animMode = tab === 'anim';
-  if (gearMode) { T.vx = 0; T.vy = 0; b.x = 0; b.y = 0; b.facing = GS.facing; b.accelRot = 0; T.grounded = true; act = 'idle'; if (GS.playing) GS.t += dt; }
+  if (gearMode) { T.vx = 0; T.vy = 0; b.x = 0; b.y = 0; b.facing = hitMode ? 1 : GS.facing; b.accelRot = 0; T.grounded = true; act = 'idle'; if (GS.playing) GS.t += dt; }
   else if (animMode) { T.vx = 0; T.vy = 0; b.x = 0; b.y = 0; b.facing = 1; b.accelRot = 0; T.grounded = true; act = 'idle';
     const c = clipOf(); if (c && AS.playing && c.length > 0) { AS.t += dt * AS.speed; if (AS.t > c.length) AS.t = c.loop ? AS.t % c.length : 0; }
     drawDope();
@@ -2203,16 +2718,18 @@ function loop(now) {
   if (act === 'climb' || act === 'swim') b.walk += dt * (act === 'climb' ? (A === 'play' ? Math.abs(T.vy) * 1.6 : 5) : 4);
   else b.walk += dt * Math.abs(T.vx) * 2.2;
   b.tailAngle = ease(b.tailAngle, Math.abs(T.vx) > 1.4 ? -6 : 23.6, 3);
-  let frames;
+  let frames, curPose = null;
   const useGame = gameMode() && T.ga && !lying;
   if (gearMode && gameMode() && T.ga) {
     T.ga.overrides = doc.animations || {};
-    const P = GEAR_POSES.find(x => x[0] === GS.pose) || GEAR_POSES[0], ga = T.ga;
-    const tb = ga.clips[P[1]] ? GS.t % Math.max(0.001, ga.clips[P[1]].length || 0.001) : 0, ta = ga.clips[P[2]] ? GS.t % Math.max(0.001, ga.clips[P[2]].length || 0.001) : 0;
-    frames = RIG.gameFrames(ga, ga.combine(ga.clipPose(P[1], tb), ga.clipPose(P[2], ta)), { x: 0, y: 0, facing: GS.facing, accelRot: 0, crouchAmount: 0, grounded: true, tailAngle: b.tailAngle });
+    const P = hitMode ? GEAR_POSES[0] : (GEAR_POSES.find(x => x[0] === GS.pose) || GEAR_POSES[0]), ga = T.ga, gt = hitMode ? 0 : GS.t;
+    const tb = ga.clips[P[1]] ? gt % Math.max(0.001, ga.clips[P[1]].length || 0.001) : 0, ta = ga.clips[P[2]] ? gt % Math.max(0.001, ga.clips[P[2]].length || 0.001) : 0;
+    curPose = ga.combine(ga.clipPose(P[1], tb), ga.clipPose(P[2], ta));
+    frames = RIG.gameFrames(ga, curPose, { x: 0, y: 0, facing: hitMode ? 1 : GS.facing, accelRot: 0, crouchAmount: 0, grounded: true, tailAngle: b.tailAngle });
   } else if (animMode && gameMode() && T.ga) {
     T.ga.overrides = doc.animations || {};
-    frames = RIG.gameFrames(T.ga, T.ga.single(AS.clip, AS.t), { x: 0, y: 0, facing: 1, accelRot: 0, crouchAmount: 0, grounded: true, tailAngle: b.tailAngle });
+    curPose = T.ga.single(AS.clip, AS.t);
+    frames = RIG.gameFrames(T.ga, curPose, { x: 0, y: 0, facing: 1, accelRot: 0, crouchAmount: 0, grounded: true, tailAngle: b.tailAngle });
   } else if (useGame) {
     // the game's Animator: same parameters Body.cs feeds it, same clips, same blend trees
     const crouchT = act === 'crouch' ? 1 : 0;
@@ -2228,11 +2745,19 @@ function loop(now) {
     };
     if (act === 'swim') G.grounded = false;
     T.ga.overrides = doc.animations || {};
-    const pose = T.ga.update(dt, G);
+    const pose = T.ga.update(dt, G); curPose = pose;
     frames = RIG.gameFrames(T.ga, pose, { x: b.x, y: b.y, facing: b.facing, accelRot: b.accelRot || 0, crouchAmount: T.crouchAmt, grounded: G.grounded, tailAngle: b.tailAngle });
   } else frames = RIG.bodyFrames(b);
   const airborne = !onGround && act !== 'climb' && act !== 'swim';
-  T.rt.update(dt, { frames, alive, moving, airborne });
+  const floorY = -(((useGame || animMode || gearMode) && gameMode()) ? moveConsts(T).footBottom : 2.415 + 0.7); // world y of the floor
+  // the character's height (Rig tab): everything scales about the feet, like the mod's body size
+  const sizeK = !animMode && !gearMode && doc ? RIG.heightOf(doc) / RIG.speciesHeight((RIG.GAME && RIG.GAME.species) || doc.species) : 1;
+  if (Math.abs(sizeK - 1) > 0.001) {
+    const px = b.x, py = b.y + floorY, Sm = RIG.M.mul(RIG.M.T(px, py), RIG.M.mul([sizeK, 0, 0, sizeK, 0, 0], RIG.M.T(-px, -py)));
+    for (const k in frames) if (Array.isArray(frames[k]) && frames[k].length === 6) frames[k] = RIG.M.mul(Sm, frames[k]);
+  }
+  T.sizeK = sizeK;
+  T.rt.update(dt, { frames, alive, moving, airborne, pose: curPose, groundY: floorY });
   // mouth: hold T to talk (the game opens the mouth from body.eatTime: half above 0, open above 0.15)
   T.eat = Math.max(0, (T.eat || 0) - dt);
   if (keys.has('t') && T.eat <= 0) T.eat = (0.05 + Math.random() * 0.05) * (Math.random() < 0.3 ? 2.5 : 1);
@@ -2265,6 +2790,15 @@ function loop(now) {
     if (act === 'climb') { ctx.fillStyle = '#1a1c22'; ctx.fillRect(sx(b.x + 0.9 * b.facing) - (b.facing > 0 ? 0 : 0.6 * z), 0, 0.6 * z, Math.min(H, groundY)); }
     if (groundY < H + 2 && !(REC.on && REC.clear)) { ctx.fillStyle = PAL.ground; ctx.fillRect(0, groundY, W, H - groundY); ctx.strokeStyle = PAL.groundLine; ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke(); }
   }
+  // how tall the game's characters are, and yours (Rig tab: Height)
+  if (!REC.on && !gearMode && !animMode && doc) {
+    ctx.save(); ctx.font = '10px ui-monospace, Consolas, monospace'; ctx.textAlign = 'left'; ctx.lineWidth = 1;
+    const bx = sx(b.x), mine = RIG.heightOf(doc);
+    const refs = ['experiment', 'milky', 'dune'].map(k => [SPECIES_NAMES[k], RIG.speciesHeight(k), PAL.text]).concat([['you', mine, '#ffcf4a']]);
+    refs.forEach(([nm, h, col], i) => { const y = sy(b.y) - h * z; ctx.strokeStyle = col; ctx.globalAlpha = nm === 'you' ? 0.9 : 0.35; ctx.setLineDash(nm === 'you' ? [] : [4, 4]);
+      ctx.beginPath(); ctx.moveTo(bx - 1.6 * z, y); ctx.lineTo(bx + 1.6 * z, y); ctx.stroke(); ctx.fillStyle = col; const lab = nm + ' ' + h.toFixed(2); ctx.fillText(lab, nm === 'you' ? bx - 1.7 * z - ctx.measureText(lab).width : bx + 1.7 * z, y + 3); void i; });
+    ctx.restore();
+  }
   const footBottom = (useGame || animMode || gearMode) && gameMode() ? moveConsts(T).footBottom : 2.415 + 0.7;
   const S = [z, 0, 0, -z, x0, groundY - footBottom * z];
   T.lastS = S; T.lastFrames = frames;
@@ -2274,17 +2808,18 @@ function loop(now) {
   const inj = tab === 'test' ? testInj : {}; const hv = RIG.hurtView(inj);
   const items = T.rt.drawList({ frames, action: act, headState, injuries: inj });
   // the game's own parts this rig doesn't replace (drawn with the game's sprites, or your skin swaps)
-  for (const part of RIG.PARTS) if (!replaced.has(part) && !hv.hidden.has(part)) items.push({ ghost: part, order: RIG.ORDER[part], m: frames[part] });
+  const custom = !!T.rig.customBody;   // a custom character: none of the game's own art shows (like the mod)
+  if (!custom) for (const part of RIG.PARTS) if (!replaced.has(part) && !hv.hidden.has(part)) items.push({ ghost: part, order: RIG.ORDER[part], m: frames[part] });
   // what the game itself puts on a hurt limb (Limb.MakeBoneSprite, CreateTemporarySprite): broken bone, bandage wrap, splint
   for (const part of RIG.PARTS) { if (hv.hidden.has(part) || !frames[part]) continue; const sts = RIG.statesOf(inj, part);
     if (sts.includes('broken')) items.push({ fx: 'brokenBone', part, order: RIG.ORDER[part] + 1, m: frames[part], angle: (part.length * 47 + part.charCodeAt(0) * 13) % 360 });
     if (sts.includes('bandaged')) items.push({ fx: 'bandageWrap', part, order: RIG.ORDER[part] + 2, m: frames[part], angle: 0, wrap: true });
     if (sts.includes('splinted') && !/Head|Torso/.test(part)) items.push({ fx: 'splint', part, order: RIG.ORDER[part] + 2.1, m: frames[part], angle: -90 }); }
-  if (!T.rig.hideVanillaTail) items.push({ ghost: 'tail', order: RIG.ORDER.tail, m: frames.tail });
+  if (!T.rig.hideVanillaTail && !custom) items.push({ ghost: 'tail', order: RIG.ORDER.tail, m: frames.tail });
   // eyes: drawn on the head, above it
   const headItem = items.find(it => !it.ghost && it.chainAttach === 'Head' && it.isPart);
   const eyesHidden = T.rig.hideObjects.includes('Eyes');
-  if (!eyesHidden && !hv.hidden.has('Head')) items.push({ eyes: true, order: (headItem ? headItem.order : RIG.ORDER.Head) + 0.5, m: frames.Head });
+  if (!eyesHidden && !custom && !hv.hidden.has('Head')) items.push({ eyes: true, order: (headItem ? headItem.order : RIG.ORDER.Head) + 0.5, m: frames.Head });
   // an item worn in the test: your version if you drew one, the game's otherwise, on its body part (like Body.WearItem)
   // items worn in the test: your version if you drew one, the game's otherwise, on its body part (like Body.WearItem)
   const wearTop = {};
@@ -2384,6 +2919,7 @@ function loop(now) {
     ctx.fillStyle = '#6f7280';
     ctx.fillText('A/D move · Shift walk · Space jump (hold = higher; jump off walls) · S crouch · W/S ladder · F attack · T talk · R ragdoll · Z sleep · X dead', 12, H - 12);
   }
+  if (hitMode) { HB.S = S; HB.frames = frames; HB.feet = { x: b.x, y: b.y + floorY }; HB.sizeK = T.sizeK || 1; drawHitboxes(); }
 }
 
 // ---------------------------------------------------------------- custom sounds
@@ -2652,7 +3188,10 @@ function drawHealth(W, H) {
     }
     // the game: the outline image tinted (1, skin, skin), its child "middle" image on top tinted (1 - muscle, 0, 0)
     if (out) ctx.drawImage(tinted(out, 1, look.skin / 100, look.skin / 100), -w / 2, -h / 2, w, h);
-    if (mid) ctx.drawImage(tinted(mid, 1 - look.muscle / 100, 0, 0), -w / 2, -h / 2, w, h);
+    // the game's own middle keeps its own size against the outline (Milky's head middle is smaller than its outline)
+    let mw = w, mh = h;
+    if (mid && !it.middle && !it.outline && G && G.sprites) { const so = G.sprites[it.vOutline], sm = G.sprites[it.vMiddle]; if (so && sm && so.w && so.h) { mw = w * sm.w / so.w; mh = h * sm.h / so.h; } }
+    if (mid) ctx.drawImage(tinted(mid, 1 - look.muscle / 100, 0, 0), -mw / 2, -mh / 2, mw, mh);
     if (look.tourniquet && G && G.tpl.effects && G.tpl.effects.tourniquetIcon && G.images[G.tpl.effects.tourniquetIcon]) { const im = G.images[G.tpl.effects.tourniquetIcon], sp = G.sprites[G.tpl.effects.tourniquetIcon] || {}; const s = 100 / (sp.ppu || 100) * v.z; ctx.drawImage(layerCanvas(im), -im.w * s / 2, -im.h * s / 2, im.w * s, im.h * s); }
     ctx.restore();
     // status icons over the part, like WoundView (bleeding, infection, broken bone…)
@@ -2736,6 +3275,54 @@ function bindHsInspector() {
 }
 
 // ---------------------------------------------------------------- export
+// the character as drawn (body parts and moving parts, open eyes), cropped and 4x bigger: the character select's picture
+// The picture for the in-game character select: the character as the Test tab shows it, standing still, with the
+// game's own parts, eyes and mouth wherever the rig doesn't replace them, on a clear background.
+async function previewPng() {
+  try { const snap = await testSnapshot(); if (snap) return snap; } catch (e) { console.warn('preview snapshot failed', e); }
+  return layerPreview();
+}
+const nextFrame = () => new Promise(r => requestAnimationFrame(r));
+async function testSnapshot() {
+  if (REC.on) return null;
+  const keepTab = tab, keepAct = $('#actPrev').value;
+  if (tab !== 'test') tabTo('test');
+  if (!test) return null;
+  $('#actPrev').value = 'idle'; if ($('#actPrev').onchange) $('#actPrev').onchange();
+  const keepZoom = test.zoom; test.zoom = 8 * 4;
+  REC.on = true; REC.clear = true;
+  try {
+    for (let i = 0; i < 40; i++) await nextFrame();   // let it settle (tails, ears…)
+    const V = test.view; if (!V) return null;
+    const d = window.devicePixelRatio || 1, z = V.z, cw = Math.round(10 * z), ch = Math.round(9 * z);
+    const cx = V.x0 + V.bx * z, top = V.groundY - 8.2 * z;
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.drawImage(cv, (cx - cw / 2) * d, top * d, cw * d, ch * d, 0, 0, cw, ch);
+    // trim to what's drawn
+    const px = g.getImageData(0, 0, cw, ch).data; let x0 = cw, y0 = ch, x1 = -1, y1 = -1;
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) if (px[(y * cw + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return null;
+    const o = document.createElement('canvas'); o.width = x1 - x0 + 9; o.height = y1 - y0 + 9;
+    o.getContext('2d').drawImage(c, x0 - 4, y0 - 4, o.width, o.height, 0, 0, o.width, o.height);
+    const blob = await new Promise(res => o.toBlob(res, 'image/png'));
+    return new Uint8Array(await blob.arrayBuffer());
+  } finally {
+    REC.on = false; REC.clear = false; if (test) test.zoom = keepZoom;
+    $('#actPrev').value = keepAct; if ($('#actPrev').onchange) $('#actPrev').onchange();
+    if (keepTab !== 'test') tabTo(keepTab);
+  }
+}
+async function layerPreview() {
+  const show = doc.layers.filter(l => !l.hidden && (l.role.type === 'part' || l.role.type === 'chain' || (l.role.type === 'eye' && l.role.state === 'experimentEyeOpen')));
+  if (!show.length) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const l of show) { x0 = Math.min(x0, l.x); y0 = Math.min(y0, l.y); x1 = Math.max(x1, l.x + l.w); y1 = Math.max(y1, l.y + l.h); }
+  const k = 4, c = document.createElement('canvas'); c.width = (x1 - x0 + 4) * k; c.height = (y1 - y0 + 4) * k;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  for (const l of show.slice().sort((a, b) => a.order - b.order)) g.drawImage(layerCanvas(l), (l.x - x0 + 2) * k, (l.y - y0 + 2) * k, l.w * k, l.h * k);
+  const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+  return new Uint8Array(await blob.arrayBuffer());
+}
 async function pngBytes(img) {
   const c = layerCanvas(img);
   const blob = await new Promise(res => c.toBlob(res, 'image/png'));
@@ -2748,6 +3335,7 @@ $('#btnExport').onclick = async () => {
   const folder = (doc.name || 'MyCharacter').replace(/[^A-Za-z0-9_\-]+/g, '_');
   const entries = [{ name: folder + '/rig.json', data: new TextEncoder().encode(JSON.stringify(rig, null, 2)) }];
   for (const f in files) entries.push({ name: folder + '/' + f, data: files[f].raw ? files[f].raw : await pngBytes(files[f]) });
+  try { const pv = await previewPng(); if (pv) entries.push({ name: folder + '/preview.png', data: pv }); } catch (e) { console.warn('no preview', e); }
   const zip = RIG.zip(entries);
   const fname = folder + '.zip';
   let saved = false;
@@ -3066,7 +3654,7 @@ function bridgeAnimCrop() {
   const w = 4.8 * z, h = 5.0 * z;
   return { x: Math.max(0, (W / 2 - w / 2) * d), y: Math.max(0, (groundY - 4.3 * z) * d), w: w * d, h: h * d };
 }
-window.__rigEditor = { recordGif, gifEncode, get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
+window.__rigEditor = { recordGif, previewPng, get hb() { return HB; }, gifEncode, get view() { return view; }, addLoopFrames, exportLayersFor, undo, redo, updateFromPsd, loadGameTemplateFiles, newFromGame, setDoc, saveProject, loadProject, openFiles, addSprites, refresh, get doc() { return doc; }, tabTo, startTest, get test() { return test; }, selectHs: (k) => { selHs = k; renderInspector(); draw(); },
   // Sprite Paint (src/paint.js)
   layerById: bridgeLayer, layersForPaint: bridgeLayers, setLayerPixels: bridgeSetPixels, addPaintLayer: bridgeAddPaintLayer, renamePaintLayer: bridgeRenamePaintLayer,
   imageAssetsForPaint: bridgeImageAssets, setImageAssetPixels: bridgeSetImageAssetPixels,

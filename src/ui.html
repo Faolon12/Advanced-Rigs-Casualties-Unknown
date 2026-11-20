@@ -3,9 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Luna Advanced Rig Systems – Editor (Casualties Release V0.5 Alpha)</title>
+<title>Luna Advanced Rig Systems – Editor (Casualties Release V1.0)</title>
 <style>
 :root{--bg:#15161a;--panel:#1d1f25;--panel2:#252830;--line:#33363f;--text:#e6e6ea;--dim:#9a9caa;--acc:#e0475b;--acc2:#8f5bff;--ok:#4cc38a;--warn:#e9b44c}
+/* optional themes (Theme menu in the header); the pride ones also get their flag as a stripe under the header */
+:root{--flag:none}
+[data-theme=trans]{--bg:#141820;--panel:#1b2130;--panel2:#232b3d;--line:#344059;--acc:#f5a9b8;--acc2:#5bcefa;--flag:linear-gradient(90deg,#5bcefa 0 20%,#f5a9b8 20% 40%,#fff 40% 60%,#f5a9b8 60% 80%,#5bcefa 80%)}
+[data-theme=rainbow]{--bg:#16151b;--panel:#1f1d26;--panel2:#28252f;--acc:#ff8c00;--acc2:#732982;--flag:linear-gradient(90deg,#e40303 0 16.6%,#ff8c00 16.6% 33.3%,#ffed00 33.3% 50%,#008026 50% 66.6%,#004dff 66.6% 83.3%,#750787 83.3%)}
+[data-theme=progress]{--bg:#16151b;--panel:#1f1d26;--panel2:#28252f;--acc:#f5a9b8;--acc2:#5bcefa;--flag:linear-gradient(90deg,#000 0 7%,#784f17 7% 14%,#5bcefa 14% 21%,#f5a9b8 21% 28%,#fff 28% 35%,#e40303 35% 45.8%,#ff8c00 45.8% 56.6%,#ffed00 56.6% 67.4%,#008026 67.4% 78.2%,#004dff 78.2% 89%,#750787 89%)}
+[data-theme=bi]{--bg:#17141c;--panel:#201b27;--panel2:#2a2333;--line:#3d3348;--acc:#d60270;--acc2:#9b4f96;--flag:linear-gradient(90deg,#d60270 0 40%,#9b4f96 40% 60%,#0038a8 60%)}
+[data-theme=lesbian]{--bg:#1a1516;--panel:#241c1e;--panel2:#2e2427;--line:#47363a;--acc:#ef7627;--acc2:#b55690;--flag:linear-gradient(90deg,#d52d00 0 20%,#ef7627 20% 40%,#fff 40% 60%,#d162a4 60% 80%,#a30262 80%)}
+[data-theme=nonbinary]{--bg:#16151a;--panel:#1f1d24;--panel2:#29262f;--acc:#fcf434;--acc2:#9c59d1;--flag:linear-gradient(90deg,#fcf434 0 25%,#fff 25% 50%,#9c59d1 50% 75%,#2c2c2c 75%)}
+[data-theme=pan]{--bg:#18161b;--panel:#211e25;--panel2:#2b2730;--acc:#ff218c;--acc2:#21b1ff;--flag:linear-gradient(90deg,#ff218c 0 33.3%,#ffd800 33.3% 66.6%,#21b1ff 66.6%)}
+[data-theme=ace]{--bg:#141414;--panel:#1c1c1e;--panel2:#262628;--acc:#a4a4a4;--acc2:#810081;--flag:linear-gradient(90deg,#000 0 25%,#a4a4a4 25% 50%,#fff 50% 75%,#810081 75%)}
+[data-theme=aro]{--bg:#141815;--panel:#1b211c;--panel2:#232b25;--acc:#3da542;--acc2:#a7d379;--flag:linear-gradient(90deg,#3da542 0 20%,#a7d379 20% 40%,#fff 40% 60%,#a9a9a9 60% 80%,#000 80%)}
+[data-theme=light]{--bg:#eef0f4;--panel:#fff;--panel2:#f3f4f7;--line:#d5d8e0;--text:#1d1f25;--dim:#636776;--acc:#d63a4f;--acc2:#7a46e8}
+[data-theme=light] select,[data-theme=light] input[type=text],[data-theme=light] input[type=number]{background:#fff}
+header{position:relative}
+header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:4px;background:var(--flag);pointer-events:none}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
 button,select,input{font:inherit;color:var(--text)}
@@ -163,14 +178,15 @@ aside.right{overflow-x:hidden}
 <body>
 <div id="app">
 <header>
-  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V0.5 Alpha</small></h1>
+  <h1>Luna Advanced Rig Systems <span>Editor</span> <small style="color:var(--dim);font-weight:400;font-size:11px">Casualties Release V1.0</small></h1>
   <button id="btnOpen" class="primary">Open…</button>
   <input id="file" type="file" multiple accept=".psd,.psb,.png,.json,.luna" hidden>
   <button id="btnSave" title="Save this character as a project file (.luna) to keep working on it later. Open… loads it back.">Save</button>
   <input id="fileTpl" type="file" webkitdirectory directory multiple hidden>
   <button id="btnBrowse" title="See every asset from your game's template and pick which ones to use">Browse template</button>
-  <button id="btnTemplate" title="Start from the game's own character (every body part, mouth and jaw state and eye, put together exactly like the game). Comes from YOUR game: the mod saves it to BepInEx\plugins\AdvancedRigs\GameTemplate the first time you play (or press F10).">Game template</button>
+  <button id="btnTemplate" title="Start from the game's own character (every body part, mouth and jaw state and eye, put together exactly like the game). Comes from YOUR game: the mod saves it to the GameTemplate folder next to the mod when the game starts (rig menu → Open the template folder).">Game template</button>
   <span id="gameBadge" class="pill" style="cursor:pointer" title="The game template (sprites, wearables, animations) from your game. Click to load / reload it."></span>
+  <select id="speciesSel" hidden title="Which of the game's characters to build on: its body parts, proportions, animations and how wearables look on it."></select>
   <button id="btnSprites" title="Add PNGs to this character: body parts, tail pieces, wings, frames (placed by name) — or skins / gear / health screen art named like the game's sprites (F9 in game saves them)">Add PNG…</button>
   <input id="fileSprites" type="file" multiple accept=".png,.json" hidden>
   <button id="btnAddPsd" title="Add a PSD / PSB to this character: layers with the same names are updated, new ones are added (with no character open, it starts a new one)">Add PSD / PSB…</button>
@@ -179,7 +195,7 @@ aside.right{overflow-x:hidden}
   <label class="muted" title="Manual setup: opening or adding files assigns nothing and moves nothing. You give every layer its role on the left (select several + set role), move parts yourself and place bones by hand." style="display:flex;align-items:center;gap:4px;cursor:pointer"><input id="manualMode" type="checkbox">Manual</label>
   <span class="muted">Name</span><input id="name" type="text" value="MyCharacter" style="width:150px">
   <div class="grow"></div>
-  <button id="btnTheme" title="Switch the editor's look (Casualties lab terminal / plain)">Theme</button>
+  <select id="themeSel" title="Editor theme"><option value="casualties">Casualties</option><option value="plain">Plain dark</option><option value="light">Light</option><option value="trans">Trans</option><option value="rainbow">Rainbow</option><option value="progress">Progress</option><option value="bi">Bi</option><option value="lesbian">Lesbian</option><option value="nonbinary">Nonbinary</option><option value="pan">Pan</option><option value="ace">Ace</option><option value="aro">Aro</option></select>
   <button id="btnHelp">How to</button>
   <button id="btnExport" class="primary">Export rig (.zip)</button>
 </header>
@@ -196,6 +212,8 @@ aside.right{overflow-x:hidden}
       <button id="tabRig" class="on">Rig</button>
       <button id="tabTest">Test</button>
       <button id="tabHealth">Health screen</button>
+      <button id="tabInv" title="Your inventory circle: move, resize and restyle any piece of it, and place extra hands' buttons">Inventory</button>
+      <button id="tabHit" title="Where each body part can be hit: draw the hit areas to fit your art">Hitboxes</button>
       <button id="tabGear" title="Backpacks, helmets, gloves, bags…: see each one worn on your character, move it to fit, repaint it">Gear</button>
       <button id="tabAnim" title="Change how your character moves: add your own touch to any of the game's animations (run, jump, attack, sit…)">Animate</button>
       <span class="sep"></span>
@@ -215,6 +233,8 @@ aside.right{overflow-x:hidden}
         <button id="wearBtn2" title="Also wear other things, to check how they layer with the item you're editing and your clothes">👕 Also wearing: nothing</button>
         <span class="muted">drag the item on the body · arrow keys nudge 1 px</span>
       </span>
+      <span id="invTools" style="display:none"><span class="muted">Click any piece · drag to move · scroll to resize · pictures on the right</span></span>
+      <span id="hitTools" style="display:none"><span class="muted">Click a part · drag the box to move it · drag its edges to resize</span></span>
       <span id="healthTools" style="display:none"><span class="muted">Drag parts to place them · click one to give it your own art</span></span>
       <span id="testTools" style="display:none">
         <select id="actPrev" title="What the character is doing: moves the body and plays that action's animation frames"></select>

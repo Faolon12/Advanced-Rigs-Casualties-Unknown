@@ -1,11 +1,12 @@
-# Luna Advanced Rig Systems Editor - Casualties Release V0.5 Alpha
+# Luna Advanced Rig Systems Editor - Casualties Release V1.0
 
-A browser-based character rig editor for **Luna Advanced Rig Systems**, the BepInEx mod for *Casualties: Unknown* (get the mod on Nexus).
-Turn a layered drawing into a fully custom character, with moving tails, ears, hair floof and wings, and test it with the same physics as the mod.
+## What's new in V1.0
+- **Character picker:** the game template now holds Experiment, Milky and Dune; pick which one to build on (next to the template badge). Rigs remember it.
+- **Works like a limb** (on a moving part): *Moves with* an arm or leg, *Holds items*, *Is a head* (eyes + mouth art), *Touches the ground*.
+- **Body size and hitboxes** in the Character section.
+- **Themes:** Casualties, plain dark, light, trans, rainbow, progress, bi, lesbian, nonbinary, pan, ace, aro.
 
-**No install:** open `index.html` in any modern browser. It also works offline, or hosted on GitHub Pages.
-
-## What's new in V0.5 Alpha
+## What was new in V0.5 Alpha
 * **Clothes & overlays:** *Over the limb* and *Above worn gear* on part layers (see Features).
 * **👕 Wearing** (Test tab) / **👕 Also wearing** (Gear tab): try on any mix of the game's wearables.
 * **⏺ GIF** (Test tab): record your character as an animated GIF, for the community hub or Nexus.

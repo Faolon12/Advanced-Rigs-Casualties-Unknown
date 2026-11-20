@@ -352,7 +352,7 @@ RIG.newId = () => 'i' + (_id++);
 
 RIG.newDoc = function (name, width, height, layers) {
   const doc = { name: name || 'MyCharacter', width, height, layers: [], chains: [], align: { x: width / 2, y: height * 0.56 },
-    hideObjects: [], hideVanillaTail: true, spriteSwaps: {}, healthScreen: {}, anims: {}, sounds: {}, animations: {}, srcSize: { w: width, h: height }, origin: { x: 0, y: 0 }, ppu: 8 };
+    hideObjects: [], hideVanillaTail: true, spriteSwaps: {}, healthScreen: {}, inventory: {}, hitboxes: {}, anims: {}, sounds: {}, animations: {}, srcSize: { w: width, h: height }, origin: { x: 0, y: 0 }, ppu: 8 };
   for (const l of layers) {
     const c = RIG.crop(l.rgba, l.w, l.h);
     if (!c) continue;
@@ -1084,6 +1084,18 @@ RIG.layerOrders = function (doc) {
   return out;
 };
 
+// the game's characters' body heights (game units); the template's numbers win when loaded
+RIG.HEIGHTS = { experiment: 5, milky: 4.25, dune: 5.2 };
+RIG.speciesHeight = function (sp) {
+  const G = RIG.GAME, b = G && G.base && G.base.species && G.base.species[sp || 'experiment'], c = b && b.body && b.body.colSize;
+  return c && c[1] ? c[1] : (RIG.HEIGHTS[sp] || RIG.HEIGHTS.experiment);
+};
+// the character's height: its own, or worked out from an older rig's "as tall as" + size
+RIG.heightOf = function (doc) {
+  const z = doc.size || {};
+  if (z.height > 0.1) return z.height;
+  return RIG.speciesHeight(z.as || doc.species) * (z.scale || 1);
+};
 RIG.buildRig = function (doc) {
   doc.layers.forEach(l => delete l._file);
   const ord = RIG.layerOrders(doc);
@@ -1134,6 +1146,8 @@ RIG.buildRig = function (doc) {
       if (s.maxBend >= 0) o.maxBend = s.maxBend;
       const arts = doc.layers.filter(a => a.role.type === 'injury' && a.role.of === s.layer);
       if (arts.length) { o.injuryArt = {}; for (const a of arts) o.injuryArt[a.role.state] = { file: add(a), x: a.x, y: a.y }; }
+      const sts = doc.layers.filter(a => a.role.type === 'state' && a.role.of === s.layer);
+      if (sts.length) { o.states = {}; for (const a of sts) o.states[a.role.state] = { file: add(a), x: a.x, y: a.y }; }
       if (ch.injury && ch.injury.enabled && RIG.isGroupLeader(ch, k)) { const h = hsOut('seg_' + ch.name + '_' + k, doc.healthScreen['seg:' + s.layer]); if (h) o.healthScreen = h; }
       RIG.exportAnims(doc, s.layer, o, add);
       return o;
@@ -1141,6 +1155,24 @@ RIG.buildRig = function (doc) {
     const motion = {}; for (const k of RIG.MOTION_KEYS) motion[k] = +ch.motion[k]; motion.flapWhen = ch.motion.flapWhen || 'never';
     const out = { name: ch.name, attachTo: ch.attachTo, anchor, offset: { x: ch.offset.x, y: ch.offset.y },
       sortingOrderOffset: sortOff, physics: !!ch.physics, motion, segments: segs };
+    // works like a real limb: moves with a game arm / leg, holds items, touches the ground (mod 1.0+)
+    if (ch.follow) { out.follow = ch.follow; out.physics = false; if (ch.followDelay) out.followDelay = +(+ch.followDelay).toFixed(3); if (ch.followMirror) out.followMirror = true; }
+    if (ch.hand && ch.hand.enabled) {
+      out.hand = { enabled: true, name: ch.hand.name || ch.name, isHand: ch.hand.isHand !== false }; if (ch.hand.piece >= 0) out.hand.piece = ch.hand.piece;
+      const b = ch.hand.button || {}, iconL = b.icon && RIG.layer(doc, b.icon);
+      const bo = {};
+      if (b.angle !== undefined && b.angle !== null && b.angle !== '') bo.angle = +(+b.angle).toFixed(1);
+      if (b.distance && Math.abs(b.distance - 1) > 0.001) bo.distance = +(+b.distance).toFixed(3);
+      if (b.size && Math.abs(b.size - 1) > 0.001) bo.size = +(+b.size).toFixed(3);
+      if (iconL) bo.icon = add(iconL);
+      if (Object.keys(bo).length) out.hand.button = bo;
+    }
+    if (ch.head && ch.head.enabled) {
+      out.head = { enabled: true, mouth: ch.head.mouth !== false };
+      if (ch.head.piece >= 0) out.head.piece = ch.head.piece;
+      if (ch.head.eyes && ch.head.eyesPoint) out.head.eyes = { enabled: true, point: { x: +(+ch.head.eyesPoint.x).toFixed(2), y: +(+ch.head.eyesPoint.y).toFixed(2) }, scale: +(+(ch.head.eyesScale || 1)).toFixed(3) };
+    }
+    if (ch.collide && ch.collide.enabled) out.collide = { enabled: true, radius: +(+ch.collide.radius || 1.5).toFixed(2) };
     if (ch.injury && ch.injury.enabled) {
       out.injury = { enabled: true, name: ch.injury.name || ch.name, tearOff: !!ch.injury.tearOff, gameShading: !!ch.injury.gameShading, vital: !!ch.injury.vital };
       if (groups && groups.some((g, k) => g !== k)) out.injury.groups = groups.slice();
@@ -1152,6 +1184,30 @@ RIG.buildRig = function (doc) {
   const hsParts = {};
   for (const p of RIG.PARTS) { const h = hsOut(p, doc.healthScreen[p]); if (h) hsParts[p] = h; }
   if (Object.keys(hsParts).length) rig.healthScreen = { parts: hsParts };
+  // the inventory circle's look (Inventory tab): per piece of the game's circle, moved / resized / own pictures
+  const invItems = {};
+  for (const path in doc.inventory || {}) {
+    const L = doc.inventory[path]; if (!L) continue;
+    const o = {}, tag = path.replace(/[^A-Za-z0-9]+/g, '_');
+    if (L.dx) o.x = +(+L.dx).toFixed(2); if (L.dy) o.y = +(+L.dy).toFixed(2);
+    if (L.size && Math.abs(L.size - 1) > 0.001) o.size = +(+L.size).toFixed(3);
+    if (L.normal) o.normal = addImg('inv_' + tag + '_normal.png', L.normal);
+    if (L.muted) o.muted = addImg('inv_' + tag + '_holding.png', L.muted);
+    if (Object.keys(o).length) invItems[path] = o;
+  }
+  if (Object.keys(invItems).length) rig.inventory = { items: invItems };
+  if (doc.species) rig.species = doc.species; // the game character this rig was built on (experiment, milky, dune)
+  if (doc.customBody) rig.customBody = true;          // only the rig's art shows (the game's body works unseen)
+  if (doc.character) rig.character = doc.character;   // character select: grouped under this name
+  if (doc.outfit) rig.outfit = doc.outfit;
+  // body height in game units (Experiment is 5). "as"/"scale" are written too, for mods before height existed.
+  const H = RIG.heightOf(doc);
+  if (Math.abs(H - RIG.speciesHeight(doc.species)) > 0.001) rig.size = { height: +H.toFixed(3), as: 'experiment', scale: +(H / RIG.speciesHeight('experiment')).toFixed(4) };
+  if (doc.hitbox && Math.abs((doc.hitbox.scale || 1) - 1) > 0.001) rig.hitbox = { scale: +(+doc.hitbox.scale).toFixed(3) };
+  // the Hitboxes tab: each part's exact hit area (its own units)
+  const shapes = {};
+  for (const p in doc.hitboxes || {}) { const c = doc.hitboxes[p]; if (c && c.w > 0 && c.h > 0) shapes[p] = { w: +c.w.toFixed(3), h: +c.h.toFixed(3), x: +(+c.x || 0).toFixed(3), y: +(+c.y || 0).toFixed(3) }; }
+  if (Object.keys(shapes).length) { rig.hitbox = rig.hitbox || {}; rig.hitbox.shapes = shapes; }
   if (doc.sounds) {
     const snd = {};
     for (const key in doc.sounds) {
@@ -1197,7 +1253,12 @@ RIG.buildRig = function (doc) {
 RIG.docFromRig = function (rig, images) {
   const ed = rig.editor || {};
   const doc = { name: rig.name || 'Rig', width: ed.width || 64, height: ed.height || 64, layers: [], chains: [], align: ed.align || { x: 32, y: 36 },
-    hideObjects: rig.hideObjects || [], hideVanillaTail: rig.hideVanillaTail !== false, spriteSwaps: {}, healthScreen: {}, anims: {}, sounds: {}, ppu: rig.pixelsPerUnit || 8 };
+    hideObjects: rig.hideObjects || [], hideVanillaTail: rig.hideVanillaTail !== false, spriteSwaps: {}, healthScreen: {}, inventory: {}, hitboxes: {}, anims: {}, sounds: {}, ppu: rig.pixelsPerUnit || 8 };
+  if (rig.species) doc.species = rig.species;
+  if (rig.character) doc.character = rig.character;
+  if (rig.outfit) doc.outfit = rig.outfit;
+  if (rig.size) doc.size = typeof rig.size === 'number' ? { scale: rig.size } : { scale: rig.size.scale || 1, as: rig.size.as || '', height: rig.size.height || 0 };
+  if (rig.hitbox) doc.hitbox = { scale: rig.hitbox.scale || 1 };
   RIG.PPU = doc.ppu;
   if (rig.sounds) for (const k in rig.sounds) doc.sounds[k] = [].concat(rig.sounds[k]).filter(f => images[f] && images[f].raw).map(f => ({ file: f.replace(/^snd_[^_]+_/, ''), data: images[f].raw }));
   const importAnims = (s, l) => {
@@ -1246,6 +1307,18 @@ RIG.docFromRig = function (rig, images) {
     const ch = { id: RIG.newId(), name: c.name || 'Chain', attachTo: c.attachTo || 'tail', segs: [], physics: c.physics !== false,
       motion: Object.assign(RIG.defaultMotion(), c.motion || {}), preset: 'Custom', offset: c.offset || { x: 0, y: 0 },
       injury: Object.assign(RIG.defaultInjury(c.name), c.injury || {}) };
+    if (c.follow) { ch.follow = c.follow; ch.followDelay = c.followDelay || 0; ch.followMirror = !!c.followMirror; }
+    if (c.hand) {
+      ch.hand = { enabled: c.hand.enabled !== false, name: c.hand.name || c.name, isHand: c.hand.isHand !== false, piece: c.hand.piece !== undefined ? c.hand.piece : -1 };
+      const b = c.hand.button;
+      if (b) {
+        ch.hand.button = { angle: b.angle !== undefined ? b.angle : null, distance: b.distance || 1, size: b.size || 1 };
+        if (b.icon && images[b.icon]) { const il = mk(b.icon, 0, 0); il.role = { type: 'ignore' }; il.name = 'Button: ' + (c.hand.name || c.name); ch.hand.button.icon = il.id; }
+      }
+    }
+    if (c.head) ch.head = { enabled: c.head.enabled !== false, piece: c.head.piece !== undefined ? c.head.piece : -1, mouth: c.head.mouth !== false,
+      eyes: !!(c.head.eyes && c.head.eyes.enabled !== false), eyesPoint: c.head.eyes ? (c.head.eyes.point || { x: c.head.eyes.x || 0, y: c.head.eyes.y || 0 }) : null, eyesScale: c.head.eyes && c.head.eyes.scale ? c.head.eyes.scale : 1 };
+    if (c.collide) ch.collide = { enabled: c.collide === true || c.collide.enabled !== false, radius: (c.collide && c.collide.radius !== undefined) ? c.collide.radius : 1.5 };
     c.segments.forEach((s, k) => {
       const l = mk(s.file, s.x, s.y); l.role = { type: 'chain', chain: ch.id }; l._abs = base + (c.sortingOrderOffset || 0) + (s.order !== undefined ? s.order : k) + k * 0.001;
       if (c.segments.length === 1 && c.name) l.name = c.name;
@@ -1253,12 +1326,20 @@ RIG.docFromRig = function (rig, images) {
       if (s.injuryArt) for (const st in s.injuryArt) { const v = s.injuryArt[st]; const f = typeof v === 'string' ? v : v.file;
         const al = mk(f, typeof v === 'string' ? s.x : v.x, typeof v === 'string' ? s.y : v.y); al.role = { type: 'injury', of: l.id, state: st }; al._abs = l._abs + 0.001; }
       if (s.healthScreen) doc.healthScreen['seg:' + l.id] = hsIn(s.healthScreen);
+      if (s.states) for (const st in s.states) { const v = s.states[st]; const f = typeof v === 'string' ? v : v.file;
+        const al = mk(f, typeof v === 'string' ? s.x : v.x, typeof v === 'string' ? s.y : v.y); al.role = { type: 'state', of: l.id, state: st }; al._abs = l._abs + 0.0015; }
       importAnims(s, l);
     });
     doc.chains.push(ch);
   }
   doc.layers.sort((a, b) => (a._abs || 0) - (b._abs || 0)); doc.layers.forEach((l, i) => { l.order = i; delete l._abs; });
   if (rig.healthScreen && rig.healthScreen.parts) for (const p in rig.healthScreen.parts) doc.healthScreen[p] = hsIn(rig.healthScreen.parts[p]);
+  if (rig.customBody) doc.customBody = true;
+  if (rig.hitbox && rig.hitbox.shapes) for (const p in rig.hitbox.shapes) { const o = rig.hitbox.shapes[p]; doc.hitboxes[p] = { w: o.w, h: o.h, x: o.x || 0, y: o.y || 0 }; }
+  if (rig.inventory && rig.inventory.items) for (const path in rig.inventory.items) {
+    const o = rig.inventory.items[path];
+    doc.inventory[path] = { dx: o.x || 0, dy: o.y || 0, size: o.size || 1, normal: o.normal ? images[o.normal] || null : null, muted: o.muted ? images[o.muted] || null : null };
+  }
   doc.animations = rig.animations ? JSON.parse(JSON.stringify(rig.animations)) : {};
   if (rig.spriteSwaps) for (const k in rig.spriteSwaps) {
     const v = rig.spriteSwaps[k]; const f = typeof v === 'string' ? v : v.file; if (!images[f]) continue;
@@ -1377,7 +1458,7 @@ RIG.deserialize = function (text) {
   let max = 0; const scan = (x) => { const m = /^i(\d+)$/.exec(x || ''); if (m) max = Math.max(max, +m[1]); };
   doc.layers.forEach(l => scan(l.id)); doc.chains.forEach(c => scan(c.id));
   if (_id <= max) _id = max + 1;
-  for (const k of ['spriteSwaps', 'healthScreen', 'anims', 'sounds']) doc[k] = doc[k] || {};
+  for (const k of ['spriteSwaps', 'healthScreen', 'anims', 'sounds', 'inventory', 'hitboxes']) doc[k] = doc[k] || {};
   doc.hideObjects = doc.hideObjects || [];
   doc.ppu = doc.ppu || 8; RIG.PPU = doc.ppu;
   if (doc.learned) Object.assign(RIG.learned, doc.learned);
@@ -1435,10 +1516,13 @@ const deltaAngle = (a, b) => { let d = ((b - a) % 360 + 540) % 360 - 180; return
 
 // ===================== runtime: same simulation as the mod =====================
 // rig = output of buildRig().rig ; frames(part) -> world matrix of a body part
+RIG.FOLLOW = { ArmF: ['UpArmF', 'DownArmF', 'HandF'], ArmB: ['UpArmB', 'DownArmB', 'HandB'], LegF: ['ThighF', 'CrusF', 'FootF'], LegB: ['ThighB', 'CrusB', 'FootB'] };
+RIG.FOLLOW_PARENT = { UpArmF: 'UpTorso', DownArmF: 'UpArmF', HandF: 'DownArmF', UpArmB: 'UpTorso', DownArmB: 'UpArmB', HandB: 'DownArmB',
+  ThighF: 'DownTorso', CrusF: 'ThighF', FootF: 'CrusF', ThighB: 'DownTorso', CrusB: 'ThighB', FootB: 'CrusB' };
 RIG.Runtime = class {
   constructor(rig, images) {
     this.rig = rig; this.images = images; this.chains = []; this.acc = 0; this.time = 0; this.clock = 0; this.animState = new Map();
-    const ppu = rig.pixelsPerUnit || 8;
+    const ppu = rig.pixelsPerUnit || 8; this.ppu = ppu;
     for (const c of rig.chains) {
       const segs = c.segments.map((s, k) => {
         let dir;
@@ -1462,9 +1546,15 @@ RIG.Runtime = class {
     return RIG.blendM(A, frames[c.def.blendWith], c.def.blendWeight !== undefined ? c.def.blendWeight : 0.5);
   }
   // world matrices of every segment for the current angles
-  segMatrices(c, attachM) {
+  segMatrices(c, attachM, keyed) {
     let parent = M.mul(attachM, M.T(c.offset.x, c.offset.y)); const out = [];
-    for (const s of c.segs) { const m = M.mul(M.mul(parent, M.T(s.local.x, s.local.y)), M.R(s.angle)); out.push({ parent, m }); parent = m; }
+    const A = keyed && this.chainAnim;  // the rig's animation keys for moving-part pieces (drawn only, like the mod)
+    c.segs.forEach((s, i) => {
+      const k = A && A['chain:' + c.def.name + '/' + i], own = A && A['chainset:' + c.def.name + '/' + i];
+      let a0 = keyed && s.shown !== undefined ? s.shown : s.angle;
+      if (own) a0 = (s.def.restAngle || 0) + (own[2] || 0);   // an "own" animation sets its whole pose
+      const m = M.mul(M.mul(parent, M.T(s.local.x, s.local.y)), M.R(a0 + (k ? k[2] || 0 : 0))); out.push({ parent, m }); parent = m;
+    });
     return out;
   }
   restTip(parentM, s, angle) {
@@ -1472,7 +1562,7 @@ RIG.Runtime = class {
     return V.add(pos, M.vec(parentM, V.mul(V.rot(s.dirLocal, angle), s.len)));
   }
   reset(c, attachM) {
-    for (const s of c.segs) s.angle = s.def.restAngle || 0;
+    for (const s of c.segs) { s.angle = s.def.restAngle || 0; s.angPrev = s.angle; s.shown = s.angle; s.floorSide = 0; s.freeT = 0; }
     const ms = this.segMatrices(c, attachM);
     c.segs.forEach((s, i) => { s.p = this.restTip(ms[i].parent, s, s.angle); s.prev = { ...s.p }; });
     c.lastRoot = M.pt(ms[0].parent, c.segs[0].local); c.init = true;
@@ -1480,15 +1570,19 @@ RIG.Runtime = class {
   // state: {frames: part->matrix, alive, moving, airborne}
   update(dt, state) {
     this.clock += dt;
+    this.chainAnim = state.pose || null;
+    this.groundY = state.groundY;  // world height of the floor (Test tab), for "Touches the ground"
     const STEP = 1 / 60;
     this.acc = Math.min(this.acc + dt, STEP * 5); let steps = 0;
     while (this.acc >= STEP) { this.acc -= STEP; steps++; }
     for (const c of this.chains) {
       const attachM = this.attachOf(c, state.frames); if (!attachM) continue;
       const root = M.pt(M.mul(attachM, M.T(c.offset.x, c.offset.y)), c.segs[0].local);
-      if (!c.def.physics) { c.segs.forEach(s => s.angle = s.def.restAngle || 0); continue; }
+      if (c.def.follow && RIG.FOLLOW[c.def.follow]) { this.follow(c, state.frames, dt); continue; }
+      if (!c.def.physics) { c.segs.forEach(s => { s.angle = s.def.restAngle || 0; s.shown = undefined; }); continue; }
       if (!c.init || (c.lastRoot && V.len(V.sub(root, c.lastRoot)) > 3)) this.reset(c, attachM);
-      if (!steps) continue;
+      const blend = () => { const a = Math.min(1, this.acc / STEP); for (const s of c.segs) s.shown = s.angPrev === undefined ? s.angle : s.angPrev + deltaAngle(s.angPrev, s.angle) * a; };
+      if (!steps) { blend(); continue; }   // no physics step this frame (fast screens): still move smoothly (same as the mod)
       const stepDelta = V.mul(V.sub(root, c.lastRoot), 1 / steps);
       const m = c.motion;
       const flapping = m.flapAmplitude !== 0 && state.alive && (m.flapWhen === 'always' || (m.flapWhen === 'air' && state.airborne));
@@ -1497,10 +1591,28 @@ RIG.Runtime = class {
         const tw = state.alive ? (state.moving ? m.wagWhileMoving : 1) : 0;
         c.wagBlend += Math.max(-STEP * 2, Math.min(STEP * 2, tw - c.wagBlend));
         c.flapBlend += Math.max(-STEP * 3, Math.min(STEP * 3, (flapping ? 1 : 0) - c.flapBlend));
+        for (const s of c.segs) s.angPrev = s.angle;
         this.simulate(c, m, state.alive, stepDelta, attachM);
       }
       c.lastRoot = root;
+      blend();
     }
+  }
+  // "moves with": each piece bends like the matching game limb (same as the mod)
+  follow(c, frames, dt) {
+    const names = RIG.FOLLOW[c.def.follow];
+    const ang = (m) => { const v = M.vec(m, { x: 1, y: 0 }); return Math.atan2(v.y, v.x) * 180 / Math.PI; };
+    const bend = (a, b) => { let d = ang(frames[a]) - ang(frames[b]); while (d > 180) d -= 360; while (d < -180) d += 360; return d; };
+    if (!c.followRest) c.followRest = names.map(n => frames[n] && frames[RIG.FOLLOW_PARENT[n]] ? bend(n, RIG.FOLLOW_PARENT[n]) : 0);
+    const sign = c.def.followMirror ? -1 : 1, delay = c.def.followDelay || 0;
+    const k = delay > 0.001 ? 1 - Math.exp(-dt / delay) : 1;
+    c.segs.forEach((s, i) => {
+      const n = names[i]; if (!n || !frames[n] || !frames[RIG.FOLLOW_PARENT[n]]) return;
+      let d = bend(n, RIG.FOLLOW_PARENT[n]) - c.followRest[i]; while (d > 180) d -= 360; while (d < -180) d += 360;
+      const target = (s.def.restAngle || 0) + sign * d;
+      let diff = target - s.angle; while (diff > 180) diff -= 360; while (diff < -180) diff += 360;
+      s.angle += diff * k;
+    });
   }
   simulate(c, m, alive, rootDelta, attachM) {
     const STEP = 1 / 60, t = this.time;
@@ -1531,13 +1643,39 @@ RIG.Runtime = class {
       if (stiff > 0) { const maxDev = len * 2 * (1 - stiff); const d = V.sub(q, target); const dl = V.len(d); if (dl > maxDev) q = V.add(target, V.mul(d, maxDev / dl)); }
       let dq = V.sub(q, joint); if (V.len(dq) < 1e-5) dq = toTarget;
       q = V.add(joint, V.mul(V.norm(dq), len));
-      const v = M.ivec(parent, V.sub(q, joint));
-      let ang = V.sang(s.dirLocal, v);
       const bend = (s.def.maxBend !== undefined && s.def.maxBend >= 0) ? s.def.maxBend : m.maxBend;
-      ang = rest + Math.max(-bend, Math.min(bend, deltaAngle(rest, ang)));
+      const angOf = (pt) => { const ang0 = V.sang(s.dirLocal, M.ivec(parent, V.sub(pt, joint))); return rest + Math.max(-bend, Math.min(bend, deltaAngle(rest, ang0))); };
+      let ang = angOf(q);                       // bend limit first...
+      q = this.restTip(parent, s, ang);
+      // ...then "Touches the ground" (same as the mod): the tip is pushed up onto the floor, on the side it was
+      // already lying on, so it rests there instead of flipping sides or sinking back in
+      let touching = false;
+      if (c.def.collide && c.def.collide.enabled !== false && this.groundY !== undefined && this.groundY !== null) {
+        const r = (c.def.collide.radius !== undefined ? c.def.collide.radius : 1.5) / (this.ppu || 8);
+        const floor = this.groundY + r;
+        if (joint.y > this.groundY && q.y < floor + r * 0.5) {   // (a joint in the ground is left alone)
+          touching = true;
+          if (q.y < floor) {
+            // the two places it can lie on the floor; take the one that bends it least from its drawn shape,
+            // and when both are about as good, the side it was already on (no flipping)
+            const h = joint.y - floor, dx = h > 0 && h < len ? Math.sqrt(len * len - h * h) : len;
+            const cand = [1, -1].map(sd => { const pt = h > 0 && h < len ? { x: joint.x + sd * dx, y: floor } : { x: joint.x + sd * len, y: joint.y };
+              const a2 = V.sang(s.dirLocal, M.ivec(parent, V.sub(pt, joint))); return { sd, a2, cost: Math.abs(deltaAngle(rest, a2)) }; });
+            const was = s.floorSide || Math.sign(s.p.x - joint.x) || 1;   // remembered even through brief lifts
+            cand.sort((A, B) => (Math.abs(A.cost - B.cost) < (s.floorSide ? 80 : 20) ? (A.sd === was ? -1 : 1) : A.cost - B.cost)); // only rolls over if the other side is far more natural
+            s.floorSide = cand[0].sd;
+            ang = ang + deltaAngle(ang, cand[0].a2);   // the floor wins over the bend limit (otherwise it sinks in)
+          }
+          const sm = s.angle + deltaAngle(s.angle, ang) * 0.35;   // ease in while lying down
+          if (this.restTip(parent, s, sm).y >= this.groundY - r * 0.5) ang = sm;   // (may dip into the floor a hair while it eases)
+        }
+      }
+      s.resting = touching;
+      s.freeT = touching ? 0 : (s.freeT || 0) + STEP; if (s.freeT > 0.5) s.floorSide = 0; // off the floor a while: forget its side
       s.angle = ang;
       const segM = M.mul(M.mul(parent, M.T(s.local.x, s.local.y)), M.R(ang));
       s.p = this.restTip(parent, s, ang);
+      if (touching) s.prev = V.sub(s.p, V.mul(V.sub(s.p, s.prev), 0.15)); // friction: drags instead of bouncing
       parent = segM;
     }
   }
@@ -1547,7 +1685,7 @@ RIG.Runtime = class {
     for (const c of this.chains) {
       const attachM = this.attachOf(c, state.frames); if (!attachM) continue;
       const base = (RIG.ORDER[c.def.attachTo] || 0) + (c.def.sortingOrderOffset || 0);
-      const ms = this.segMatrices(c, attachM);
+      const ms = this.segMatrices(c, attachM, true);
       const inj = c.def.injury && c.def.injury.enabled;
       const I = state.injuries || null, hv = I ? RIG.hurtView(I) : null;
       if (hv && c.def.attachTo !== 'tail' && hv.hidden.has(c.def.attachTo)) continue; // gone with the limb it hangs on
@@ -1672,6 +1810,13 @@ RIG.GameAnim = class {
     if (ov && ov.bones) for (const path in ov.bones) {
       if (!ov.bones[path] || !ov.bones[path].length) continue;
       const k = RIG.sampleKeys(ov.bones[path], tt);
+      // a body animation's keys on an arm bone: in game they go on top of whatever the arms animation does
+      // (the mod applies them after both animators), so they're kept apart here and put on in combine()
+      if (c.animator !== 'arms' && path.startsWith(this.armsPath + '/')) {
+        out[(ov.mode === 'replace' ? 'ARMSET:' : 'ARMADD:') + path] = [k.x || 0, k.y || 0, k.r || 0]; continue;
+      }
+      // a moving part's piece in an "own" animation: its whole pose (drawn shape + this turn), like the mod
+      if (ov.mode === 'replace' && path.startsWith('chain:')) { out['chainset:' + path.slice(6)] = [0, 0, k.r || 0]; continue; }
       if (ov.mode === 'replace') { out[path] = [k.x || 0, k.y || 0, k.r || 0]; continue; } // the player's own pose for this bone
       const base = out[path] || this.rest(c.animator === 'arms' ? this.armsPath + '/' + path : path);
       out[path] = [base[0] + (k.x || 0), base[1] + (k.y || 0), base[2] + (k.r || 0)];
@@ -1782,9 +1927,36 @@ RIG.GameAnim = class {
   single(name, t) {
     const c = this.clips[name]; if (!c) return {};
     const p = this.clipPose(name, t);
-    return c.animator === 'arms' ? this.combine({}, p) : this.combine(p, this.clipPose('ArmsIdle', 0));
+    // shown with the clip the game plays alongside it (Body.cs: ExperimentPlank + ArmsPlank, ExperimentRun + ArmsRun…),
+    // in step, so the arms move with the body like in game
+    const mate = this.mateOf(name);
+    const mc = mate && this.clips[mate];
+    const mt = mc ? (mc.length > 0 ? (mc.loop ? t % mc.length : Math.min(t, mc.length)) : 0) : 0;
+    if (c.animator === 'arms') return this.combine(mate ? this.clipPose(mate, mt) : {}, p);
+    return this.combine(p, this.clipPose(mate || 'ArmsIdle', mate ? mt : 0));
   }
-  combine(body, arms) { const out = Object.assign({}, body); for (const k in arms) out[this.armsPath + '/' + k] = arms[k]; return out; }
+  // the body / arms clip that goes with this one (same name after "Experiment" / "Arms"), or the idle one
+  mateOf(name) {
+    const c = this.clips[name]; if (!c) return null;
+    const pick = (...ns) => ns.find(n => n && this.clips[n] && this.clips[n].animator !== c.animator) || null;
+    if (c.animator === 'arms') { const rest = name.replace(/^Arms/, ''); return pick('Experiment' + rest, rest, 'ExperimentIdle'); }
+    const rest = name.replace(/^(Experiment|Milky|Dune)/, '');
+    return pick('Arms' + rest, rest.startsWith('Run') ? 'ArmsRun' : null, /Crouch/.test(rest) ? 'ArmsCrouch' : null, /Climb/.test(rest) ? 'ArmsClimbIdle' : null, /Air/.test(rest) ? 'ArmsAirDown' : null, 'ArmsIdle');
+  }
+  combine(body, arms) {
+    const out = {};
+    for (const k in body) if (!k.startsWith('ARMSET:') && !k.startsWith('ARMADD:')) out[k] = body[k];
+    for (const k in arms) {
+      if (k.startsWith('chain:') && out[k]) { const a = out[k], v = arms[k]; out[k] = [a[0] + v[0], a[1] + v[1], a[2] + v[2]]; }   // moving parts aren't arm bones: keys from both add up, like the mod
+      else if (k.startsWith('chain:') || k.startsWith('chainset:')) out[k] = arms[k];
+      else out[this.armsPath + '/' + k] = arms[k];
+    }
+    for (const k in body) {   // body animation keys on arm bones, on top of the arms animation (same as the mod)
+      if (k.startsWith('ARMSET:')) out[k.slice(7)] = body[k];
+      else if (k.startsWith('ARMADD:')) { const p = k.slice(7), b = out[p] || this.rest(p), v = body[k]; out[p] = [b[0] + v[0], b[1] + v[1], b[2] + v[2]]; }
+    }
+    return out;
+  }
   // where each body part ends up (body-local, before facing), following Body.cs: parts copy their anim twin's position and angle
   partLocal(pose) {
     const out = {};
